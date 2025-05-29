@@ -8,8 +8,7 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 - Bootstrap (para diseño responsivo)
 - JSON como base de datos local simulada
 
----
-
+```batch 
 ## 🗂 Estructura de carpetas
 
 /src
@@ -49,7 +48,7 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 /.astro                      # Carpeta generada por Astro (NO TOCAR)
 /node_modules                # Dependencias del proyecto (NO TOCAR)
 
----
+```
 
 ## 📄 Archivos raíz importantes
 
