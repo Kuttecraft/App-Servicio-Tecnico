@@ -40,12 +40,15 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 ## 🗂 Otras carpetas importantes
 
 /public
-    ├── logo.png              # Logo de la app
-    ├── img/                  # Imágenes públicas
-    └── ...                   # Archivos estáticos accesibles por URL directa
+├── styles/                # Archivos CSS globales separados (login.css, dashboard.css, etc.)
+│   └── login.css
+├── logo.png               # Logo de la app
+├── img/                   # Imágenes públicas
+└── ...                    # Archivos estáticos accesibles por URL directa
 
-/.astro                      # Carpeta generada por Astro (NO TOCAR)
-/node_modules                # Dependencias del proyecto (NO TOCAR)
+/.astro                    # Carpeta generada por Astro (NO TOCAR)
+/node_modules              # Dependencias del proyecto (NO TOCAR)
+
 
 ```
 
