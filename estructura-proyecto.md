@@ -1,4 +1,3 @@
-contenido = """
 # 📦 Estructura del Proyecto - App Servicio Técnico
 
 Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
