@@ -23,12 +23,11 @@ Su propósito principal es permitir un **seguimiento eficiente de productos ingr
 ```batch 
 git clone https://github.com/Kuttecraft/App-Servicio-Tecnico.git
 cd App-Servicio-Tecnico
-npm install
 ```
 
 ### 2. Instalar dependencias
 ```batch 
-npm run dev
+npm install
 ```
 
 ### 3. 🚀 Iniciar el servidor de desarrollo
