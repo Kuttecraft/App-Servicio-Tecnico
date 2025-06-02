@@ -30,7 +30,13 @@ cd App-Servicio-Tecnico
 npm install
 ```
 
-### 3. 🚀 Iniciar el servidor de desarrollo
+### 3. Instalar dependencias de Clerk
+```batch
+npm install @clerk/astro
+npm install @clerk/clerk-sdk-node
+```
+
+### 4. 🚀 Iniciar el servidor de desarrollo
 ```batch 
 npm run dev
 ```
