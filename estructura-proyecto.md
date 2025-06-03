@@ -5,7 +5,6 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 - Node.js (para backend local a través de /api)
 - Clerk (para autenticación de usuarios)
 - Bootstrap (para diseño responsivo)
-- JSON como base de datos local simulada
 
 ```batch 
 ## 🗂 Estructura de carpetas
@@ -13,27 +12,14 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 /src
 │
 ├── /pages                 # 📄 Páginas principales del sitio web
-│   ├── index.astro        # Página de inicio
-│   ├── login.astro        # Login de usuario
-│   ├── dashboard.astro    # Página principal tras login
-│   └── /api               # 🌐 Endpoints tipo backend (Node.js dentro de Astro)
-│       ├── login.ts       # POST - Simulación de login de usuario
-│       ├── clientes.ts    # CRUD básico de clientes
-│       └── ...            # Otros endpoints (estadísticas, servicios, etc.)
+│   ├── index.astro        # Página raíz, puede redirigir a /signin
+│   ├── signin.astro       # Página de login (Clerk)
+│   ├── signup.astro       # Página de registro (Clerk)
+│   └── middleware.ts      # Middleware opcional para rutas protegidas
 │
-├── /components            # 🧩 Componentes reutilizables de UI
-│   ├── Header.astro       # Encabezado de la app
-│   ├── Sidebar.astro      # Menú lateral (en desktop)
-│   ├── ClienteCard.astro  # Tarjeta para mostrar datos del cliente
-│   └── Formulario.astro   # Formulario para alta o edición
-│
-├── /layouts               # 🖼 Layouts generales
-│   ├── BaseLayout.astro   # Estructura base con header/sidebar
-│   └── AuthLayout.astro   # Layout usado en páginas como login/registro
-│
-├── /lib                   # 🔧 Funciones auxiliares
-│   ├── db.ts              # Lectura y escritura de archivo JSON (clientes, servicios, etc.)
-│   └── auth.ts            # Funciones de ayuda para autenticación local o Clerk
+├── /types                 # 📘 Tipos globales TypeScript
+│   ├── clerk.d.ts         # Tipado para window.Clerk
+│   └── env.d.ts           # Tipado para variables de entorno (import.meta.env)
 
 ---
 
