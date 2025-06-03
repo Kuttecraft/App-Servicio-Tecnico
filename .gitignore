@@ -1,24 +1,27 @@
-# build output
+# ─── Build Output ─────────────────────────────
 dist/
-
-# generated types
 .astro/
 
-# dependencies
+# ─── Node.js Dependencies ─────────────────────
 node_modules/
 
-# logs
+# ─── Environment Variables ────────────────────
+.env
+.env.*    # Esto cubre .env.production, .env.local, etc.
+
+# ─── Log files ────────────────────────────────
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# environment variables
-.env
-.env.production
-
-# macOS-specific files
+# ─── OS/Editor-specific ───────────────────────
 .DS_Store
-
-# jetbrains setting folder
 .idea/
+.vscode/
+
+# ─── TypeScript ───────────────────────────────
+*.tsbuildinfo
+
+# ─── Clerk temporary sessions (por si algún SDK los genera localmente) ─────
+.clerk
