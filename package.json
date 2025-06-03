@@ -9,6 +9,11 @@
     "astro": "astro"
   },
   "dependencies": {
+    "@astrojs/node": "^9.2.2",
+    "@clerk/clerk-sdk-node": "^4.13.23",
     "astro": "^5.8.0"
+  },
+  "devDependencies": {
+    "@clerk/astro": "^2.8.2"
   }
 }
