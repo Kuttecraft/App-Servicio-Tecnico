@@ -12,7 +12,6 @@ Su propósito principal es permitir un **seguimiento eficiente de productos ingr
 - **Node.js** (para lógica de backend simulada en `/api`)
 - **Bootstrap** (para diseño responsive)
 - **Clerk** (para autenticación real con cuentas de usuario)
-- **JSON local** como base de datos simulada (por ahora)
 
 ---
 
@@ -31,9 +30,11 @@ npm install
 ```
 
 ### 3. Instalar dependencias de Clerk
-```batch
-npm install @clerk/astro
-npm install @clerk/clerk-sdk-node
+
+Crear un archivo `.env` en la raíz del proyecto con tu clave pública de Clerk:
+
+```env
+PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 ```
 
 ### 4. 🚀 Iniciar el servidor de desarrollo
