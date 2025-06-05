@@ -15,6 +15,6 @@
     "astro": "^5.8.0"
   },
   "devDependencies": {
-    "@clerk/astro": "^2.8.2"
+    "@clerk/astro": "^2.9.0"
   }
 }
