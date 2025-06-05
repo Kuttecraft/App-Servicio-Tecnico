@@ -1,5 +1,11 @@
 {
   "extends": "astro/tsconfigs/strict",
-  "include": ["src", ".astro/types.d.ts"],
-  "exclude": ["dist", "**/*.astro.d.ts", "**/login.astro", "**/registro.astro", "**/dashboard.astro"]
+  "compilerOptions": {
+    "typeRoots": ["./types", "./node_modules/@types"]
+  },
+  "include": ["src", "types", ".astro/types.d.ts"],
+  "exclude": [
+    "dist",
+    "**/*.astro.d.ts"
+  ]
 }
