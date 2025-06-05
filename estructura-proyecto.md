@@ -11,15 +11,18 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 
 /src
 │
-├── /pages                 # 📄 Páginas principales del sitio web
-│   ├── index.astro        # Página raíz, puede redirigir a /signin
-│   ├── signin.astro       # Página de login (Clerk)
-│   ├── signup.astro       # Página de registro (Clerk)
-│   └── middleware.ts      # Middleware opcional para rutas protegidas
+├── /pages # 📄 Páginas principales del sitio web
+│ ├── index.astro # Página raíz, redirige a /signin
+│ ├── signin.astro # Página de login (usa <SignIn /> de Clerk)
+│ ├── signup.astro # Página de registro (usa <SignUp /> de Clerk)
+│ └── middleware.ts # Middleware opcional para rutas protegidas
 │
-├── /types                 # 📘 Tipos globales TypeScript
-│   ├── clerk.d.ts         # Tipado para window.Clerk
-│   └── env.d.ts           # Tipado para variables de entorno (import.meta.env)
+├── /lib # ⚙️ Lógica y configuración reutilizable
+│ └── clerk.ts # Configuración centralizada de Clerk (apariencia, idioma)
+│
+├── /types # 📘 Tipos globales TypeScript
+│ ├── clerk.d.ts # Tipado para window.Clerk
+│ └── env.d.ts # Tipado para variables de entorno (import.meta.env)
 
 ---
 
@@ -40,14 +43,14 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 
 ## 📄 Archivos raíz importantes
 
-Archivo              | Descripción
-----------------------|-----------------------------------------------------------
-astro.config.mjs     | Configuración del proyecto Astro
-tsconfig.json        | Configuración de TypeScript
-package.json         | Dependencias, scripts y metadata del proyecto
-package-lock.json    | Registro exacto de versiones instaladas
-.gitignore           | Archivos/carpetas que Git debe ignorar
-README.md            | Información general del proyecto
+Archivo                 | Descripción
+------------------------|-----------------------------------------------------------
+astro.config.ts         | Configuración principal de Astro y Clerk
+tsconfig.json           | Configuración de TypeScript
+package.json            | Dependencias, scripts y metadata del proyecto
+package-lock.json       | Registro exacto de versiones instaladas
+.gitignore              | Archivos/carpetas que Git debe ignorar
+README.md               | Información general del proyecto
 estructura-proyecto.txt | Este archivo: explica toda la organización del código
 
 ---
@@ -56,17 +59,17 @@ estructura-proyecto.txt | Este archivo: explica toda la organización del códig
 
 - Usar componentes para mantener el código limpio y reutilizable.
 - Centralizar layouts comunes (evita repetir header, sidebar, etc.).
-- Documentar cada endpoint en /api con comentarios claros.
-- Usar /lib para separar la lógica de negocio del renderizado.
+- Documentar cada endpoint en `/api` con comentarios claros.
+- Usar `/lib` para separar lógica de negocio y configuración del renderizado.
 
 ---
 
 ## 🔜 Futuras ampliaciones
 
-- Sustituir la autenticación simulada por Clerk.
-- Migrar el almacenamiento de datos JSON a SQLite si el proyecto escala.
-- Añadir validaciones del lado del cliente.
+- Crear panel de control (`dashboard`) protegido con sesión activa.
+- Añadir validaciones del lado del cliente y formularios más ricos.
+- Implementar CRUD completo de clientes/tickets.
 
 ---
 
-📌 Mantené este archivo actualizado si hacés cambios importantes en la estructura.
+📌 Mantené este archivo actualizado si hacés cambios importantes en la estructura o convenciones del proyecto.
