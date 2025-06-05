@@ -1,6 +1,5 @@
 ---
 import { SignIn } from '@clerk/astro/components';
-import { dark } from '@clerk/themes';
 ---
 
 <html lang="es">
@@ -13,12 +12,8 @@ import { dark } from '@clerk/themes';
 
   <body class="d-flex justify-content-center align-items-center vh-100 bg-dark text-white">
     <div>
-      <h1 class="text-center mb-4">Iniciar sesión</h1>
-      <SignIn 
-        appearance={{ baseTheme: dark }} 
-        forceRedirectUrl="/dashboard"
-        signUpUrl="/signup"                 
-      />
+      <h1 class="text-center mb-4">¡Bienvenido de nuevo!</h1>
+      <SignIn forceRedirectUrl="/dashboard" signUpUrl="/signup" />
     </div>
   </body>
 </html>
