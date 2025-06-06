@@ -7,13 +7,11 @@ node_modules/
 
 # ─── Environment Variables ────────────────────
 .env
-.env.*    # Esto cubre .env.production, .env.local, etc.
+.env.local
+.env.production
 
-# ─── Log files ────────────────────────────────
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+# Permitir que .env.example se incluya en el repositorio
+!.env.example
 
 # ─── OS/Editor-specific ───────────────────────
 .DS_Store
