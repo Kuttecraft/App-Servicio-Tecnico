@@ -50,6 +50,7 @@ tsconfig.json           | Configuración de TypeScript
 package.json            | Dependencias, scripts y metadata del proyecto
 package-lock.json       | Registro exacto de versiones instaladas
 .gitignore              | Archivos/carpetas que Git debe ignorar
+.env.example            | Plantilla de variables de entorno necesarias para ejecutar el proyecto
 README.md               | Información general del proyecto
 estructura-proyecto.txt | Este archivo: explica toda la organización del código
 
@@ -61,6 +62,7 @@ estructura-proyecto.txt | Este archivo: explica toda la organización del códig
 - Centralizar layouts comunes (evita repetir header, sidebar, etc.).
 - Documentar cada endpoint en `/api` con comentarios claros.
 - Usar `/lib` para separar lógica de negocio y configuración del renderizado.
+- Mantener actualizado el archivo `.env.example` cuando se agregan nuevas variables de entorno.
 
 ---
 
