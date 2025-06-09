@@ -1,0 +1,17 @@
+---
+const {
+  cliente = "Nombre del Cliente",
+  estado = "Presupuesto",
+  tipo = "Multifunción",
+  imagen = "/printer-placeholder.svg", // o una imagen real
+  onClickUrl = "#"
+} = Astro.props;
+---
+
+<div class="card card-custom text-center p-3">
+  <img src={imagen} alt="Imagen impresora" class="img-fluid mb-3" style="max-height: 120px;" />
+  <h6 class="fw-bold">{cliente}</h6>
+  <p class="mb-1"><strong>Estado:</strong> {estado}</p>
+  <p class="mb-3"><strong>Tipo:</strong> {tipo}</p>
+  <a href={onClickUrl} class="btn btn-dark btn-sm">VER</a>
+</div>

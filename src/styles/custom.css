@@ -1,0 +1,20 @@
+:root {
+  --bs-body-bg: #f8f9fa;
+  --bs-body-color: #2c2c2c;
+
+  --bs-primary: #6c63ff;
+  --bs-secondary: #2f3144;
+  --bs-light: #D9D6F2;
+  --bs-dark: #1b1b1b;
+}
+
+.card-custom {
+  background-color: var(--bs-light);
+  border: none;
+  border-radius: 0.75rem;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s;
+}
+.card-custom:hover {
+  transform: scale(1.01);
+}
