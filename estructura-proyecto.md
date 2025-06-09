@@ -11,33 +11,38 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 
 /src
 │
-├── /pages # 📄 Páginas principales del sitio web
-│ ├── index.astro # Página raíz, redirige a /signin
-│ ├── signin.astro # Página de login (usa <SignIn /> de Clerk)
-│ ├── signup.astro # Página de registro (usa <SignUp /> de Clerk)
-│ └── middleware.ts # Middleware opcional para rutas protegidas
+├── /components                 # Componentes reutilizables (tarjetas, barra lateral, etc.)
+│   └── PrinterCard.astro      # Componente para mostrar una impresora o equipo como tarjeta visual
 │
-├── /lib # ⚙️ Lógica y configuración reutilizable
-│ └── clerk.ts # Configuración centralizada de Clerk (apariencia, idioma)
+├── /layouts
+│   └── BasePrivateLayout.astro # Layout base para secciones autenticadas con Clerk + Bootstrap
 │
-├── /types # 📘 Tipos globales TypeScript
-│ ├── clerk.d.ts # Tipado para window.Clerk
-│ └── env.d.ts # Tipado para variables de entorno (import.meta.env)
+├── /lib
+│   └── clerk.ts                # Configuración centralizada de Clerk: apariencia, idioma, helpers
+│
+├── /pages                      # Páginas principales del sitio web
+│   ├── index.astro             # Página raíz, redirige a /signin automáticamente
+│   ├── dashboard.astro         # Panel de control principal (requiere sesión activa)
+│   ├── signin.astro            # Página de login (componente <SignIn /> de Clerk)
+│   ├── signup.astro            # Página de registro (componente <SignUp /> de Clerk)
+│   └── middleware.ts           # Middleware opcional para proteger rutas privadas
+│
+├── /types
+│   ├── clerk.d.ts              # Tipado específico para objetos de Clerk (ej. window.Clerk)
+│   └── env.d.ts                # Tipado para variables de entorno (import.meta.env)
 
 ---
-
-## 🗂 Otras carpetas importantes
+📁 OTRAS CARPETAS IMPORTANTES
 
 /public
-├── styles/                # Archivos CSS globales separados (login.css, dashboard.css, etc.)
-│   └── login.css
-├── logo.png               # Logo de la app
-├── img/                   # Imágenes públicas
-└── ...                    # Archivos estáticos accesibles por URL directa
+├── styles/                    # Archivos CSS estáticos globales (si se usan)
+│   └── login.css              # Estilos base para login o páginas públicas
+├── logo.svg                   # Icono/logo de la app
+├── img/                       # Imágenes visibles por URL directa
+└── printer-placeholder.svg    # Imagen por defecto para impresoras
 
-/.astro                    # Carpeta generada por Astro (NO TOCAR)
-/node_modules              # Dependencias del proyecto (NO TOCAR)
-
+/.astro                        # Archivos generados por Astro (NO EDITAR)
+/node_modules                  # Dependencias instaladas por npm (NO EDITAR)
 
 ```
 
@@ -58,19 +63,20 @@ estructura-proyecto.txt | Este archivo: explica toda la organización del códig
 
 ## ✅ Buenas prácticas
 
-- Usar componentes para mantener el código limpio y reutilizable.
-- Centralizar layouts comunes (evita repetir header, sidebar, etc.).
-- Documentar cada endpoint en `/api` con comentarios claros.
-- Usar `/lib` para separar lógica de negocio y configuración del renderizado.
-- Mantener actualizado el archivo `.env.example` cuando se agregan nuevas variables de entorno.
+- Usar **componentes modulares** y legibles
+- Centralizar lógica en `/lib/`
+- No dejar lógica en páginas si puede extraerse
+- Mantener el código limpio y comentado
+- Actualizar `.env.example` al agregar nuevas variables
 
 ---
 
 ## 🔜 Futuras ampliaciones
 
-- Crear panel de control (`dashboard`) protegido con sesión activa.
-- Añadir validaciones del lado del cliente y formularios más ricos.
-- Implementar CRUD completo de clientes/tickets.
+- CRUD completo de clientes, tickets y técnicos
+- Sistema de notificaciones por email
+- Exportación de informes
+- Generación automática de etiquetas o fichas técnicas
 
 ---
 
