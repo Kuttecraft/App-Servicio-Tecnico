@@ -1,0 +1,61 @@
+---
+import "bootstrap/dist/css/bootstrap.min.css"; // ✅ CSS Bootstrap local
+import { SignedIn, SignedOut } from '@clerk/astro/components';
+import Sidebar from '../components/Sidebar.astro';
+import Topbar from '../components/Topbar.astro';
+import "../styles/custom.css";
+---
+
+
+<SignedIn>
+  <!DOCTYPE html>
+  <html lang="es">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>App Servicio Técnico</title>
+      <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+    </head>
+
+    <body class="bg-light text-dark">
+      <div class="d-flex flex-column flex-md-row">
+        <!-- Sidebar visible en desktop y offcanvas en mobile -->
+        <Sidebar />
+
+        <!-- Contenido principal -->
+        <div class="flex-grow-1">
+          <Topbar />
+          <main class="p-3">
+            <slot />
+          </main>
+        </div>
+      </div>
+
+      <!-- Bootstrap JS local (necesario para offcanvas) -->
+      <script type="module">
+        import 'bootstrap/dist/js/bootstrap.bundle.min.js';
+      </script>
+    </body>
+  </html>
+</SignedIn>
+
+
+<SignedOut>
+  <!DOCTYPE html>
+  <html lang="es">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Acceso Restringido</title>
+      <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+    </head>
+    <body class="bg-light d-flex align-items-center justify-content-center vh-100">
+      <div class="text-center">
+        <h2 class="h4 fw-bold">Acceso restringido</h2>
+        <p class="mt-2">
+          Debes <a href="/signin" class="text-primary fw-semibold">iniciar sesión</a> para continuar.
+        </p>
+      </div>
+    </body>
+  </html>
+</SignedOut>
