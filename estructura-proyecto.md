@@ -11,25 +11,37 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 
 /src
 │
-├── /components                 # Componentes reutilizables (tarjetas, barra lateral, etc.)
-│   └── PrinterCard.astro      # Componente para mostrar una impresora o equipo como tarjeta visual
+├── /components                  # Componentes reutilizables (tarjetas, barra lateral, etc.)
+│   ├── PrinterCard.astro        # Componente visual para mostrar una impresora o equipo
+│   ├── Sidebar.astro            # Componente para la barra de navegación lateral
+│   └── Topbar.astro             # Componente para la barra superior
 │
 ├── /layouts
-│   └── BasePrivateLayout.astro # Layout base para secciones autenticadas con Clerk + Bootstrap
+│   └── BasePrivateLayout.astro  # Layout base para áreas privadas con Clerk + Bootstrap
 │
 ├── /lib
-│   └── clerk.ts                # Configuración centralizada de Clerk: apariencia, idioma, helpers
+│   └── clerk.ts                 # Configuración centralizada de Clerk: apariencia, idioma y helpers
 │
-├── /pages                      # Páginas principales del sitio web
-│   ├── index.astro             # Página raíz, redirige a /signin automáticamente
-│   ├── dashboard.astro         # Panel de control principal (requiere sesión activa)
-│   ├── signin.astro            # Página de login (componente <SignIn /> de Clerk)
-│   ├── signup.astro            # Página de registro (componente <SignUp /> de Clerk)
-│   └── middleware.ts           # Middleware opcional para proteger rutas privadas
+├── /pages                       # Páginas principales del sitio
+│   ├── index.astro              # Página raíz, redirige automáticamente a /signin
+│   ├── dashboard.astro          # Panel principal del usuario (requiere sesión activa)
+│   ├── signin.astro             # Página de inicio de sesión (<SignIn /> de Clerk)
+│   ├── signup.astro             # Página de registro (<SignUp /> de Clerk)
+│   └── /detalle
+│       └── [id].astro           # Página dinámica con detalle según `id` y datos de `/data`
+│
+├── /data
+│   └── impresoras.json          # Datos ficticios de impresoras y clientes
+│
+├── /styles
+│   └── Custom.css                # Estilos base para trabajar a lo largo de la web 
 │
 ├── /types
-│   ├── clerk.d.ts              # Tipado específico para objetos de Clerk (ej. window.Clerk)
-│   └── env.d.ts                # Tipado para variables de entorno (import.meta.env)
+│   ├── clerk.d.ts               # Tipado personalizado para Clerk (ej. window.Clerk)
+│   └── env.d.ts                 # Tipado para variables de entorno (`import.meta.env`)
+│
+├── middleware.ts                # Middleware para proteger rutas privadas
+
 
 ---
 📁 OTRAS CARPETAS IMPORTANTES
