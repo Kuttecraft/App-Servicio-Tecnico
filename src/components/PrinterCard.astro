@@ -1,9 +1,9 @@
 ---
 const {
   cliente = "Nombre del Cliente",
-  estado = "Presupuesto",
-  tipo = "Multifunción",
-  imagen = "/printer-placeholder.svg", // o una imagen real
+  estado = "Estado",
+  modelo = "Modelo",
+  imagen = "/printer-placeholder.svg",
   onClickUrl = "#"
 } = Astro.props;
 ---
@@ -12,6 +12,6 @@ const {
   <img src={imagen} alt="Imagen impresora" class="img-fluid mb-3" style="max-height: 120px;" />
   <h6 class="fw-bold">{cliente}</h6>
   <p class="mb-1"><strong>Estado:</strong> {estado}</p>
-  <p class="mb-3"><strong>Tipo:</strong> {tipo}</p>
+  <p class="mb-3"><strong>Modelo:</strong> {modelo}</p>
   <a href={onClickUrl} class="btn btn-dark btn-sm">VER</a>
 </div>

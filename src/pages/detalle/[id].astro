@@ -1,0 +1,48 @@
+---
+import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
+import data from '../../data/impresoras.json';
+
+const { id } = Astro.params;
+const equipo = data.find(e => e.id === id);
+---
+
+<BasePrivateLayout>
+  <div class="container mt-4">
+    <h1 class="h3 mb-4">Detalle del equipo</h1>
+
+    {equipo ? (
+      <div class="card p-4 mx-auto shadow-sm" style="max-width: 600px;">
+        <div class="text-center mb-4">
+          <img src={equipo.imagen} alt="Imagen impresora" class="img-fluid" style="max-height: 180px;" />
+        </div>
+
+        <h4 class="fw-bold text-primary mb-3">{equipo.cliente}</h4>
+
+        <ul class="list-unstyled">
+          <li><strong>Ticket:</strong> {equipo.ticket}</li>
+          <li><strong>Estado:</strong> {equipo.estado}</li>
+          <li><strong>Modelo:</strong> {equipo.modelo}</li>
+          <li><strong>Fecha formulario:</strong> {equipo.fechaFormulario}</li>
+          <li><strong>Nota Técnico:</strong> {equipo.notaTecnico}</li>
+          <li><strong>Nota administración:</strong> {equipo.notaAdmin}</li>
+          <li><strong>Comentarios:</strong> {equipo.comentarios}</li>
+          <li><strong>Técnico:</strong> {equipo.tecnico}</li>
+          <li><strong>¿Cubre garantía?:</strong> {equipo.cubreGarantia}</li>
+          <li><strong>Nota interna:</strong> {equipo.notaInterna}</li>
+          <li><strong>Link presupuesto:</strong> <a href={equipo.linkPresupuesto} target="_blank">Ver</a></li>
+          <li><strong>Monto:</strong> ${equipo.monto}</li>
+          <li><strong>Modo delivery:</strong> {equipo.costoDelivery}</li>
+          <li><strong>Info delivery:</strong> {equipo.infoDelivery}</li>
+          <li><strong>DNI/CUIT:</strong> {equipo.dniCuit}</li>
+          <li><strong>WhatsApp:</strong> {equipo.whatsapp}</li>
+          <li><strong>Correo:</strong> {equipo.correo}</li>
+          <li><strong>¿Cobrado?:</strong> {equipo.cobrado}</li>
+          <li><strong>Fecha presupuesto:</strong> {equipo.timestampPresupuesto}</li>
+          <li><strong>Fecha listo:</strong> {equipo.timestampListo}</li>
+        </ul>
+      </div>
+    ) : (
+      <p class="text-danger">No se encontró el equipo con ID: {id}</p>
+    )}
+  </div>
+</BasePrivateLayout>

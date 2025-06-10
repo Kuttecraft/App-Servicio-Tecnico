@@ -1,29 +1,29 @@
 ---
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 import PrinterCard from '../components/PrinterCard.astro';
+import data from '../data/impresoras.json';
 ---
 
 <BasePrivateLayout>
   <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h1 class="h3">Clientes y Equipos</h1>
+      <h1 class="h3">Equipos</h1>
       <span class="badge bg-primary"><span class="me-1">👋</span> Bienvenido</span>
     </div>
 
     <!-- Grid de impresoras -->
     <div class="row g-4">
-      <div class="col-sm-6 col-md-4 col-lg-3">
-        <PrinterCard cliente="Juan Pérez" estado="Presupuesto" tipo="Multifunción" imagen="/printer-placeholder.svg" onClickUrl="/detalle/1" />
-      </div>
-      <div class="col-sm-6 col-md-4 col-lg-3">
-        <PrinterCard cliente="Marta Gómez" estado="En reparación" tipo="Láser" imagen="/printer-placeholder.svg" onClickUrl="/detalle/2" />
-      </div>
-      <div class="col-sm-6 col-md-4 col-lg-3">
-        <PrinterCard cliente="Tech Corp" estado="Listo para entregar" tipo="Inyección" imagen="/printer-placeholder.svg" onClickUrl="/detalle/3" />
-      </div>
-      <div class="col-sm-6 col-md-4 col-lg-3">
-        <PrinterCard cliente="Carlos S." estado="Entregado" tipo="Térmica" imagen="/printer-placeholder.svg" onClickUrl="/detalle/4" />
-      </div>
+      {data.map((equipo) => (
+        <div class="col-sm-6 col-md-4 col-lg-3">
+          <PrinterCard
+            cliente={equipo.cliente}
+            estado={equipo.estado}
+            modelo={equipo.modelo}
+            imagen={equipo.imagen}
+            onClickUrl={`/detalle/${equipo.id}`}
+          />
+        </div>
+      ))}
     </div>
   </div>
 </BasePrivateLayout>

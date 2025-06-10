@@ -1,25 +1,31 @@
 ---
 import { UserButton } from '@clerk/astro/components';
 ---
-
 <nav class="navbar bg-white border-bottom px-3 py-2 shadow-sm">
   <div class="d-flex w-100 align-items-center justify-content-between">
-    <!-- Botón hamburguesa -->
+    <!-- Botón hamburguesa (móvil) -->
     <button
       class="btn d-md-none"
       type="button"
       data-bs-toggle="offcanvas"
       data-bs-target="#mobileSidebar"
+      aria-controls="mobileSidebar"
+      aria-label="Abrir menú"
     >
       ☰
     </button>
 
-    <!-- Buscador -->
+    <!-- Buscador (desktop) -->
     <form class="d-none d-md-flex flex-grow-1 mx-3" role="search">
-      <input class="form-control" type="search" placeholder="Buscar..." />
+      <input
+        class="form-control"
+        type="search"
+        placeholder="Buscar..."
+        aria-label="Buscar"
+      />
     </form>
 
-    <!-- User -->
+    <!-- User (Clerk) -->
     <div class="ms-auto">
       <UserButton />
     </div>
