@@ -1,7 +1,14 @@
 ---
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 import PrinterCard from '../components/PrinterCard.astro';
-import data from '../data/impresoras.json';
+import { supabase } from '../lib/supabase';
+
+// Cambiar el nombre de la tabla para que coincida con Supabase
+const { data: impresoras, error } = await supabase.from('TestImpresoras').select('*');
+
+if (error) {
+  console.error('Error al obtener datos desde Supabase:', error.message);
+}
 ---
 
 <BasePrivateLayout>
@@ -13,17 +20,29 @@ import data from '../data/impresoras.json';
 
     <!-- Grid de impresoras -->
     <div class="row g-4">
-      {data.map((equipo) => (
-        <div class="col-sm-6 col-md-4 col-lg-3">
-          <PrinterCard
+      {impresoras && impresoras.length > 0 ? (
+        impresoras.map((equipo) => (
+          <div class="col-sm-6 col-md-4 col-lg-3">
+           <PrinterCard
             cliente={equipo.cliente}
             estado={equipo.estado}
             modelo={equipo.modelo}
             imagen={equipo.imagen}
             onClickUrl={`/detalle/${equipo.id}`}
+            ticket={equipo.ticket}
+            whatsapp={equipo.whatsapp}
           />
+          </div>
+        ))
+      ) : (
+        <div class="col-12 text-center">
+          <p class="text-muted">No hay equipos cargados en la base de datos.</p>
         </div>
-      ))}
+      )}
     </div>
+
+    <!-- Debug opcional -->
+    <!-- Permite rescatar y mostrar en el dashboard los datos de la tabla -->
+    <!--<pre>{JSON.stringify(impresoras, null, 2)}</pre> -->
   </div>
 </BasePrivateLayout>
