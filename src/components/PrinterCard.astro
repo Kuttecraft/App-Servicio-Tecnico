@@ -4,14 +4,21 @@ const {
   estado = "Estado",
   modelo = "Modelo",
   imagen = "/printer-placeholder.svg",
-  onClickUrl = "#"
+  onClickUrl = "#",
+  ticket = "",
+  whatsapp = ""
 } = Astro.props;
 ---
 
+
 <div class="card card-custom text-center p-3">
   <img src={imagen} alt="Imagen impresora" class="img-fluid mb-3" style="max-height: 120px;" />
+  
   <h6 class="fw-bold">{cliente}</h6>
+  <p class="mb-1"><strong>Ticket:</strong> {ticket}</p>
+  <p class="mb-1"><strong>Modelo:</strong> {modelo}</p>
   <p class="mb-1"><strong>Estado:</strong> {estado}</p>
-  <p class="mb-3"><strong>Modelo:</strong> {modelo}</p>
+  <p class="mb-2"><strong>WhatsApp:</strong> {whatsapp}</p>
+
   <a href={onClickUrl} class="btn btn-dark btn-sm">VER</a>
 </div>
