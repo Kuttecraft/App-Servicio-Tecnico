@@ -1,9 +1,18 @@
 ---
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
-import data from '../../data/impresoras.json';
+import { supabase } from '../../lib/supabase';
 
 const { id } = Astro.params;
-const equipo = data.find(e => e.id === id);
+const { data, error } = await supabase
+  .from('TestImpresoras')
+  .select('*')
+  .eq('id', id)
+  .single();
+
+const equipo = data;
+
+import { formatearFecha, booleanATexto, formatearMoneda } from '../../lib/utils';
+
 ---
 
 <BasePrivateLayout>
@@ -27,18 +36,18 @@ const equipo = data.find(e => e.id === id);
           <li><strong>Nota administración:</strong> {equipo.notaAdmin}</li>
           <li><strong>Comentarios:</strong> {equipo.comentarios}</li>
           <li><strong>Técnico:</strong> {equipo.tecnico}</li>
-          <li><strong>¿Cubre garantía?:</strong> {equipo.cubreGarantia}</li>
+          <li><strong>¿Cubre garantía?:</strong> {booleanATexto(equipo.cubreGarantia)}</li>
           <li><strong>Nota interna:</strong> {equipo.notaInterna}</li>
           <li><strong>Link presupuesto:</strong> <a href={equipo.linkPresupuesto} target="_blank">Ver</a></li>
-          <li><strong>Monto:</strong> ${equipo.monto}</li>
+          <li><strong>Monto:</strong> {formatearMoneda(equipo.monto)}</li>
           <li><strong>Modo delivery:</strong> {equipo.costoDelivery}</li>
           <li><strong>Info delivery:</strong> {equipo.infoDelivery}</li>
           <li><strong>DNI/CUIT:</strong> {equipo.dniCuit}</li>
           <li><strong>WhatsApp:</strong> {equipo.whatsapp}</li>
           <li><strong>Correo:</strong> {equipo.correo}</li>
-          <li><strong>¿Cobrado?:</strong> {equipo.cobrado}</li>
-          <li><strong>Fecha presupuesto:</strong> {equipo.timestampPresupuesto}</li>
-          <li><strong>Fecha listo:</strong> {equipo.timestampListo}</li>
+          <li><strong>¿Cobrado?:</strong> {booleanATexto(equipo.cobrado)}</li>
+          <li><strong>Fecha presupuesto:</strong> {equipo.timestampPresupuesto ? formatearFecha(equipo.timestampPresupuesto) : '—'}</li>
+          <li><strong>Fecha listo:</strong> {equipo.timestampListo ? formatearFecha(equipo.timestampListo) : '—'}</li>
         </ul>
       </div>
     ) : (
