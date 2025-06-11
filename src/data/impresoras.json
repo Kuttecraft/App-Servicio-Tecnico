@@ -1,15 +1,15 @@
 [
   {
-    "id": "1",
+    "id": "",
     "ticket": "TK-001",
     "estado": "Presupuesto",
-    "cliente": "Cliente",
+    "cliente": "Orlando",
     "modelo": "Ender-3 V2",
     "fechaFormulario": "2025-06-01",
     "notaTecnico": "Cliente indica que la boquilla no calienta.",
     "notaAdmin": "Revisar conexión del hotend.",
     "comentarios": "Pérdida de filamento al iniciar impresión.",
-    "tecnico": "Lucas P.",
+    "tecnico": "Alejandro Britez",
     "cubreGarantia": "Sí",
     "notaInterna": "Equipo recibido sin caja original.",
     "linkPresupuesto": "https://example.com/presupuesto/1",
