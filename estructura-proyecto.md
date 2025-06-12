@@ -17,44 +17,44 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 │   └── Topbar.astro             # Componente para la barra superior
 │
 ├── /layouts
-│   └── BasePrivateLayout.astro  # Layout base para áreas privadas con Clerk + Bootstrap
+│   └── BasePrivateLayout.astro  # Layout base para áreas privadas (Clerk + Bootstrap)
 │
 ├── /lib
-│   └── clerk.ts                 # Configuración centralizada de Clerk: apariencia, idioma y helpers
+│   ├── clerk.ts                 # Configuración de Clerk: apariencia, idioma y helpers
+│   ├── supabase.ts              # Inicialización y cliente de Supabase
+│   └── utils.ts                 # Funciones auxiliares (fechas, textos, formatos, moneda)
 │
-├── /pages                       # Páginas principales del sitio
-│   ├── index.astro              # Página raíz, redirige automáticamente a /signin
+├── /pages
+│   ├── index.astro              # Página raíz, redirige a /signin
 │   ├── dashboard.astro          # Panel principal del usuario (requiere sesión activa)
-│   ├── signin.astro             # Página de inicio de sesión (<SignIn /> de Clerk)
-│   ├── signup.astro             # Página de registro (<SignUp /> de Clerk)
+│   ├── signin.astro             # Página de inicio de sesión (<SignIn />)
+│   ├── signup.astro             # Página de registro (<SignUp />)
 │   └── /detalle
-│       └── [id].astro           # Página dinámica con detalle según `id` y datos de `/data`
+│       └── [id].astro           # Página dinámica según `id`
 │
 ├── /data
-│   └── impresoras.json          # Datos ficticios de impresoras y clientes
+│   └── impresoras.json          # Datos ficticios para pruebas
 │
 ├── /styles
-│   └── Custom.css                # Estilos base para trabajar a lo largo de la web 
+│   └── Custom.css               # Estilos personalizados
 │
 ├── /types
 │   ├── clerk.d.ts               # Tipado personalizado para Clerk (ej. window.Clerk)
-│   └── env.d.ts                 # Tipado para variables de entorno (`import.meta.env`)
+│   ├── astro.d.ts               # Extensión de tipos para Astro.locals.user (Clerk backend)
+│   └── env.d.ts                 # Tipado de variables de entorno
 │
-├── middleware.ts                # Middleware para proteger rutas privadas
-
+├── middleware.ts                # Middleware para protección de rutas
 
 ---
 📁 OTRAS CARPETAS IMPORTANTES
 
 /public
-├── styles/                    # Archivos CSS estáticos globales (si se usan)
-│   └── login.css              # Estilos base para login o páginas públicas
-├── logo.svg                   # Icono/logo de la app
-├── img/                       # Imágenes visibles por URL directa
-└── printer-placeholder.svg    # Imagen por defecto para impresoras
+├── logo.svg                     # Icono principal de la aplicación
+├── img/                         # Imágenes públicas accesibles por URL
+└── printer-placeholder.svg      # Imagen por defecto para impresoras
 
-/.astro                        # Archivos generados por Astro (NO EDITAR)
-/node_modules                  # Dependencias instaladas por npm (NO EDITAR)
+/.astro                          # Archivos generados automáticamente por Astro (NO EDITAR)
+/node_modules                    # Dependencias instaladas por npm (NO EDITAR)
 
 ```
 
