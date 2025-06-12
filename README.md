@@ -8,10 +8,12 @@ Su propósito principal es permitir un **seguimiento eficiente de productos ingr
 
 ## 🚀 Tecnologías utilizadas
 
-- **Astro** (Frontend basado en componentes)
-- **Node.js** (para lógica de backend simulada en `/api`)
-- **Bootstrap** (para diseño responsive)
-- **Clerk** (para autenticación real con cuentas de usuario)
+- **Astro** Framework moderno basado en componentes para el desarrollo frontend.
+- **Bootstrap** Sistema de diseño responsive para una interfaz adaptable.
+- **Clerk** Servicio de autenticación para la gestión completa de usuarios (registro, login, sesiones, redirecciones) [`Referencia.`](https://clerk.com/) 
+- **Supabase** Backend como servicio que proporciona base de datos PostgreSQL, autenticación, almacenamiento y funciones serverless. [`Referencia.`](https://supabase.com) 
+- **Node.js** Motor para la lógica de backend. Actualmente se usa en endpoints locales dentro de `/api`, y está previsto como base para una migración futura a un backend propio más robusto.
+
 
 ---
 
@@ -29,20 +31,28 @@ cd App-Servicio-Tecnico
 npm install
 ```
 
-### 3. Instalar dependencias de Clerk
+### 3. Configurar entorno 
 
-Crear un archivo `.env` en la raíz del proyecto con tu clave pública de Clerk:
+- Crear un archivo `.env` y ver [`.env.example`](./.env.example) 
 
 ```env
+# 🔐 CLAVES DE CLERK 
 PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...           # Solo necesaria para funciones protegidas en el backend
+
+# 🔑 CLAVES DE SUPABASE
+PUBLIC_SUPABASE_URL=https://<tu-proyecto>.supabase.co
+PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1...
+
+# 🌐 OPCIONALES DE ASTRO
+PUBLIC_CLERK_SIGN_IN_URL=/ingreso
+PUBLIC_CLERK_SIGN_UP_URL=/registro
 ```
 
 ### 4. 🚀 Iniciar el servidor de desarrollo
 ```batch 
 npm run dev
 ```
-
----
 
 ## 📁 Documentación de estructura
 
@@ -52,19 +62,18 @@ La estructura interna del código está documentada en:
 
 Incluye detalles de carpetas, archivos clave, buenas prácticas y planes de escalabilidad.
 
----
-
 ## 👤 Autor
 
-- Proyecto creado por **Santiago Llamosas**
 - Fecha de inicio: **22/05/2025**
+- Proyecto creado por  [`Santiago Llamosas`](https://github.com/Llamosas21)
+
 
 ---
 
 ## 🤝 Contribuciones
 
-Este es un proyecto **público**, abierto a ideas, mejoras y colaboración.  
-Si querés contribuir, podés abrir un **issue** o enviar un **pull request**.
+- Este es un proyecto **público**, abierto a ideas, mejoras y colaboración.  
+    - Si querés contribuir, podés abrir un **issue** o enviar un **pull request**.
 
 ---
 
