@@ -9,42 +9,49 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 ```batch 
 ## 🗂 Estructura de carpetas
 
+📁 Estructura de carpetas
+
 /src
 │
-├── /components                  # Componentes reutilizables (tarjetas, barra lateral, etc.)
-│   ├── PrinterCard.astro        # Componente visual para mostrar una impresora o equipo
-│   ├── Sidebar.astro            # Componente para la barra de navegación lateral
-│   └── Topbar.astro             # Componente para la barra superior
+├── /components
+│   ├── PrinterCard.astro         # Componente visual para mostrar un equipo
+│   ├── Sidebar.astro             # Barra lateral de navegación
+│   └── Topbar.astro              # Barra superior con sesión, etc.
 │
 ├── /layouts
-│   └── BasePrivateLayout.astro  # Layout base para áreas privadas (Clerk + Bootstrap)
+│   └── BasePrivateLayout.astro   # Layout base para vistas privadas (con Clerk + estilos)
 │
 ├── /lib
-│   ├── clerk.ts                 # Configuración de Clerk: apariencia, idioma y helpers
-│   ├── supabase.ts              # Inicialización y cliente de Supabase
-│   └── utils.ts                 # Funciones auxiliares (fechas, textos, formatos, moneda)
+│   ├── clerk.ts                  # Configuración visual y de idioma de Clerk
+│   ├── supabase.ts               # Cliente global de Supabase (PostgreSQL)
+│   └── utils.ts                  # Funciones útiles (formato, fechas, monedas)
 │
 ├── /pages
-│   ├── index.astro              # Página raíz, redirige a /signin
-│   ├── dashboard.astro          # Panel principal del usuario (requiere sesión activa)
-│   ├── addTicket.astro          # Página para agregar datos
-│   ├── signin.astro             # Página de inicio de sesión (<SignIn />)
-│   ├── signup.astro             # Página de registro (<SignUp />)
-│   └── /detalle
-│       └── [id].astro           # Página dinámica según `id`
+│   ├── index.astro               # Redirección a /signin
+│   ├── dashboard.astro           # Panel principal del usuario
+│   ├── addTicket.astro           # Formulario para crear nuevos tickets
+│   ├── signin.astro              # Página de ingreso (Clerk)
+│   ├── signup.astro              # Registro de usuarios
+│   ├── clientes.astro            # (pendiente) vista para gestión de técnicos/clientes
+│   ├── estadisticas.astro        # (pendiente) panel con métricas
+│   ├── /detalle/
+│   │   └── [id].astro            # Vista dinámica de detalle del ticket
+│   └── /api/
+│       └── crearTicket.ts        # Endpoint POST para crear un ticket (modo servidor)
 │
 ├── /data
-│   └── impresoras.json          # Datos ficticios para pruebas
+│   └── impresoras.json           # Datos de ejemplo para pruebas (mock)
 │
 ├── /styles
-│   └── Custom.css               # Estilos personalizados
+│   └── Custom.css                # Estilos personalizados (Bootstrap + overrides)
 │
 ├── /types
-│   ├── clerk.d.ts               # Tipado personalizado para Clerk (ej. window.Clerk)
-│   ├── astro.d.ts               # Extensión de tipos para Astro.locals.user (Clerk backend)
-│   └── env.d.ts                 # Tipado de variables de entorno
-│
-├── middleware.ts                # Middleware para protección de rutas
+│   ├── astro.d.ts                # Extensiones de tipos de Astro (ej: locals.user)
+│   ├── clerk.d.ts                # Tipado de `window.Clerk`, etc.
+│   └── env.d.ts                  # Tipos para las variables de entorno
+
+├── middleware.ts                 # Middleware global para proteger rutas privadas
+
 
 ---
 📁 OTRAS CARPETAS IMPORTANTES
@@ -63,7 +70,7 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 
 Archivo                 | Descripción
 ------------------------|-----------------------------------------------------------
-astro.config.ts         | Configuración principal de Astro y Clerk
+astro.config.ts         | Configuración de Astro. Actualmente usa output: 'server' con @astrojs/node.
 tsconfig.json           | Configuración de TypeScript
 package.json            | Dependencias, scripts y metadata del proyecto
 package-lock.json       | Registro exacto de versiones instaladas
@@ -76,8 +83,8 @@ estructura-proyecto.txt | Este archivo: explica toda la organización del códig
 
 ## ✅ Buenas prácticas
 
-- Usar **componentes modulares** y legibles
-- Centralizar lógica en `/lib/`
+- Usar **componentes modulares**, legibles y reutilizables diidir en `/components` que puedan combinarse y mantenerse fácilmente.
+- Centralizar lógica en `/lib/` 
 - No dejar lógica en páginas si puede extraerse
 - Mantener el código limpio y comentado
 - Actualizar `.env.example` al agregar nuevas variables
@@ -87,9 +94,8 @@ estructura-proyecto.txt | Este archivo: explica toda la organización del códig
 ## 🔜 Futuras ampliaciones
 
 - CRUD completo de clientes, tickets y técnicos
-- Sistema de notificaciones por email
 - Exportación de informes
-- Generación automática de etiquetas o fichas técnicas
+- Generación de estadísticas apartir de lso datos de la base 
 
 ---
 
