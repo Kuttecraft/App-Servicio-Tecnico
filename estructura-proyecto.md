@@ -27,6 +27,7 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 ├── /pages
 │   ├── index.astro              # Página raíz, redirige a /signin
 │   ├── dashboard.astro          # Panel principal del usuario (requiere sesión activa)
+│   ├── addTicket.astro          # Página para agregar datos
 │   ├── signin.astro             # Página de inicio de sesión (<SignIn />)
 │   ├── signup.astro             # Página de registro (<SignUp />)
 │   └── /detalle

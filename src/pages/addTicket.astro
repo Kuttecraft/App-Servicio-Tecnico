@@ -1,0 +1,224 @@
+---
+import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
+
+const url = new URL(Astro.request.url);
+
+// Capturamos los valores desde la URL (o dejamos vacío si no están)
+// para visualizar los datos pre cargados: 
+// /addTicket?cliente=Juan+Pérez&correo=juan@example.com&modelo=PK3++&tecnico=Luis&dniCuit=20304050&whatsapp=1122334455&estado=Revisado&ticket=TK1234&notaTecnico=Chequeado+motor&notaAdmin=Esperando+repuesto&comentarios=Cliente+avisó+demora&cubreGarantia=true&cobrado=false&monto=8500&linkPresupuesto=https%3A%2F%2Fejemplo.com%2Fpresupuesto.pdf&costoDelivery=Envío+normal&infoDelivery=Retira+cliente
+
+const cliente = url.searchParams.get('cliente') || '';
+const dniCuit = url.searchParams.get('dniCuit') || '';
+const correo = url.searchParams.get('correo') || '';
+const whatsapp = url.searchParams.get('whatsapp') || '';
+const modelo = url.searchParams.get('modelo') || '';
+const tecnico = url.searchParams.get('tecnico') || '';
+const estado = url.searchParams.get('estado') || 'Recibido';
+const ticket = url.searchParams.get('ticket') || '';
+const notaTecnico = url.searchParams.get('notaTecnico') || '';
+const notaAdmin = url.searchParams.get('notaAdmin') || '';
+const comentarios = url.searchParams.get('comentarios') || '';
+const cubreGarantia = url.searchParams.get('cubreGarantia') || 'false';
+const cobrado = url.searchParams.get('cobrado') || 'false';
+const monto = url.searchParams.get('monto') || '';
+const linkPresupuesto = url.searchParams.get('linkPresupuesto') || '';
+const costoDelivery = url.searchParams.get('costoDelivery') || '';
+const infoDelivery = url.searchParams.get('infoDelivery') || '';
+---
+<BasePrivateLayout>
+  <div class="container mt-5">
+    <h2 class="mb-4">🎫 Crear nuevo ticket</h2>
+
+    <form method="post" action="/api/crearTicket" class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Cliente</label>
+        <input type="text" class="form-control" name="cliente" value={cliente} required />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">DNI/CUIT</label>
+        <input type="text" class="form-control" name="dniCuit" value={dniCuit} />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Correo</label>
+        <input type="email" class="form-control" name="correo" value={correo} />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">WhatsApp</label>
+        <input type="text" class="form-control" name="whatsapp" value={whatsapp} />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Modelo</label>
+        <input type="text" class="form-control" name="modelo" value={modelo} />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Técnico</label>
+        <input type="text" class="form-control" name="tecnico" value={tecnico} />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Estado</label>
+        <input type="text" class="form-control" name="estado" value={estado} />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Ticket</label>
+        <input type="text" class="form-control" name="ticket" value={ticket} />
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Nota técnico</label>
+        <textarea class="form-control" name="notaTecnico">{notaTecnico}</textarea>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Nota administración</label>
+        <textarea class="form-control" name="notaAdmin">{notaAdmin}</textarea>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Comentarios</label>
+        <textarea class="form-control" name="comentarios">{comentarios}</textarea>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">¿Cubre garantía?</label>
+        <select class="form-select" name="cubreGarantia">
+          <option value="false" selected={cubreGarantia === 'false'}>No</option>
+          <option value="true" selected={cubreGarantia === 'true'}>Sí</option>
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">¿Cobrado?</label>
+        <select class="form-select" name="cobrado">
+          <option value="false" selected={cobrado === 'false'}>No</option>
+          <option value="true" selected={cobrado === 'true'}>Sí</option>
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Monto</label>
+        <input type="number" class="form-control" name="monto" value={monto} />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Link presupuesto</label>
+        <input type="url" class="form-control" name="linkPresupuesto" value={linkPresupuesto} />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Modo delivery</label>
+        <input type="text" class="form-control" name="costoDelivery" value={costoDelivery} />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Info delivery</label>
+        <input type="text" class="form-control" name="infoDelivery" value={infoDelivery} />
+      </div>
+
+      <div class="col-12">
+        <button type="submit" class="btn btn-primary mt-3">Crear ticket</button>
+      </div>
+    </form>
+  </div>
+</BasePrivateLayout>
+
+{ /*  Descomentar en caso de querer cargar los campos 
+<BasePrivateLayout>
+  <div class="container mt-5">
+    <h2 class="mb-4">🎫 Crear nuevo ticket</h2>
+
+    <form method="post" action="/api/crearTicket" class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Cliente</label>
+        <input type="text" class="form-control" name="cliente" required />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">DNI/CUIT</label>
+        <input type="text" class="form-control" name="dniCuit" />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Correo</label>
+        <input type="email" class="form-control" name="correo" />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">WhatsApp</label>
+        <input type="text" class="form-control" name="whatsapp" />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Modelo</label>
+        <input type="text" class="form-control" name="modelo" />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Técnico</label>
+        <input type="text" class="form-control" name="tecnico" />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Estado</label>
+        <input type="text" class="form-control" name="estado" value="Recibido" />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Ticket</label>
+        <input type="text" class="form-control" name="ticket" />
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Nota técnico</label>
+        <textarea class="form-control" name="notaTecnico"></textarea>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Nota administración</label>
+        <textarea class="form-control" name="notaAdmin"></textarea>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Comentarios</label>
+        <textarea class="form-control" name="comentarios"></textarea>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">¿Cubre garantía?</label>
+        <select class="form-select" name="cubreGarantia">
+          <option value="false">No</option>
+          <option value="true">Sí</option>
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">¿Cobrado?</label>
+        <select class="form-select" name="cobrado">
+          <option value="false">No</option>
+          <option value="true">Sí</option>
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Monto</label>
+        <input type="number" class="form-control" name="monto" />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Link presupuesto</label>
+        <input type="url" class="form-control" name="linkPresupuesto" />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Modo delivery</label>
+        <input type="text" class="form-control" name="costoDelivery" />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Info delivery</label>
+        <input type="text" class="form-control" name="infoDelivery" />
+      </div>
+
+      <div class="col-12">
+        <button type="submit" class="btn btn-primary mt-3">Crear ticket</button>
+      </div>
+    </form>
+  </div>
+</BasePrivateLayout>
+*/ }
