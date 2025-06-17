@@ -3,8 +3,6 @@ import node from '@astrojs/node';
 import clerk from '@clerk/astro';
 import { clerkAppearance, clerkLocalization } from './src/lib/clerk';
 
-import tailwindcss from '@tailwindcss/vite';
-
 export default defineConfig({
   integrations: [
     clerk({
@@ -15,8 +13,4 @@ export default defineConfig({
 
   adapter: node({ mode: 'standalone' }),
   output: 'server',
-
-  vite: {
-    plugins: [tailwindcss()],
-  },
 });
