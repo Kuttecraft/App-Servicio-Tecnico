@@ -11,6 +11,11 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 
 📁 Estructura de carpetas
 
+```batch 
+## 🗂 Estructura de carpetas
+
+📁 Estructura de carpetas
+
 /src
 │
 ├── /components
@@ -36,8 +41,11 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 │   ├── estadisticas.astro        # (pendiente) panel con métricas
 │   ├── /detalle/
 │   │   └── [id].astro            # Vista dinámica de detalle del ticket
+│   ├── /editar/
+│   │   └── [id].astro            # Vista dinámica del ticket para editar
 │   └── /api/
-│       └── crearTicket.ts        # Endpoint POST para crear un ticket (modo servidor)
+│       ├── crearTicket.ts        # Endpoint POST para crear un ticket (modo servidor)
+│       └── actualizarTicket.ts   # Endpoint POST para editar un ticket (modo servidor)
 │
 ├── /data
 │   └── impresoras.json           # Datos de ejemplo para pruebas (mock)
@@ -51,7 +59,6 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 │   └── env.d.ts                  # Tipos para las variables de entorno
 
 ├── middleware.ts                 # Middleware global para proteger rutas privadas
-
 
 ---
 📁 OTRAS CARPETAS IMPORTANTES
