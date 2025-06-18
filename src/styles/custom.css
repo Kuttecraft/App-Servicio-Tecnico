@@ -18,3 +18,15 @@
 .card-custom:hover {
   transform: scale(1.01);
 }
+
+.btn-editar {
+  background-color: var(--bs-secondary);
+  color: #ffffff;
+  border: none;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.btn-editar:hover {
+  background-color: #4b4e68; 
+  color: #ffffff;
+}

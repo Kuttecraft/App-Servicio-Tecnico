@@ -15,7 +15,6 @@ if (error) {
   <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h1 class="h3">Equipos</h1>
-      <span class="badge bg-primary"><span class="me-1">👋</span> Bienvenido</span>
     </div>
 
     <!-- Grid de impresoras -->
@@ -29,6 +28,7 @@ if (error) {
             modelo={equipo.modelo}
             imagen={equipo.imagen}
             onClickUrl={`/detalle/${equipo.id}`}
+            onClickUrlEditar={`/editar/${equipo.id}`}
             ticket={equipo.ticket}
             whatsapp={equipo.whatsapp}
           />

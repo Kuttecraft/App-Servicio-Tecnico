@@ -5,20 +5,26 @@ const {
   modelo = "Modelo",
   imagen = "/printer-placeholder.svg",
   onClickUrl = "#",
+  onClickUrlEditar = "#",
   ticket = "",
   whatsapp = ""
 } = Astro.props;
 ---
 
-
-<div class="card card-custom text-center p-3">
-  <img src={imagen} alt="Imagen impresora" class="img-fluid mb-3" style="max-height: 120px;" />
+<div class="card text-center p-3 shadow-sm" style="background-color: #f5f6fa; border-radius: 12px;">
+  <img src={imagen} alt="Imagen impresora" class="img-fluid mb-2 mx-auto" style="max-height: 100px;" />
   
-  <h6 class="fw-bold">{cliente}</h6>
-  <p class="mb-1"><strong>Ticket:</strong> {ticket}</p>
-  <p class="mb-1"><strong>Modelo:</strong> {modelo}</p>
-  <p class="mb-1"><strong>Estado:</strong> {estado}</p>
-  <p class="mb-2"><strong>WhatsApp:</strong> {whatsapp}</p>
+  <h6 class="fw-bold text-dark mt-2 mb-1">{cliente}</h6>
 
-  <a href={onClickUrl} class="btn btn-dark btn-sm">VER</a>
+  <ul class="list-unstyled mb-3 small">
+    <li><strong>Ticket:</strong> {ticket}</li>
+    <li><strong>Modelo:</strong> {modelo}</li>
+    <li><strong>Estado:</strong> {estado}</li>
+    <li><strong>WhatsApp:</strong> {whatsapp}</li>
+  </ul>
+
+  <div class="d-grid gap-2">
+    <a href={onClickUrl} class="btn btn-sm btn-primary">Ver</a>
+    <a href={onClickUrlEditar} class="btn btn-sm btn-editar">Editar</a>
+  </div>
 </div>
