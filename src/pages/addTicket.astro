@@ -5,7 +5,7 @@ const url = new URL(Astro.request.url);
 
 // Capturamos los valores desde la URL (o dejamos vacío si no están)
 // para visualizar los datos pre cargados: 
-// /addTicket?cliente=Juan+Pérez&correo=juan@example.com&modelo=PK3++&tecnico=Luis&dniCuit=20304050&whatsapp=1122334455&estado=Revisado&ticket=TK1234&notaTecnico=Chequeado+motor&notaAdmin=Esperando+repuesto&comentarios=Cliente+avisó+demora&cubreGarantia=true&cobrado=false&monto=8500&linkPresupuesto=https%3A%2F%2Fejemplo.com%2Fpresupuesto.pdf&costoDelivery=Envío+normal&infoDelivery=Retira+cliente
+// /addTicket?cliente=Juan+Pérez&correo=juan@example.com&modelo=PK3++&tecnico=Luis&dniCuit=20304050&whatsapp=1122334455&estado=Revisado&ticket=9&notaTecnico=Chequeado+motor&notaAdmin=Esperando+repuesto&comentarios=Cliente+avisó+demora&cubreGarantia=true&cobrado=false&monto=8500&linkPresupuesto=https%3A%2F%2Fejemplo.com%2Fpresupuesto.pdf&costoDelivery=Envío+normal&infoDelivery=Retira+cliente
 
 const cliente = url.searchParams.get('cliente') || '';
 const dniCuit = url.searchParams.get('dniCuit') || '';
