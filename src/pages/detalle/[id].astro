@@ -85,7 +85,7 @@ const equipo = data;
 
     if (res.ok) {
       alert("Ticket eliminado correctamente.");
-      window.location.href = '/';
+      window.location.href = '/dashboard'; // La ruta a donde te manda cuando se elimina un dato 
     } else {
       alert("Error al eliminar: " + data.error);
     }

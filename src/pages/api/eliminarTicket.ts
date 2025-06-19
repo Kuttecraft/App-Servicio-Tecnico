@@ -2,7 +2,7 @@ import { supabase } from '../../lib/supabase';
 
 export async function POST(context: RequestContext) {
   const url = new URL(context.request.url);
-  const id = url.searchParams.get('id'); // ✅ Extraemos el ID desde la query string
+  const id = url.searchParams.get('id'); 
 
   if (!id) {
     return new Response(JSON.stringify({ error: 'ID no proporcionado' }), {
@@ -14,7 +14,7 @@ export async function POST(context: RequestContext) {
   const { error } = await supabase
     .from('TestImpresoras')
     .delete()
-    .eq('id', id); // ✅ UUID string
+    .eq('id', id);
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
