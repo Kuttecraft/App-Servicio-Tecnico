@@ -16,17 +16,31 @@ export async function POST(context: RequestContext) {
   const fields: Record<string, string> = {};
   formData.forEach((value, key) => {
     if (typeof value === 'string') {
-      fields[key] = value;
+      fields[key] = value.trim();
     }
   });
 
-  // Conversión y validaciones
+  // Conversión de tipos y validaciones específicas
   const datosActualizados = {
-    ...fields,
+    estado: fields.estado,
+    modelo: fields.modelo,
+    fechaFormulario: fields.fechaFormulario || null,
+    tecnico: fields.tecnico,
+    notaTecnico: fields.notaTecnico,
+    notaAdmin: fields.notaAdmin,
+    comentarios: fields.comentarios,
+    notaInterna: fields.notaInterna,
     cubreGarantia: fields.cubreGarantia === 'true',
     cobrado: fields.cobrado === 'true',
     monto: isNaN(parseFloat(fields.monto)) ? 0 : parseFloat(fields.monto),
-    timestampEdicion: new Date().toISOString(), // campo opcional de timestamp
+    linkPresupuesto: fields.linkPresupuesto,
+    costoDelivery: fields.costoDelivery,
+    infoDelivery: fields.infoDelivery,
+    dniCuit: fields.dniCuit,
+    whatsapp: fields.whatsapp,
+    correo: fields.correo,
+    timestampPresupuesto: fields.timestampPresupuesto || null,
+    timestampListo: fields.timestampListo || null
   };
 
   const { error } = await supabase
@@ -41,7 +55,6 @@ export async function POST(context: RequestContext) {
     });
   }
 
-  // Redirigir al detalle del equipo editado
   return new Response(null, {
     status: 303,
     headers: { Location: `/detalle/${id}` },
