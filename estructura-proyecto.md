@@ -39,13 +39,17 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 │   ├── signup.astro              # Registro de usuarios
 │   ├── clientes.astro            # (pendiente) vista para gestión de técnicos/clientes
 │   ├── estadisticas.astro        # (pendiente) panel con métricas
+|   |
 │   ├── /detalle/
-│   │   └── [id].astro            # Vista dinámica de detalle del ticket
+│   │   └── [id].astro            # Vista dinámica de detalle del ticket y poder eliminar en caso de ser necesario
+|   |
 │   ├── /editar/
 │   │   └── [id].astro            # Vista dinámica del ticket para editar
+│   │
 │   └── /api/
 │       ├── crearTicket.ts        # Endpoint POST para crear un ticket (modo servidor)
 │       └── actualizarTicket.ts   # Endpoint POST para editar un ticket (modo servidor)
+│       └── eliminarTicket.ts     # Endpoint POST para eliminar un ticket (modo servidor)
 │
 ├── /data
 │   └── impresoras.json           # Datos de ejemplo para pruebas (mock)
@@ -66,7 +70,8 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 /public
 ├── logo.svg                     # Icono principal de la aplicación
 ├── img/                         # Imágenes públicas accesibles por URL
-└── printer-placeholder.svg      # Imagen por defecto para impresoras
+├── logo.svg                     # Imagen por defecto para impresoras
+└── eliminar.png                 # Imagen dedicada a elimnar un ticket (Uilizado en /detalle/[id].astro)
 
 /.astro                          # Archivos generados automáticamente por Astro (NO EDITAR)
 /node_modules                    # Dependencias instaladas por npm (NO EDITAR)
