@@ -30,3 +30,12 @@
   background-color: #4b4e68; 
   color: #ffffff;
 }
+
+@media (min-width: 768px) {
+  main.ms-md-240 {
+    margin-left: 240px !important;
+  }
+   nav.navbar {
+      margin-left: 240px;
+    }
+}

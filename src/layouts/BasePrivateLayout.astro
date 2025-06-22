@@ -3,6 +3,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { SignedIn, SignedOut } from '@clerk/astro/components';
 import Sidebar from '../components/Sidebar.astro';
 import Topbar from '../components/Topbar.astro';
+import "bootstrap-icons/font/bootstrap-icons.css";
 import "../styles/custom.css";
 ---
 <SignedIn>
@@ -26,7 +27,7 @@ import "../styles/custom.css";
         <div class="flex-grow-1 d-flex flex-column">
           <Topbar />
 
-          <main class="p-3 flex-grow-1 overflow-auto">
+          <main class="p-3 flex-grow-1 overflow-auto ms-md-240">
             <slot />
           </main>
         </div>
@@ -37,16 +38,14 @@ import "../styles/custom.css";
         class="offcanvas offcanvas-start"
         tabindex="-1"
         id="mobileSidebar"
-        aria-labelledby="mobileSidebarLabel"
-      >
+        aria-labelledby="mobileSidebarLabel">
         <div class="offcanvas-header">
           <h5 class="offcanvas-title" id="mobileSidebarLabel">Menú</h5>
           <button
             type="button"
             class="btn-close"
             data-bs-dismiss="offcanvas"
-            aria-label="Cerrar"
-          ></button>
+            aria-label="Cerrar"></button>
         </div>
         <div class="offcanvas-body">
           <!-- Si Sidebar.astro tuviera una variante mobile, podrías usar: 

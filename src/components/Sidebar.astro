@@ -1,27 +1,42 @@
-<aside class="d-none d-md-flex flex-column bg-dark text-white vh-100 p-3" style="width: 240px;">
+<aside class="d-none d-md-flex flex-column bg-dark text-white p-3"
+  style="position: fixed; top: 0; left: 0; height: 100vh; width: 240px; z-index: 1030;">
+  
   <h4 class="text-center mb-4">⚙️ Servicio</h4>
   <nav class="nav nav-pills flex-column gap-2">
-    <a class="nav-link text-white" href="/dashboard">   🏠 Inicio</a>
-    <a class="nav-link text-white" href="/addTicket">   🎫 Tickets</a>
-    <a class="nav-link text-white" href="/Tecnico">    👥 Técnicos</a>
-    <a class="nav-link text-white" href="/estadisticas">📊 Estadísticas</a>
+    <a class="nav-link text-white d-flex align-items-center gap-2" href="/dashboard">
+      <i class="bi bi-house"></i> Inicio
+    </a>
+    <a class="nav-link text-white d-flex align-items-center gap-2" href="/addTicket">
+      <i class="bi bi-ticket-detailed"></i> Tickets
+    </a>
+    <a class="nav-link text-white d-flex align-items-center gap-2" href="/Tecnico">
+      <i class="bi bi-people"></i> Técnicos
+    </a>
+    <a class="nav-link text-white d-flex align-items-center gap-2" href="/estadisticas">
+      <i class="bi bi-bar-chart-line"></i> Estadísticas
+    </a>
   </nav>
 </aside>
 
+
 <!-- Offcanvas para mobile -->
-<div
-  class="offcanvas offcanvas-start bg-dark text-white"
-  tabindex="-1"
-  id="mobileSidebar"
->
+<div class="offcanvas offcanvas-start bg-dark text-white" tabindex="-1" id="mobileSidebar">
   <div class="offcanvas-header">
     <h5 class="offcanvas-title">Menú</h5>
     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
   </div>
   <div class="offcanvas-body d-flex flex-column">
-    <a class="nav-link text-white mb-2" href="/dashboard">   🏠 Inicio</a>
-    <a class="nav-link text-white mb-2" href="/addTicket">   🎫 Tickets</a>
-    <a class="nav-link text-white mb-2" href="/Tecnico">    👥 Técnicos</a>
-    <a class="nav-link text-white mb-2" href="/estadisticas">📊 Estadísticas</a>
+    <a class="nav-link text-white mb-2 d-flex align-items-center gap-2" href="/dashboard">
+      <i class="bi bi-house"></i> Inicio
+    </a>
+    <a class="nav-link text-white mb-2 d-flex align-items-center gap-2" href="/addTicket">
+      <i class="bi bi-ticket-detailed"></i> Tickets
+    </a>
+    <a class="nav-link text-white mb-2 d-flex align-items-center gap-2" href="/Tecnico">
+      <i class="bi bi-people"></i> Técnicos
+    </a>
+    <a class="nav-link text-white mb-2 d-flex align-items-center gap-2" href="/estadisticas">
+      <i class="bi bi-bar-chart-line"></i> Estadísticas
+    </a>
   </div>
 </div>
