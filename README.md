@@ -51,7 +51,7 @@ PUBLIC_CLERK_SIGN_UP_URL=/registro
 
 ### 4. 🚀 Iniciar el servidor de desarrollo
 ```batch 
-npm run dev
+npm run dev -- --host
 ```
 
 ## 📁 Documentación de estructura
