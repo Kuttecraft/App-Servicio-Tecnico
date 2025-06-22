@@ -6,7 +6,7 @@ import { UserButton } from '@clerk/astro/components';
   <div class="d-flex w-100 align-items-center justify-content-between">
     <!-- Botón hamburguesa (móvil) -->
     <button
-      class="btn d-md-none"
+      class="btn d-md-none me-2"
       type="button"
       data-bs-toggle="offcanvas"
       data-bs-target="#mobileSidebar"
@@ -16,7 +16,17 @@ import { UserButton } from '@clerk/astro/components';
       ☰
     </button>
 
-    <!-- Buscador (desktop) -->
+    <!-- Buscador móvil (solo visible en mobile) -->
+    <form class="d-flex d-md-none flex-grow-1 me-2" role="search">
+      <input
+        class="form-control"
+        type="search"
+        placeholder="Buscar..."
+        aria-label="Buscar"
+      />
+    </form>
+
+    <!-- Buscador desktop -->
     <form class="d-none d-md-flex flex-grow-1 mx-3" role="search">
       <input
         class="form-control"
