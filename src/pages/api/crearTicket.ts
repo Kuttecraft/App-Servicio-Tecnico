@@ -3,10 +3,10 @@ import { supabase } from '../../lib/supabase';
 export async function POST(context: RequestContext) {
   const req = context.request;
 
-  // Procesar el body del formulario
   const formData = await req.formData();
   const imagenArchivo = formData.get("imagenArchivo") as File | null;
 
+  // Extraer campos como string
   const fields: Record<string, string> = {};
   formData.forEach((value, key) => {
     if (typeof value === 'string') {
@@ -22,14 +22,31 @@ export async function POST(context: RequestContext) {
     fechaFormulario: new Date().toISOString(),
   };
 
-  // 🖼 Subida de imagen si existe
+  // Insertar ticket 
+  const { data, error } = await supabase
+    .from('TestImpresoras')
+    .insert([nuevoTicket])
+    .select()
+    .single();
+
+  if (error || !data) {
+    return new Response(JSON.stringify({ error: error?.message || 'Error al insertar ticket' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const id = data.id;
+
+  // Subida de imagen con nombre fijo {id}.jpg
   if (imagenArchivo && imagenArchivo.size > 0) {
-    const nombreArchivo = `public/${Date.now()}_${imagenArchivo.name}`;
+    const nombreArchivo = `public/${id}.webp`;
+
     const { error: uploadError } = await supabase.storage
-      .from('imagenes') // Asegurate que este bucket exista en Supabase
+      .from('imagenes')
       .upload(nombreArchivo, imagenArchivo, {
         cacheControl: '3600',
-        upsert: false,
+        upsert: true, // sobrescribir si ya existe
       });
 
     if (uploadError) {
@@ -43,27 +60,17 @@ export async function POST(context: RequestContext) {
       .from('imagenes')
       .getPublicUrl(nombreArchivo);
 
-    nuevoTicket.imagen = publicUrl.publicUrl;
-  }
-
-  // ✅ Insertar ticket en la base
-  const { data, error } = await supabase
-    .from('TestImpresoras')
-    .insert([nuevoTicket])
-    .select()
-    .single();
-
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    // Actualizar ticket con la URL de la imagen
+    await supabase
+      .from('TestImpresoras')
+      .update({ imagen: publicUrl.publicUrl })
+      .eq('id', id);
   }
 
   // Redirigir al detalle del ticket
   return new Response(null, {
     status: 303,
-    headers: { Location: `/detalle/${data.id}` },
+    headers: { Location: `/detalle/${id}` },
   });
 }
 

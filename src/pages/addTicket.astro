@@ -26,6 +26,43 @@ const costoDelivery = url.searchParams.get('costoDelivery') || '';
 const infoDelivery = url.searchParams.get('infoDelivery') || '';
 ---
 <BasePrivateLayout>
+  <script type="module">
+    import imageCompression from 'browser-image-compression';
+
+    const input = document.querySelector('input[name="imagenArchivo"]');
+
+    input.addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const options = {
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1000,
+        useWebWorker: true,
+        fileType: 'image/webp' 
+      };
+
+      try {
+        const compressedWebP = await imageCompression(file, options);
+
+        // Reemplazar el archivo original por el comprimido
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(
+          new File([compressedWebP], file.name.replace(/\.(jpg|jpeg|png)$/i, '.webp'), {
+            type: 'image/webp',
+          })
+        );
+
+        input.files = dataTransfer.files;
+
+        console.log('Imagen convertida a WebP:', input.files[0]);
+
+      } catch (error) {
+        console.error('Error al comprimir/convertir imagen:', error);
+      }
+    });
+  </script>
+
   <div class="container mt-5">
     <h2 class="mb-4">🎫 Crear nuevo ticket</h2>
 
