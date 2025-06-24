@@ -7,14 +7,8 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 - Bootstrap (para diseño responsivo)
 
 ```batch 
-## 🗂 Estructura de carpetas
-
 📁 Estructura de carpetas
 
-```batch 
-## 🗂 Estructura de carpetas
-
-📁 Estructura de carpetas
 
 /src
 │
