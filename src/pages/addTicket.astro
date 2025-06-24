@@ -29,7 +29,8 @@ const infoDelivery = url.searchParams.get('infoDelivery') || '';
   <div class="container mt-5">
     <h2 class="mb-4">🎫 Crear nuevo ticket</h2>
 
-    <form method="post" action="/api/crearTicket" class="row g-3">
+    <form method="post" action="/api/crearTicket" enctype="multipart/form-data" class="row g-3">
+      
       <div class="col-md-6">
         <label class="form-label">Cliente</label>
         <input type="text" class="form-control" name="cliente" value={cliente} required />
@@ -114,6 +115,11 @@ const infoDelivery = url.searchParams.get('infoDelivery') || '';
       <div class="col-md-6">
         <label class="form-label">Info delivery</label>
         <input type="text" class="form-control" name="infoDelivery" value={infoDelivery} />
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Imagen del equipo</label>
+        <input type="file" class="form-control" name="imagenArchivo" accept="image/*" />
       </div>
 
       <div class="col-12">
