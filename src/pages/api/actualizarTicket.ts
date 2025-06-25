@@ -13,6 +13,9 @@ export async function POST(context: RequestContext) {
   }
 
   const formData = await req.formData();
+  const imagenArchivo = formData.get("imagenArchivo") as File | null;
+
+  // Parse fields
   const fields: Record<string, string> = {};
   formData.forEach((value, key) => {
     if (typeof value === 'string') {
@@ -21,7 +24,7 @@ export async function POST(context: RequestContext) {
   });
 
   // Conversión de tipos y validaciones específicas
-  const datosActualizados = {
+  const datosActualizados: any = {
     estado: fields.estado,
     modelo: fields.modelo,
     fechaFormulario: fields.fechaFormulario || null,
@@ -43,6 +46,33 @@ export async function POST(context: RequestContext) {
     timestampListo: fields.timestampListo || null
   };
 
+  // Si hay imagen nueva, la subimos y actualizamos el campo imagen
+  if (imagenArchivo && imagenArchivo.size > 0) {
+    const nombreArchivo = `public/${id}.webp`;
+    // Subir imagen (upsert)
+    const { error: uploadError } = await supabase.storage
+      .from('imagenes')
+      .upload(nombreArchivo, imagenArchivo, {
+        cacheControl: '3600',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      return new Response(JSON.stringify({ error: `Error al subir imagen: ${uploadError.message}` }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Obtener URL pública
+    const { data: publicUrl } = supabase.storage
+      .from('imagenes')
+      .getPublicUrl(nombreArchivo);
+
+    datosActualizados.imagen = publicUrl.publicUrl;
+  }
+
+  // Actualizar la base con los datos (y la imagen si hay)
   const { error } = await supabase
     .from('TestImpresoras')
     .update(datosActualizados)

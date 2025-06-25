@@ -17,49 +17,40 @@ const equipo = data;
     <h1 class="h3 mb-4">Editar equipo</h1>
 
     {equipo ? (
-      <form method="POST" action={`/api/actualizarTicket?id=${equipo.id}`} class="card p-4 shadow-sm" style="max-width: 800px; margin: auto;">
-        
+      <form method="POST" action={`/api/actualizarTicket?id=${equipo.id}`} enctype="multipart/form-data" class="card p-4 shadow-sm" style="max-width: 800px; margin: auto;">
         <div class="row g-3">
           <div class="col-md-6">
             <label class="form-label">Estado</label>
             <input name="estado" type="text" class="form-control" value={equipo.estado} />
           </div>
-
           <div class="col-md-6">
             <label class="form-label">Modelo</label>
             <input name="modelo" type="text" class="form-control" value={equipo.modelo} />
           </div>
-
           <div class="col-md-6">
             <label class="form-label">Fecha formulario</label>
             <input name="fechaFormulario" type="date" class="form-control" value={equipo.fechaFormulario?.slice(0, 10)} />
           </div>
-
           <div class="col-md-6">
             <label class="form-label">Técnico</label>
             <input name="tecnico" type="text" class="form-control" value={equipo.tecnico} />
           </div>
-
           <div class="col-md-12">
             <label class="form-label">Nota Técnico</label>
             <textarea name="notaTecnico" class="form-control">{equipo.notaTecnico}</textarea>
           </div>
-
           <div class="col-md-12">
             <label class="form-label">Nota administración</label>
             <textarea name="notaAdmin" class="form-control">{equipo.notaAdmin}</textarea>
           </div>
-
           <div class="col-md-12">
             <label class="form-label">Comentarios</label>
             <textarea name="comentarios" class="form-control">{equipo.comentarios}</textarea>
           </div>
-
           <div class="col-md-12">
             <label class="form-label">Nota interna</label>
             <textarea name="notaInterna" class="form-control">{equipo.notaInterna}</textarea>
           </div>
-
           <div class="col-md-6">
             <label class="form-label">¿Cubre garantía?</label>
             <select name="cubreGarantia" class="form-select">
@@ -67,7 +58,6 @@ const equipo = data;
               <option value="false" selected={!equipo.cubreGarantia}>No</option>
             </select>
           </div>
-
           <div class="col-md-6">
             <label class="form-label">¿Cobrado?</label>
             <select name="cobrado" class="form-select">
@@ -75,55 +65,59 @@ const equipo = data;
               <option value="false" selected={!equipo.cobrado}>No</option>
             </select>
           </div>
-
           <div class="col-md-6">
             <label class="form-label">Monto</label>
             <input name="monto" type="number" step="0.01" class="form-control" value={equipo.monto} />
           </div>
-
           <div class="col-md-6">
             <label class="form-label">Link presupuesto</label>
             <input name="linkPresupuesto" type="url" class="form-control" value={equipo.linkPresupuesto} />
           </div>
-
           <div class="col-md-6">
             <label class="form-label">Modo delivery</label>
             <input name="costoDelivery" type="text" class="form-control" value={equipo.costoDelivery} />
           </div>
-
           <div class="col-md-6">
             <label class="form-label">Info delivery</label>
             <input name="infoDelivery" type="text" class="form-control" value={equipo.infoDelivery} />
           </div>
-
           <div class="col-md-6">
             <label class="form-label">DNI/CUIT</label>
             <input name="dniCuit" type="text" class="form-control" value={equipo.dniCuit} />
           </div>
-
           <div class="col-md-6">
             <label class="form-label">WhatsApp</label>
             <input name="whatsapp" type="text" class="form-control" value={equipo.whatsapp} />
           </div>
-
           <div class="col-md-12">
             <label class="form-label">Correo</label>
             <input name="correo" type="email" class="form-control" value={equipo.correo} />
           </div>
-
           <div class="col-md-6">
             <label class="form-label">Fecha presupuesto</label>
             <input name="timestampPresupuesto" type="datetime-local" class="form-control"
               value={equipo.timestampPresupuesto ? equipo.timestampPresupuesto.slice(0, 16) : ""} />
           </div>
-
           <div class="col-md-6">
             <label class="form-label">Fecha listo</label>
             <input name="timestampListo" type="datetime-local" class="form-control"
               value={equipo.timestampListo ? equipo.timestampListo.slice(0, 16) : ""} />
           </div>
-        </div>
 
+          <!-- Imagen equipo -->
+          <div class="col-md-12">
+            <label class="form-label">Imagen del equipo</label>
+            {equipo.imagen && (
+              <div class="mb-2">
+                <img src={equipo.imagen} alt="Imagen actual" style="max-width: 200px; max-height: 200px; object-fit: cover;" />
+              </div>
+            )}
+            <input type="file" class="form-control" name="imagenArchivo" accept="image/*" />
+            <div class="form-text">
+              Elegí una imagen nueva si querés reemplazar la actual. Si no, dejá vacío.
+            </div>
+          </div>
+        </div>
         <div class="text-end mt-4">
           <button type="submit" class="btn btn-success">Guardar cambios</button>
         </div>
@@ -132,4 +126,37 @@ const equipo = data;
       <p class="text-danger">No se encontró el equipo con ID: {id}</p>
     )}
   </div>
+
+  <!-- Script de compresión/conversión a WebP -->
+  <script type="module">
+    import imageCompression from 'browser-image-compression';
+    const input = document.querySelector('input[name="imagenArchivo"]');
+    if (input) {
+      input.addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const options = {
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1000,
+          useWebWorker: true,
+          fileType: 'image/webp'
+        };
+
+        try {
+          const compressedWebP = await imageCompression(file, options);
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(
+            new File([compressedWebP], file.name.replace(/\.(jpg|jpeg|png)$/i, '.webp'), {
+              type: 'image/webp',
+            })
+          );
+          input.files = dataTransfer.files;
+          console.log('Imagen convertida a WebP:', input.files[0]);
+        } catch (error) {
+          console.error('Error al comprimir/convertir imagen:', error);
+        }
+      });
+    }
+  </script>
 </BasePrivateLayout>
