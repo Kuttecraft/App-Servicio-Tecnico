@@ -12,7 +12,7 @@ const {
 ---
 
 <div class="card text-center p-3 shadow-sm" style="background-color: #f5f6fa; border-radius: 12px;">
-  <img src={imagen} alt="Imagen impresora" class="img-fluid mb-2 mx-auto" style="max-height: 100px;" />
+  <img src={imagen ? imagen + '?t=' + Date.now() : "/printer-placeholder.svg"} alt="Imagen impresora" class="img-fluid mb-2 mx-auto" style="max-height: 100px;" />
   
   <h6 class="fw-bold text-dark mt-2 mb-1">{cliente}</h6>
 

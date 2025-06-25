@@ -47,15 +47,19 @@ export async function POST(context: RequestContext) {
     timestampListo: fields.timestampListo || null
   };
 
-  // Si hay imagen nueva, la subimos y actualizamos el campo imagen
+  const nombreArchivo = `public/${id}.webp`;
+
+  // CASO 1: Imagen nueva subida (PRIMERO borrar, LUEGO subir la nueva)
   if (imagenArchivo && imagenArchivo.size > 0) {
-    const nombreArchivo = `public/${id}.webp`;
-    // Subir imagen (upsert)
+    // BORRAR la anterior
+    await supabase.storage.from('imagenes').remove([nombreArchivo]);
+
+    // Subir nueva imagen
     const { error: uploadError } = await supabase.storage
       .from('imagenes')
       .upload(nombreArchivo, imagenArchivo, {
         cacheControl: '3600',
-        upsert: true,
+        upsert: true, // sigue estando, por si el borrado falla por "no existe"
       });
 
     if (uploadError) {
@@ -71,14 +75,15 @@ export async function POST(context: RequestContext) {
       .getPublicUrl(nombreArchivo);
 
     datosActualizados.imagen = publicUrl.publicUrl;
+
   } else if (borrarImagen) {
-    // Solo borrar si el usuario lo pidió explícitamente
-    const nombreArchivo = `public/${id}.webp`;
+    // CASO 2: Se pidió borrar y NO hay imagen nueva
     await supabase.storage.from('imagenes').remove([nombreArchivo]);
     datosActualizados.imagen = null;
   }
+  // CASO 3: Ni subió ni borró -> no se modifica el campo imagen
 
-  // Actualizar la base con los datos (y la imagen si hay)
+  // Actualizar base
   const { error } = await supabase
     .from('TestImpresoras')
     .update(datosActualizados)

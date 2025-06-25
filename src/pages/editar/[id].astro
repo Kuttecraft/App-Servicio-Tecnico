@@ -17,7 +17,7 @@ const equipo = data;
     <h1 class="h3 mb-4">Editar equipo</h1>
 
     {equipo ? (
-      <form method="POST" action={`/api/actualizarTicket?id=${equipo.id}`} enctype="multipart/form-data" class="card p-4 shadow-sm" style="max-width: 800px; margin: auto;">
+      <form method="POST" action={`/api/actualizarTicket?id=${equipo.id}`} enctype="multipart/form-data" class="card p-4 shadow-sm" style="max-width: 800px; margin: auto;" id="form-editar-equipo">
         <div class="row g-3">
           <div class="col-md-6">
             <label class="form-label">Estado</label>
@@ -109,19 +109,20 @@ const equipo = data;
             <label class="form-label">Imagen del equipo</label>
             {equipo.imagen ? (
               <div class="mb-2" id="imagen-actual-container">
-                <img src={equipo.imagen} alt="Imagen actual" style="max-width: 200px; max-height: 200px; object-fit: cover;" />
+                <img src={equipo.imagen + '?t=' + Date.now()} alt="Imagen actual" style="max-width: 200px; max-height: 200px; object-fit: cover;" />
                 <div class="mt-2">
                   <button type="button" class="btn btn-warning btn-sm" id="btn-reemplazar-imagen">Reemplazar imagen</button>
-                  <button type="button" class="btn btn-secondary btn-sm d-none" id="btn-cancelar-imagen">Cancelar</button>
+                  {/* <button type="button" class="btn btn-secondary btn-sm d-none" id="btn-cancelar-imagen">Cancelar</button> */}
                 </div>
               </div>
             ) : null}
             <input type="file" class={`form-control${equipo.imagen ? ' d-none' : ''}`} name="imagenArchivo" accept="image/*" id="input-imagen-archivo" />
             <input type="hidden" name="borrarImagen" id="input-borrar-imagen" value="false" />
             <div class="form-text">
-              Elegí una imagen nueva si querés reemplazar la actual. Si no, dejá vacío.
+              Si querés reemplazar la actual. Elegí una imagen nueva 
             </div>
           </div>
+
         </div>
         <div class="text-end mt-4">
           <button type="submit" class="btn btn-success">Guardar cambios</button>
@@ -134,7 +135,6 @@ const equipo = data;
 
   <!-- Script de compresión/conversión a WebP y manejo de reemplazo/cancelar -->
   <script type="module">
-    // Importar dinámicamente desde CDN
     let imageCompression;
     try {
       imageCompression = (await import('https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js')).default;
@@ -143,30 +143,26 @@ const equipo = data;
     }
 
     const btnReemplazar = document.getElementById('btn-reemplazar-imagen');
-    const btnCancelar = document.getElementById('btn-cancelar-imagen');
     const inputBorrar = document.getElementById('input-borrar-imagen');
     const imagenActualContainer = document.getElementById('imagen-actual-container');
     const inputArchivo = document.getElementById('input-imagen-archivo');
+    const btnGuardar = document.querySelector('button[type="submit"].btn-success');
+    const form = document.getElementById('form-editar-equipo') || document.querySelector('form');
 
-    if (btnReemplazar && btnCancelar && inputBorrar && imagenActualContainer && inputArchivo) {
-      btnReemplazar.addEventListener('click', () => {
+    if (btnReemplazar && inputBorrar && imagenActualContainer && inputArchivo) {
+      btnReemplazar.addEventListener('click', (e) => {
+        const respuesta = confirm("¿Seguro que querés reemplazar la imagen? Tendrás que elegir una nueva antes de guardar.");
+        if (!respuesta) {
+          return;
+        }
         imagenActualContainer.style.display = 'none';
         inputArchivo.classList.remove('d-none');
         inputArchivo.style.display = '';
-        btnCancelar.classList.remove('d-none');
         inputBorrar.value = "true";
-      });
-      btnCancelar.addEventListener('click', () => {
-        inputArchivo.value = "";
-        inputArchivo.classList.add('d-none');
-        inputArchivo.style.display = 'none';
-        imagenActualContainer.style.display = '';
-        btnCancelar.classList.add('d-none');
-        inputBorrar.value = "false";
+        validarGuardar();
       });
     }
 
-    // --- Compresión/Conversión a WebP ---
     document.addEventListener('change', async (event) => {
       const input = event.target;
       if (input && input.id === 'input-imagen-archivo' && imageCompression) {
@@ -193,7 +189,34 @@ const equipo = data;
         } catch (error) {
           console.error('Error al comprimir/convertir imagen:', error);
         }
+        validarGuardar();
       }
     });
-  </script>
+
+    function validarGuardar() {
+      const reemplazando = !inputArchivo.classList.contains('d-none') && inputBorrar.value === "true";
+      const archivoSubido = inputArchivo.files && inputArchivo.files.length > 0;
+
+      if (reemplazando && !archivoSubido) {
+        btnGuardar.disabled = true;
+      } else {
+        btnGuardar.disabled = false;
+      }
+    }
+
+    inputArchivo.addEventListener('change', validarGuardar);
+    if (btnReemplazar) btnReemplazar.addEventListener('click', validarGuardar);
+    validarGuardar();
+
+    form.addEventListener('submit', (e) => {
+      const reemplazando = !inputArchivo.classList.contains('d-none') && inputBorrar.value === "true";
+      const archivoSubido = inputArchivo.files && inputArchivo.files.length > 0;
+
+      if (reemplazando && !archivoSubido) {
+        e.preventDefault();
+        alert('Tenés que elegir una nueva imagen antes de guardar los cambios.');
+      }
+    });
+</script>
+
 </BasePrivateLayout>
