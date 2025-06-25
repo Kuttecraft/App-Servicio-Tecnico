@@ -14,6 +14,7 @@ export async function POST(context: RequestContext) {
 
   const formData = await req.formData();
   const imagenArchivo = formData.get("imagenArchivo") as File | null;
+  const borrarImagen = formData.get("borrarImagen") === "true";
 
   // Parse fields
   const fields: Record<string, string> = {};
@@ -70,6 +71,11 @@ export async function POST(context: RequestContext) {
       .getPublicUrl(nombreArchivo);
 
     datosActualizados.imagen = publicUrl.publicUrl;
+  } else if (borrarImagen) {
+    // Solo borrar si el usuario lo pidió explícitamente
+    const nombreArchivo = `public/${id}.webp`;
+    await supabase.storage.from('imagenes').remove([nombreArchivo]);
+    datosActualizados.imagen = null;
   }
 
   // Actualizar la base con los datos (y la imagen si hay)

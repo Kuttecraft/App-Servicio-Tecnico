@@ -107,12 +107,17 @@ const equipo = data;
           <!-- Imagen equipo -->
           <div class="col-md-12">
             <label class="form-label">Imagen del equipo</label>
-            {equipo.imagen && (
-              <div class="mb-2">
+            {equipo.imagen ? (
+              <div class="mb-2" id="imagen-actual-container">
                 <img src={equipo.imagen} alt="Imagen actual" style="max-width: 200px; max-height: 200px; object-fit: cover;" />
+                <div class="mt-2">
+                  <button type="button" class="btn btn-warning btn-sm" id="btn-reemplazar-imagen">Reemplazar imagen</button>
+                  <button type="button" class="btn btn-secondary btn-sm d-none" id="btn-cancelar-imagen">Cancelar</button>
+                </div>
               </div>
-            )}
-            <input type="file" class="form-control" name="imagenArchivo" accept="image/*" />
+            ) : null}
+            <input type="file" class={`form-control${equipo.imagen ? ' d-none' : ''}`} name="imagenArchivo" accept="image/*" id="input-imagen-archivo" />
+            <input type="hidden" name="borrarImagen" id="input-borrar-imagen" value="false" />
             <div class="form-text">
               Elegí una imagen nueva si querés reemplazar la actual. Si no, dejá vacío.
             </div>
@@ -127,13 +132,45 @@ const equipo = data;
     )}
   </div>
 
-  <!-- Script de compresión/conversión a WebP -->
+  <!-- Script de compresión/conversión a WebP y manejo de reemplazo/cancelar -->
   <script type="module">
-    import imageCompression from 'browser-image-compression';
-    const input = document.querySelector('input[name="imagenArchivo"]');
-    if (input) {
-      input.addEventListener('change', async (event) => {
-        const file = event.target.files[0];
+    // Importar dinámicamente desde CDN
+    let imageCompression;
+    try {
+      imageCompression = (await import('https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js')).default;
+    } catch (e) {
+      console.error('No se pudo cargar browser-image-compression desde CDN', e);
+    }
+
+    const btnReemplazar = document.getElementById('btn-reemplazar-imagen');
+    const btnCancelar = document.getElementById('btn-cancelar-imagen');
+    const inputBorrar = document.getElementById('input-borrar-imagen');
+    const imagenActualContainer = document.getElementById('imagen-actual-container');
+    const inputArchivo = document.getElementById('input-imagen-archivo');
+
+    if (btnReemplazar && btnCancelar && inputBorrar && imagenActualContainer && inputArchivo) {
+      btnReemplazar.addEventListener('click', () => {
+        imagenActualContainer.style.display = 'none';
+        inputArchivo.classList.remove('d-none');
+        inputArchivo.style.display = '';
+        btnCancelar.classList.remove('d-none');
+        inputBorrar.value = "true";
+      });
+      btnCancelar.addEventListener('click', () => {
+        inputArchivo.value = "";
+        inputArchivo.classList.add('d-none');
+        inputArchivo.style.display = 'none';
+        imagenActualContainer.style.display = '';
+        btnCancelar.classList.add('d-none');
+        inputBorrar.value = "false";
+      });
+    }
+
+    // --- Compresión/Conversión a WebP ---
+    document.addEventListener('change', async (event) => {
+      const input = event.target;
+      if (input && input.id === 'input-imagen-archivo' && imageCompression) {
+        const file = input.files[0];
         if (!file) return;
 
         const options = {
@@ -156,7 +193,7 @@ const equipo = data;
         } catch (error) {
           console.error('Error al comprimir/convertir imagen:', error);
         }
-      });
-    }
+      }
+    });
   </script>
 </BasePrivateLayout>
