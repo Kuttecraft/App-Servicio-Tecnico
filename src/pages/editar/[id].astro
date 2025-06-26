@@ -42,11 +42,11 @@ const equipo = data;
           </div>
           <div class="col-md-12">
             <label class="form-label">Nota Técnico</label>
-            <textarea name="notaTecnico" class="form-control">{equipo.notaTecnico}</textarea>
+            <textarea name="notaTecnico" class="form-control">{equipo.notaTecnico || ""}</textarea>
           </div>
           <div class="col-md-12">
             <label class="form-label">Nota administración</label>
-            <textarea name="notaAdmin" class="form-control">{equipo.notaAdmin}</textarea>
+            <textarea name="notaAdmin" class="form-control">{equipo.notaAdmin || ""}</textarea>
           </div>
           <div class="col-md-12">
             <label class="form-label">Comentarios</label>
