@@ -102,7 +102,7 @@ estructura-proyecto.txt | Este archivo: explica toda la organización del códig
 - Buscar la forma de comprimir la imagen para poder almacenarla en la base de supabase
 - Mejorar los tiempos de carga
 - Exportación de informes
-- Generación de estadísticas apartir de lso datos de la base 
+- Generación de estadísticas apartir de info datos de la base 
 
 ---
 
