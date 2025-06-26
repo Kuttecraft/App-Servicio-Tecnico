@@ -110,16 +110,12 @@ const equipo = data;
           </div>
 
           {/* Imagen equipo: muestra actual y reemplazo */}
-          <div class="col-md-12">
-            <label class="form-label">Imagen del equipo</label>
+          <div class="text-center mb-2">
             {/* Si existe imagen, la muestra */}
             {equipo.imagen ? (
-              <div class="mb-2" id="imagen-actual-container">
-                <img src={equipo.imagen + '?t=' + Date.now()} alt="Imagen actual" style="max-width: 200px; max-height: 200px; object-fit: cover;" />
-                <div class="mt-2">
-                  {/* Botón para reemplazar imagen */}
-                  <button type="button" class="btn btn-warning btn-sm" id="btn-reemplazar-imagen">Reemplazar imagen</button>
-                </div>
+              <div class="mb-3 d-flex justify-content-center">
+                <img src={equipo.imagen + '?t=' + Date.now()} alt="Imagen actual" style="max-width: 220px; max-height: 220px; object-fit: cover; border-radius: 6px; margin-top: 20px;" />
+
               </div>
             ) : null}
             {/* Input de archivo solo visible si no hay imagen o si se va a reemplazar */}
@@ -128,10 +124,11 @@ const equipo = data;
             <input type="hidden" name="borrarImagen" id="input-borrar-imagen" value="false" />
           </div>
 
-        </div>
-        <div class="text-end mt-4">
+  </div>
+  <div class="text-end mt-4 d-flex gap-2 justify-content-end">
+          <button type="button" class="btn btn-warning btn-sm" id="btn-reemplazar-imagen">Reemplazar imagen</button>
           <button type="submit" class="btn btn-success">Guardar cambios</button>
-        </div>
+  </div>
       </form>
     ) : (
       <p class="text-danger">No se encontró el equipo con ID: {id}</p>
