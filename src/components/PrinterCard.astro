@@ -12,7 +12,13 @@ const {
 ---
 
 <div class="card text-center p-3 shadow-sm" style="background-color: #f5f6fa; border-radius: 12px;">
-  <img src={imagen ? imagen + '?t=' + Date.now() : "/printer-placeholder.svg"} alt="Imagen impresora" class="img-fluid mb-2 mx-auto" style="max-height: 100px;" />
+    <img 
+      src={imagen ? imagen + '?t=' + Date.now() : "/printer-placeholder.svg"}
+      alt="Imagen impresora"
+      style="max-height: 200px; max-width: 200px; object-fit: cover; border-radius: 5px; transition: box-shadow 0.2s;"
+      class="mx-auto"
+    />
+
   
   <h6 class="fw-bold text-dark mt-2 mb-1">{cliente}</h6>
 
@@ -28,3 +34,4 @@ const {
     <a href={onClickUrlEditar} class="btn btn-sm btn-editar">Editar</a>
   </div>
 </div>
+
