@@ -112,7 +112,7 @@ const equipo = data;
           {/* Imagen equipo: muestra actual y reemplazo */}
           <div class="col-md-12">
             {equipo.imagen ? (
-              <div class="mb-3 d-flex justify-content-center">
+              <div class="mb-3 d-flex justify-content-center" id="imagen-actual-container">
                 <img 
                   src={equipo.imagen + '?t=' + Date.now()} 
                   alt="Imagen actual" 
@@ -131,9 +131,9 @@ const equipo = data;
 
             {/* Botones: a la derecha en desktop, apilados en mobile */}
             <div class="mt-4 d-flex flex-column flex-md-row gap-2 justify-content-center align-items-stretch">
-              <button type="button" class="btn btn-danger btn-sm" id="btn-eliminar-equipo">Eliminar equipo</button>
-              <button type="submit" class="btn btn-success">Guardar cambios</button>
-              <button type="button" class="btn btn-warning btn-sm" id="btn-reemplazar-imagen">Reemplazar imagen</button>
+              <button type="submit" class="btn btn-success order-1 order-md-2">Guardar cambios</button>
+              <button type="button" class="btn btn-warning order-2 order-md-3" id="btn-reemplazar-imagen">Reemplazar imagen</button>
+              <button type="button" class="btn btn-danger order-3 order-md-1" id="btn-eliminar-equipo">Eliminar equipo</button>
             </div>
           </div>
 
@@ -159,23 +159,27 @@ const equipo = data;
     // Elementos clave del DOM
     const btnReemplazar = document.getElementById('btn-reemplazar-imagen');
     const inputBorrar = document.getElementById('input-borrar-imagen');
-    const imagenActualContainer = document.getElementById('imagen-actual-container');
     const inputArchivo = document.getElementById('input-imagen-archivo');
     const btnGuardar = document.querySelector('button[type="submit"].btn-success');
     const form = document.getElementById('form-editar-equipo') || document.querySelector('form');
 
-    // Lógica para el reemplazo de imagen: oculta imagen previa, muestra input, pide confirmación.
-    if (btnReemplazar && inputBorrar && imagenActualContainer && inputArchivo) {
+    // Escuchar click SIEMPRE (no importa si hay imagen o no)
+    if (btnReemplazar && inputBorrar && inputArchivo) {
       btnReemplazar.addEventListener('click', (e) => {
         const respuesta = confirm("¿Seguro que querés reemplazar la imagen? Tendrás que elegir una nueva antes de guardar.");
         if (!respuesta) return;
-        imagenActualContainer.style.display = 'none';
+        // Ocultar imagen si existe el contenedor
+        const imagenActualContainer = document.getElementById('imagen-actual-container');
+        if (imagenActualContainer) {
+          imagenActualContainer.style.display = 'none';
+        }
         inputArchivo.classList.remove('d-none');
         inputArchivo.style.display = '';
         inputBorrar.value = "true";
         validarGuardar();
       });
     }
+
 
     // Compresión y conversión de la imagen subida a WebP usando browser-image-compression
     document.addEventListener('change', async (event) => {
