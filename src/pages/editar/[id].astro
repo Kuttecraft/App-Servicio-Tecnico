@@ -110,25 +110,36 @@ const equipo = data;
           </div>
 
           {/* Imagen equipo: muestra actual y reemplazo */}
-          <div class="text-center mb-2">
-            {/* Si existe imagen, la muestra */}
+          <div class="col-md-12">
             {equipo.imagen ? (
               <div class="mb-3 d-flex justify-content-center">
-                <img src={equipo.imagen + '?t=' + Date.now()} alt="Imagen actual" style="max-width: 220px; max-height: 220px; object-fit: cover; border-radius: 6px; margin-top: 20px;" />
-
+                <img 
+                  src={equipo.imagen + '?t=' + Date.now()} 
+                  alt="Imagen actual" 
+                  style="max-width: 240px; max-height: 240px; object-fit: cover; border-radius: 6px; margin-top: 20px;" 
+                />
               </div>
             ) : null}
-            {/* Input de archivo solo visible si no hay imagen o si se va a reemplazar */}
-            <input type="file" class={`form-control${equipo.imagen ? ' d-none' : ''}`} name="imagenArchivo" accept="image/*" id="input-imagen-archivo" />
-            {/* Campo oculto para marcar si se borra la imagen previa */}
+            <input 
+              type="file" 
+              class={`form-control${equipo.imagen ? ' d-none' : ''}`} 
+              name="imagenArchivo" 
+              accept="image/*" 
+              id="input-imagen-archivo" 
+            />
             <input type="hidden" name="borrarImagen" id="input-borrar-imagen" value="false" />
+
+            {/* Botones: a la derecha en desktop, apilados en mobile */}
+            <div class="mt-4 d-flex flex-column flex-md-row gap-2 justify-content-center align-items-stretch">
+              <button type="button" class="btn btn-danger btn-sm" id="btn-eliminar-equipo">Eliminar equipo</button>
+              <button type="submit" class="btn btn-success">Guardar cambios</button>
+              <button type="button" class="btn btn-warning btn-sm" id="btn-reemplazar-imagen">Reemplazar imagen</button>
+            </div>
           </div>
 
   </div>
-  <div class="text-end mt-4 d-flex gap-2 justify-content-end">
-          <button type="button" class="btn btn-warning btn-sm" id="btn-reemplazar-imagen">Reemplazar imagen</button>
-          <button type="submit" class="btn btn-success">Guardar cambios</button>
-  </div>
+
+
       </form>
     ) : (
       <p class="text-danger">No se encontró el equipo con ID: {id}</p>
