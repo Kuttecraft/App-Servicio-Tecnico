@@ -137,7 +137,7 @@ const infoDelivery = url.searchParams.get('infoDelivery') || '';
       if (!file) return;
 
       const options = {
-        maxSizeMB: 1,
+        maxSizeMB: 0.09,
         maxWidthOrHeight: 1000,
         useWebWorker: true,
         fileType: 'image/webp' 
