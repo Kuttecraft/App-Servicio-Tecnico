@@ -2,7 +2,9 @@
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import { supabase } from '../../lib/supabase';
 
+// Obtener el ID de la URL
 const { id } = Astro.params;
+// Buscar los datos del equipo por ID
 const { data, error } = await supabase
   .from('TestImpresoras')
   .select('*')
@@ -17,8 +19,11 @@ const equipo = data;
     <h1 class="h3 mb-4">Editar equipo</h1>
 
     {equipo ? (
+      // Formulario de edición
       <form method="POST" action={`/api/actualizarTicket?id=${equipo.id}`} enctype="multipart/form-data" class="card p-4 shadow-sm" style="max-width: 800px; margin: auto;" id="form-editar-equipo">
         <div class="row g-3">
+
+          {/* Campos principales */}
           <div class="col-md-6">
             <label class="form-label">Estado</label>
             <input name="estado" type="text" class="form-control" value={equipo.estado} />
@@ -104,23 +109,23 @@ const equipo = data;
               value={equipo.timestampListo ? equipo.timestampListo.slice(0, 16) : ""} />
           </div>
 
-          <!-- Imagen equipo -->
+          {/* Imagen equipo: muestra actual y reemplazo */}
           <div class="col-md-12">
             <label class="form-label">Imagen del equipo</label>
+            {/* Si existe imagen, la muestra */}
             {equipo.imagen ? (
               <div class="mb-2" id="imagen-actual-container">
                 <img src={equipo.imagen + '?t=' + Date.now()} alt="Imagen actual" style="max-width: 200px; max-height: 200px; object-fit: cover;" />
                 <div class="mt-2">
+                  {/* Botón para reemplazar imagen */}
                   <button type="button" class="btn btn-warning btn-sm" id="btn-reemplazar-imagen">Reemplazar imagen</button>
-                  {/* <button type="button" class="btn btn-secondary btn-sm d-none" id="btn-cancelar-imagen">Cancelar</button> */}
                 </div>
               </div>
             ) : null}
+            {/* Input de archivo solo visible si no hay imagen o si se va a reemplazar */}
             <input type="file" class={`form-control${equipo.imagen ? ' d-none' : ''}`} name="imagenArchivo" accept="image/*" id="input-imagen-archivo" />
+            {/* Campo oculto para marcar si se borra la imagen previa */}
             <input type="hidden" name="borrarImagen" id="input-borrar-imagen" value="false" />
-            <div class="form-text">
-              Si querés reemplazar la actual. Elegí una imagen nueva 
-            </div>
           </div>
 
         </div>
@@ -133,8 +138,9 @@ const equipo = data;
     )}
   </div>
 
-  <!-- Script de compresión/conversión a WebP y manejo de reemplazo/cancelar -->
+  {/* Script principal: reemplazo y compresión de imagen, validaciones */}
   <script type="module">
+    // Cargar browser-image-compression desde CDN
     let imageCompression;
     try {
       imageCompression = (await import('https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js')).default;
@@ -142,6 +148,7 @@ const equipo = data;
       console.error('No se pudo cargar browser-image-compression desde CDN', e);
     }
 
+    // Elementos clave del DOM
     const btnReemplazar = document.getElementById('btn-reemplazar-imagen');
     const inputBorrar = document.getElementById('input-borrar-imagen');
     const imagenActualContainer = document.getElementById('imagen-actual-container');
@@ -149,12 +156,11 @@ const equipo = data;
     const btnGuardar = document.querySelector('button[type="submit"].btn-success');
     const form = document.getElementById('form-editar-equipo') || document.querySelector('form');
 
+    // Lógica para el reemplazo de imagen: oculta imagen previa, muestra input, pide confirmación.
     if (btnReemplazar && inputBorrar && imagenActualContainer && inputArchivo) {
       btnReemplazar.addEventListener('click', (e) => {
         const respuesta = confirm("¿Seguro que querés reemplazar la imagen? Tendrás que elegir una nueva antes de guardar.");
-        if (!respuesta) {
-          return;
-        }
+        if (!respuesta) return;
         imagenActualContainer.style.display = 'none';
         inputArchivo.classList.remove('d-none');
         inputArchivo.style.display = '';
@@ -163,19 +169,18 @@ const equipo = data;
       });
     }
 
+    // Compresión y conversión de la imagen subida a WebP usando browser-image-compression
     document.addEventListener('change', async (event) => {
       const input = event.target;
       if (input && input.id === 'input-imagen-archivo' && imageCompression) {
         const file = input.files[0];
         if (!file) return;
-
         const options = {
           maxSizeMB: 1,
           maxWidthOrHeight: 1000,
           useWebWorker: true,
           fileType: 'image/webp'
         };
-
         try {
           const compressedWebP = await imageCompression(file, options);
           const dataTransfer = new DataTransfer();
@@ -185,7 +190,6 @@ const equipo = data;
             })
           );
           input.files = dataTransfer.files;
-          console.log('Imagen convertida a WebP:', input.files[0]);
         } catch (error) {
           console.error('Error al comprimir/convertir imagen:', error);
         }
@@ -193,10 +197,10 @@ const equipo = data;
       }
     });
 
+    // Valida si se debe habilitar o no el botón de guardar (no permite guardar si se reemplaza imagen pero no se eligió una nueva)
     function validarGuardar() {
       const reemplazando = !inputArchivo.classList.contains('d-none') && inputBorrar.value === "true";
       const archivoSubido = inputArchivo.files && inputArchivo.files.length > 0;
-
       if (reemplazando && !archivoSubido) {
         btnGuardar.disabled = true;
       } else {
@@ -208,15 +212,14 @@ const equipo = data;
     if (btnReemplazar) btnReemplazar.addEventListener('click', validarGuardar);
     validarGuardar();
 
+    // Previene enviar el formulario si está en reemplazo de imagen y no se eligió una nueva
     form.addEventListener('submit', (e) => {
       const reemplazando = !inputArchivo.classList.contains('d-none') && inputBorrar.value === "true";
       const archivoSubido = inputArchivo.files && inputArchivo.files.length > 0;
-
       if (reemplazando && !archivoSubido) {
         e.preventDefault();
         alert('Tenés que elegir una nueva imagen antes de guardar los cambios.');
       }
     });
-</script>
-
+  </script>
 </BasePrivateLayout>
