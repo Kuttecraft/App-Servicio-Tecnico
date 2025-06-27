@@ -62,51 +62,50 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 📁 OTRAS CARPETAS IMPORTANTES
 
 /public
-├── img/                         # Imágenes públicas accesibles por URL (fotos de impresoras, usuarios, etc)
-├── logo.svg                     # Logo principal de la aplicación (también como imagen por defecto)
-├── eliminar.png                 # Icono de "eliminar" para tickets (usado en /detalle/[id].astro)
-├── scripts/                     # Scripts JavaScript vanilla para formularios y lógica del frontend
-│   ├── form-crear-ticket.js         # Comprime la imagen al crear un ticket. Si el usuario selecciona una imagen, la convierte a WebP optimizado antes de enviarla.
-│   └── form-editar-equipo.js        # Permite reemplazar, eliminar o comprimir la imagen de un ticket existente. Controla la UI para mostrar/ocultar la imagen actual y asegura que sólo se pueda guardar si se seleccionó una nueva imagen cuando corresponde.
+├── img/ # Imágenes públicas accesibles por URL (fotos de impresoras, usuarios, etc)
+├── logo.svg # Logo principal de la aplicación (también como imagen por defecto)
+├── eliminar.png # Icono de "eliminar" para tickets (usado en /detalle/[id].astro)
+├── scripts/ # Scripts JavaScript vanilla para formularios y lógica del frontend
+│ ├── form-crear-ticket.js # Comprime la imagen al crear un ticket. Si el usuario selecciona una imagen, la convierte a WebP optimizado antes de enviarla.
+│ └── form-editar-equipo.js # Permite reemplazar, eliminar o comprimir la imagen de un ticket existente. Controla la UI para mostrar/ocultar la imagen actual y asegura que sólo se pueda guardar si se seleccionó una nueva imagen cuando corresponde.
+│
+/.astro # Archivos generados automáticamente por Astro (NO EDITAR)
+/node_modules # Dependencias instaladas por npm (NO EDITAR)
 
 
-/.astro                          # Archivos generados automáticamente por Astro (NO EDITAR)
-/node_modules                    # Dependencias instaladas por npm (NO EDITAR)
-
-```
+---
 
 ## 📄 Archivos raíz importantes
 
-Archivo                 | Descripción
-------------------------|-----------------------------------------------------------
-astro.config.ts         | Configuración de Astro. Actualmente usa output: 'server' con @astrojs/node.
-tsconfig.json           | Configuración de TypeScript
-package.json            | Dependencias, scripts y metadata del proyecto
-package-lock.json       | Registro exacto de versiones instaladas
-.gitignore              | Archivos/carpetas que Git debe ignorar
-.env.example            | Plantilla de variables de entorno necesarias para ejecutar el proyecto
-README.md               | Información general del proyecto
-estructura-proyecto.txt | Este archivo: explica toda la organización del código
+| Archivo                 | Descripción                                                             |
+|-------------------------|-------------------------------------------------------------------------|
+| astro.config.ts         | Configuración de Astro. Actualmente usa output: 'server' con @astrojs/node. |
+| tsconfig.json           | Configuración de TypeScript                                             |
+| package.json            | Dependencias, scripts y metadata del proyecto                           |
+| package-lock.json       | Registro exacto de versiones instaladas                                 |
+| .gitignore              | Archivos/carpetas que Git debe ignorar                                  |
+| .env.example            | Plantilla de variables de entorno necesarias para ejecutar el proyecto  |
+| README.md               | Información general del proyecto                                        |
+| estructura-proyecto.md  | Este archivo: explica toda la organización del código                   |
 
 ---
 
 ## ✅ Buenas prácticas
 
-- Usar **componentes modulares**, legibles y reutilizables diidir en `/components` que puedan combinarse y mantenerse fácilmente.
-- Centralizar lógica en `/lib/` 
-- No dejar lógica en páginas si puede extraerse
-- Mantener el código limpio y comentado
-- Actualizar `.env.example` al agregar nuevas variables
+- Usar **componentes modulares**, legibles y reutilizables en `/components` para poder combinarlos y mantenerlos fácilmente.
+- Centralizar lógica en `/lib/`.
+- No dejar lógica en páginas si puede extraerse.
+- Mantener el código limpio y comentado.
+- Actualizar `.env.example` al agregar nuevas variables.
 
 ---
 
 ## 🔜 Futuras ampliaciones
 
-- Buscar la forma de comprimir la imagen para poder almacenarla en la base de supabase
-- Mejorar los tiempos de carga
-- Exportación de informes
-- Generación de estadísticas apartir de info datos de la base 
+- Exportación de informes.
+- Mejorar la estética general.
+- Generación de estadísticas a partir de datos de la base.
 
 ---
 
-📌 Mantené este archivo actualizado si hacés cambios importantes en la estructura o convenciones del proyecto.
+📌 **Mantené este archivo actualizado si hacés cambios importantes en la estructura o convenciones del proyecto.**
