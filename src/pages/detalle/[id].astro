@@ -59,20 +59,14 @@ const equipo = data;
           <div class="col"><strong>Fecha listo:</strong> {equipo.timestampListo ? formatearFecha(equipo.timestampListo) : '—'}</div>
           <!-- Quitar o agregar más campos relevantes acá según tu necesidad -->
         </div>
-        <!-- Comentarios, notas, links, solo si los necesitas: -->
-        {equipo.comentarios && (
-          <div class="alert alert-secondary mt-3 p-2">
-            <i class="bi bi-chat-text"></i> {equipo.comentarios}
-          </div>
-        )}
         {/* Botones extra opcionales */}
         <div class="mt-4 d-flex justify-content-end gap-2">
-          {/* <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm">
+          <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm">
             <i class="bi bi-receipt"></i> Añadir presupuesto
           </a>
           <a href={`/delivery/${equipo.id}`} class="btn btn-outline-success btn-sm">
             <i class="bi bi-truck"></i> Añadir delivery
-          </a> */}
+          </a> 
         </div>
       </div>
     </div>
