@@ -1,17 +1,18 @@
 import imageCompression from 'browser-image-compression';
 
-// Elementos DOM
+// Elementos clave del DOM
 const btnReemplazar = document.getElementById('btn-reemplazar-imagen');
 const inputBorrar = document.getElementById('input-borrar-imagen');
 const inputArchivo = document.getElementById('input-imagen-archivo');
 const btnGuardar = document.querySelector('button[type="submit"].btn-success');
 const form = document.getElementById('form-editar-equipo') || document.querySelector('form');
 
-// Botón reemplazar imagen
+// Botón para reemplazar imagen
 if (btnReemplazar && inputBorrar && inputArchivo) {
   btnReemplazar.addEventListener('click', (e) => {
     const respuesta = confirm("¿Seguro que querés reemplazar la imagen? Tendrás que elegir una nueva antes de guardar.");
     if (!respuesta) return;
+    // Ocultar imagen si existe el contenedor
     const imagenActualContainer = document.getElementById('imagen-actual-container');
     if (imagenActualContainer) {
       imagenActualContainer.style.display = 'none';
@@ -23,7 +24,7 @@ if (btnReemplazar && inputBorrar && inputArchivo) {
   });
 }
 
-// Compresión de imagen
+// Compresión y conversión de la imagen subida a WebP usando browser-image-compression
 inputArchivo?.addEventListener('change', async (event) => {
   const file = inputArchivo.files?.[0];
   if (!file) return;
