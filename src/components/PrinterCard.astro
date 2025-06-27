@@ -11,7 +11,7 @@ const {
 } = Astro.props;
 
 // Si imagen es vacío, null o string vacío, usamos /logo.svg (que está en /public/logo.svg)
-const imgPorDefecto = "/logo.svg";
+const imgPorDefecto = "/logo.webp";
 const imagenFinal = imagen && imagen.trim() !== "" ? imagen : imgPorDefecto;
 const esPorDefecto = imagenFinal === imgPorDefecto;
 const srcImagen = esPorDefecto ? imgPorDefecto : imagenFinal + '?t=' + Date.now();
