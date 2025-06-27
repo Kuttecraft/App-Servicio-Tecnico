@@ -127,42 +127,8 @@ const infoDelivery = url.searchParams.get('infoDelivery') || '';
       </div>
     </form>
   </div>
-  <script type="module">
-    import imageCompression from 'browser-image-compression';
-
-    const input = document.querySelector('input[name="imagenArchivo"]');
-
-    input.addEventListener('change', async (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const options = {
-        maxSizeMB: 0.09,
-        maxWidthOrHeight: 500,
-        useWebWorker: true,
-        fileType: 'image/webp' 
-      };
-
-      try {
-        const compressedWebP = await imageCompression(file, options);
-
-        // Reemplazar el archivo original por el comprimido
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(
-          new File([compressedWebP], file.name.replace(/\.(jpg|jpeg|png)$/i, '.webp'), {
-            type: 'image/webp',
-          })
-        );
-
-        input.files = dataTransfer.files;
-
-        console.log('Imagen convertida a WebP:', input.files[0]);
-
-      } catch (error) {
-        console.error('Error al comprimir/convertir imagen:', error);
-      }
-    });
-  </script>
+  <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js"></script>
+  <script src="/scripts/form-crear-ticket.js" is:inline></script>
 </BasePrivateLayout>
 
 { /*  Descomentar en caso de querer cargar los campos 
