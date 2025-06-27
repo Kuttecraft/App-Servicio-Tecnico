@@ -3,17 +3,22 @@ const {
   cliente = "Nombre del Cliente",
   estado = "Estado",
   modelo = "Modelo",
-  imagen = "/printer-placeholder.svg",
+  imagen,
   onClickUrl = "#",
   onClickUrlEditar = "#",
   ticket = "",
   whatsapp = ""
 } = Astro.props;
----
 
+// Si imagen es vacío, null o string vacío, usamos /logo.svg (que está en /public/logo.svg)
+const imgPorDefecto = "/logo.svg";
+const imagenFinal = imagen && imagen.trim() !== "" ? imagen : imgPorDefecto;
+const esPorDefecto = imagenFinal === imgPorDefecto;
+const srcImagen = esPorDefecto ? imgPorDefecto : imagenFinal + '?t=' + Date.now();
+---
 <div class="card text-center p-3 shadow-sm" style="background-color: #f5f6fa; border-radius: 12px;">
   <img 
-    src={imagen ? imagen + '?t=' + Date.now() : "/printer-placeholder.svg"}
+    src={srcImagen}
     alt="Imagen impresora"
     loading="lazy"
     style="max-height: 200px; max-width: 200px; object-fit: cover; border-radius: 5px; transition: box-shadow 0.2s;"
@@ -34,4 +39,3 @@ const {
     <a href={onClickUrlEditar} class="btn btn-sm btn-editar">Editar</a>
   </div>
 </div>
-

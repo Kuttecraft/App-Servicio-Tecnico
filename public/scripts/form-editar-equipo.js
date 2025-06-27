@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   const btnReemplazar = document.getElementById('btn-reemplazar-imagen');
+  const btnEliminar = document.getElementById('btn-eliminar-equipo');
   const inputBorrar = document.getElementById('input-borrar-imagen');
   const inputArchivo = document.getElementById('input-imagen-archivo');
   const btnGuardar = document.querySelector('button[type="submit"].btn-success');
@@ -7,10 +8,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Botón para reemplazar imagen
   if (btnReemplazar && inputBorrar && inputArchivo) {
-    btnReemplazar.addEventListener('click', (e) => {
+    btnReemplazar.addEventListener('click', () => {
       const respuesta = confirm("¿Seguro que querés reemplazar la imagen? Tendrás que elegir una nueva antes de guardar.");
       if (!respuesta) return;
-      // Ocultar imagen si existe el contenedor
       const imagenActualContainer = document.getElementById('imagen-actual-container');
       if (imagenActualContainer) {
         imagenActualContainer.style.display = 'none';
@@ -19,6 +19,27 @@ document.addEventListener('DOMContentLoaded', () => {
       inputArchivo.style.display = '';
       inputBorrar.value = "true";
       validarGuardar();
+    });
+  }
+
+  // Botón para eliminar imagen
+  if (btnEliminar && inputBorrar && inputArchivo) {
+    btnEliminar.addEventListener('click', () => {
+      const respuesta = confirm("¿Seguro que querés eliminar la imagen? Esta acción no se puede deshacer.");
+      if (!respuesta) return;
+      // Oculta la imagen actual
+      const imagenActualContainer = document.getElementById('imagen-actual-container');
+      if (imagenActualContainer) {
+        imagenActualContainer.style.display = 'none';
+      }
+      // Limpia archivo cargado, oculta el input de archivo
+      inputArchivo.value = "";
+      inputArchivo.classList.add('d-none');
+      inputArchivo.style.display = 'none';
+      // Marca el hidden para que el backend borre la imagen
+      inputBorrar.value = "delete";
+      validarGuardar();
+      alert("La imagen será eliminada cuando guardes los cambios.");
     });
   }
 
@@ -33,7 +54,6 @@ document.addEventListener('DOMContentLoaded', () => {
       fileType: 'image/webp'
     };
     try {
-      // usa window.imageCompression (global del CDN)
       const compressedWebP = await window.imageCompression(file, options);
       const dataTransfer = new DataTransfer();
       dataTransfer.items.add(
@@ -50,14 +70,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function validarGuardar() {
     const reemplazando = !inputArchivo.classList.contains('d-none') && inputBorrar.value === "true";
+    const eliminando = inputBorrar.value === "delete";
     const archivoSubido = inputArchivo.files && inputArchivo.files.length > 0;
-    btnGuardar.disabled = reemplazando && !archivoSubido;
+    // Solo desactiva guardar si está en modo reemplazo y no se subió imagen
+    btnGuardar.disabled = (reemplazando && !archivoSubido);
+    // Si elimina, permite guardar siempre
   }
 
   inputArchivo?.addEventListener('change', validarGuardar);
   if (btnReemplazar) btnReemplazar.addEventListener('click', validarGuardar);
+  if (btnEliminar) btnEliminar.addEventListener('click', validarGuardar);
   validarGuardar();
 
+  // Valida antes de enviar el form
   form?.addEventListener('submit', (e) => {
     const reemplazando = !inputArchivo.classList.contains('d-none') && inputBorrar.value === "true";
     const archivoSubido = inputArchivo.files && inputArchivo.files.length > 0;
@@ -65,5 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       alert('Tenés que elegir una nueva imagen antes de guardar los cambios.');
     }
+    // Si elimina, permite guardar
   });
 });

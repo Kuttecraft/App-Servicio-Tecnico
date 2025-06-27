@@ -62,10 +62,13 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 📁 OTRAS CARPETAS IMPORTANTES
 
 /public
-├── logo.svg                     # Icono principal de la aplicación
-├── img/                         # Imágenes públicas accesibles por URL
-├── logo.svg                     # Imagen por defecto para impresoras
-└── eliminar.png                 # Imagen dedicada a elimnar un ticket (Uilizado en /detalle/[id].astro)
+├── img/                         # Imágenes públicas accesibles por URL (fotos de impresoras, usuarios, etc)
+├── logo.svg                     # Logo principal de la aplicación (también como imagen por defecto)
+├── eliminar.png                 # Icono de "eliminar" para tickets (usado en /detalle/[id].astro)
+├── scripts/                     # Scripts JavaScript vanilla para formularios y lógica del frontend
+│   ├── form-crear-ticket.js         # Comprime la imagen al crear un ticket. Si el usuario selecciona una imagen, la convierte a WebP optimizado antes de enviarla.
+│   └── form-editar-equipo.js        # Permite reemplazar, eliminar o comprimir la imagen de un ticket existente. Controla la UI para mostrar/ocultar la imagen actual y asegura que sólo se pueda guardar si se seleccionó una nueva imagen cuando corresponde.
+
 
 /.astro                          # Archivos generados automáticamente por Astro (NO EDITAR)
 /node_modules                    # Dependencias instaladas por npm (NO EDITAR)

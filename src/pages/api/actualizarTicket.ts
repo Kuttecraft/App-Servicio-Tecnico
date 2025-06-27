@@ -14,7 +14,7 @@ export async function POST(context: RequestContext) {
 
   const formData = await req.formData();
   const imagenArchivo = formData.get("imagenArchivo") as File | null;
-  const borrarImagen = formData.get("borrarImagen") === "true";
+  const borrarImagen = formData.get("borrarImagen");
 
   // Parse fields
   const fields: Record<string, string> = {};
@@ -49,17 +49,18 @@ export async function POST(context: RequestContext) {
 
   const nombreArchivo = `public/${id}.webp`;
 
-  // CASO 1: Imagen nueva subida (PRIMERO borrar, LUEGO subir la nueva)
+  // ---- Lógica de imagen ----
+  // CASO 1: Subió imagen nueva (siempre reemplaza)
   if (imagenArchivo && imagenArchivo.size > 0) {
-    // BORRAR la anterior
+    // Borra anterior (por las dudas, puede no existir)
     await supabase.storage.from('imagenes').remove([nombreArchivo]);
 
-    // Subir nueva imagen
+    // Sube nueva imagen
     const { error: uploadError } = await supabase.storage
       .from('imagenes')
       .upload(nombreArchivo, imagenArchivo, {
         cacheControl: '3600',
-        upsert: true, // sigue estando, por si el borrado falla por "no existe"
+        upsert: true,
       });
 
     if (uploadError) {
@@ -69,21 +70,22 @@ export async function POST(context: RequestContext) {
       });
     }
 
-    // Obtener URL pública
+    // Guarda URL pública
     const { data: publicUrl } = supabase.storage
       .from('imagenes')
       .getPublicUrl(nombreArchivo);
 
     datosActualizados.imagen = publicUrl.publicUrl;
 
-  } else if (borrarImagen) {
-    // CASO 2: Se pidió borrar y NO hay imagen nueva
+  // CASO 2: Eligió borrar imagen (sin subir nada)
+  } else if (borrarImagen === "delete") {
     await supabase.storage.from('imagenes').remove([nombreArchivo]);
     datosActualizados.imagen = null;
-  }
-  // CASO 3: Ni subió ni borró -> no se modifica el campo imagen
 
-  // Actualizar base
+  // CASO 3: No tocó nada de la imagen (ni sube ni borra)
+  } // No se modifica el campo "imagen"
+
+  // ---- Actualizar base de datos ----
   const { error } = await supabase
     .from('TestImpresoras')
     .update(datosActualizados)
@@ -96,6 +98,7 @@ export async function POST(context: RequestContext) {
     });
   }
 
+  // Redirige al detalle del equipo
   return new Response(null, {
     status: 303,
     headers: { Location: `/detalle/${id}` },
