@@ -3,34 +3,54 @@ import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 
 const url = new URL(Astro.request.url);
 
-// Capturamos los valores desde la URL (o dejamos vacío si no están)
-// para visualizar los datos pre cargados: 
-// /addTicket?cliente=Juan+Pérez&correo=juan@example.com&modelo=PK3++&tecnico=Luis&dniCuit=20304050&whatsapp=1122334455&estado=Revisado&ticket=9&notaTecnico=Chequeado+motor&notaAdmin=Esperando+repuesto&comentarios=Cliente+avisó+demora&cubreGarantia=true&cobrado=false&monto=8500&linkPresupuesto=https%3A%2F%2Fejemplo.com%2Fpresupuesto.pdf&costoDelivery=Envío+normal&infoDelivery=Retira+cliente
-
 const cliente = url.searchParams.get('cliente') || '';
 const dniCuit = url.searchParams.get('dniCuit') || '';
 const correo = url.searchParams.get('correo') || '';
 const whatsapp = url.searchParams.get('whatsapp') || '';
 const modelo = url.searchParams.get('modelo') || '';
 const tecnico = url.searchParams.get('tecnico') || '';
-const estado = url.searchParams.get('estado') || 'Recibido';
-const ticket = url.searchParams.get('ticket') || '';
-const notaTecnico = url.searchParams.get('notaTecnico') || '';
-const notaAdmin = url.searchParams.get('notaAdmin') || '';
 const comentarios = url.searchParams.get('comentarios') || '';
-const cubreGarantia = url.searchParams.get('cubreGarantia') || 'false';
-const cobrado = url.searchParams.get('cobrado') || 'false';
-const monto = url.searchParams.get('monto') || '';
-const linkPresupuesto = url.searchParams.get('linkPresupuesto') || '';
-const costoDelivery = url.searchParams.get('costoDelivery') || '';
-const infoDelivery = url.searchParams.get('infoDelivery') || '';
+
+const estados = [
+  "Retirar", "Presupuestar", "Enviar presupuesto", "P. Enviado",
+  "Reparación", "Prueba", "Lista", "Entregada",
+  "Feedback Enviado", "Archivada", "No realizada"
+];
+const estado = url.searchParams.get('estado') || estados[0];
+
+// --- Obtención del ticket sugerido (SSR) ---
+let ticketSugerido = 1;
+try {
+  let base = Astro.site?.toString() || 'http://localhost:4321';
+  const res = await fetch(`${base}/api/proximoTicket`);
+  if (res.ok) {
+    const data = await res.json();
+    ticketSugerido = data.sugerido;
+    // === DEBUG SSR: mostrar logs solo en zona de pruebas ===
+    // console.log('[SSR] ticketSugerido desde /api/proximoTicket:', ticketSugerido, '| data:', data);
+  }
+} catch (err) {
+  ticketSugerido = 1;
+  // === DEBUG SSR: error al obtener sugerido ===
+  // console.log('[SSR] Error al obtener ticket sugerido:', err);
+}
+// --- FIN zona de test SSR ---
+
+const ticket = url.searchParams.get('ticket') || ticketSugerido;
+const cobrado = "No";
 ---
+
 <BasePrivateLayout>
+  {/*
+  ⚡️ Pre-carga por URL: podés entrar con
+  /addTicket?cliente=Lucas+Pérez&dniCuit=20304050&correo=Lucas@example.com&whatsapp=1122334455&modelo=PK3&tecnico=Luis&estado=Lista&comentarios=Este+es+un+test
+
+  (Todos los campos son opcionales, y el form los completará automáticamente si están presentes)
+*/}
+
   <div class="container mt-5">
     <h2 class="mb-4">🎫 Crear nuevo ticket</h2>
-
     <form method="post" action="/api/crearTicket" enctype="multipart/form-data" class="row g-3">
-      
       <div class="col-md-6">
         <label class="form-label">Cliente</label>
         <input type="text" class="form-control" name="cliente" value={cliente} required />
@@ -44,6 +64,19 @@ const infoDelivery = url.searchParams.get('infoDelivery') || '';
         <label class="form-label">Correo</label>
         <input type="email" class="form-control" name="correo" value={correo} />
       </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Ticket</label>
+        <input
+          type="number"
+          class="form-control"
+          name="ticket"
+          value={ticket}
+          min={1}
+          required
+        />
+      </div>
+
       <div class="col-md-6">
         <label class="form-label">WhatsApp</label>
         <input type="text" class="form-control" name="whatsapp" value={whatsapp} />
@@ -60,61 +93,18 @@ const infoDelivery = url.searchParams.get('infoDelivery') || '';
 
       <div class="col-md-6">
         <label class="form-label">Estado</label>
-        <input type="text" class="form-control" name="estado" value={estado} />
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Ticket</label>
-        <input type="text" class="form-control" name="ticket" value={ticket} />
-      </div>
-
-      <div class="col-12">
-        <label class="form-label">Nota técnico</label>
-        <textarea class="form-control" name="notaTecnico">{notaTecnico}</textarea>
+        <select class="form-select" name="estado" required>
+          {estados.map((op) => (
+            <option value={op} selected={op === estado}>{op}</option>
+          ))}
+        </select>
       </div>
 
-      <div class="col-12">
-        <label class="form-label">Nota administración</label>
-        <textarea class="form-control" name="notaAdmin">{notaAdmin}</textarea>
-      </div>
+      <input type="hidden" name="cobrado" value={cobrado} />
 
       <div class="col-12">
         <label class="form-label">Comentarios</label>
         <textarea class="form-control" name="comentarios">{comentarios}</textarea>
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">¿Cubre garantía?</label>
-        <select class="form-select" name="cubreGarantia">
-          <option value="false" selected={cubreGarantia === 'false'}>No</option>
-          <option value="true" selected={cubreGarantia === 'true'}>Sí</option>
-        </select>
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">¿Cobrado?</label>
-        <select class="form-select" name="cobrado">
-          <option value="false" selected={cobrado === 'false'}>No</option>
-          <option value="true" selected={cobrado === 'true'}>Sí</option>
-        </select>
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">Monto</label>
-        <input type="number" class="form-control" name="monto" value={monto} />
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">Link presupuesto</label>
-        <input type="url" class="form-control" name="linkPresupuesto" value={linkPresupuesto} />
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">Modo delivery</label>
-        <input type="text" class="form-control" name="costoDelivery" value={costoDelivery} />
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Info delivery</label>
-        <input type="text" class="form-control" name="infoDelivery" value={infoDelivery} />
       </div>
 
       <div class="col-12">
@@ -130,103 +120,3 @@ const infoDelivery = url.searchParams.get('infoDelivery') || '';
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js"></script>
   <script src="/scripts/form-crear-ticket.js" is:inline></script>
 </BasePrivateLayout>
-
-{ /*  Descomentar en caso de querer cargar los campos 
-<BasePrivateLayout>
-  <div class="container mt-5">
-    <h2 class="mb-4">🎫 Crear nuevo ticket</h2>
-
-    <form method="post" action="/api/crearTicket" class="row g-3">
-      <div class="col-md-6">
-        <label class="form-label">Cliente</label>
-        <input type="text" class="form-control" name="cliente" required />
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">DNI/CUIT</label>
-        <input type="text" class="form-control" name="dniCuit" />
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">Correo</label>
-        <input type="email" class="form-control" name="correo" />
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">WhatsApp</label>
-        <input type="text" class="form-control" name="whatsapp" />
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">Modelo</label>
-        <input type="text" class="form-control" name="modelo" />
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Técnico</label>
-        <input type="text" class="form-control" name="tecnico" />
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">Estado</label>
-        <input type="text" class="form-control" name="estado" value="Recibido" />
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Ticket</label>
-        <input type="text" class="form-control" name="ticket" />
-      </div>
-
-      <div class="col-12">
-        <label class="form-label">Nota técnico</label>
-        <textarea class="form-control" name="notaTecnico"></textarea>
-      </div>
-
-      <div class="col-12">
-        <label class="form-label">Nota administración</label>
-        <textarea class="form-control" name="notaAdmin"></textarea>
-      </div>
-
-      <div class="col-12">
-        <label class="form-label">Comentarios</label>
-        <textarea class="form-control" name="comentarios"></textarea>
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">¿Cubre garantía?</label>
-        <select class="form-select" name="cubreGarantia">
-          <option value="false">No</option>
-          <option value="true">Sí</option>
-        </select>
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">¿Cobrado?</label>
-        <select class="form-select" name="cobrado">
-          <option value="false">No</option>
-          <option value="true">Sí</option>
-        </select>
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">Monto</label>
-        <input type="number" class="form-control" name="monto" />
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">Link presupuesto</label>
-        <input type="url" class="form-control" name="linkPresupuesto" />
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">Modo delivery</label>
-        <input type="text" class="form-control" name="costoDelivery" />
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Info delivery</label>
-        <input type="text" class="form-control" name="infoDelivery" />
-      </div>
-
-      <div class="col-12">
-        <button type="submit" class="btn btn-primary mt-3">Crear ticket</button>
-      </div>
-    </form>
-  </div>
-</BasePrivateLayout>
-*/ }

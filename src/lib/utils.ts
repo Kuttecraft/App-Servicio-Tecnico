@@ -10,10 +10,21 @@ export function formatearFecha(fechaISO: string): string {
   });
 }
 
-/** Convierte true/false en 'Sí' / 'No' para visualización */
-export function booleanATexto(valor: boolean): string {
-  return valor ? 'Sí' : 'No';
+
+/** Convierte true/false o string "Sí"/"No" en 'Sí' / 'No' para visualización */
+export function booleanATexto(valor: boolean | string): string {
+  if (typeof valor === 'boolean') {
+    return valor ? 'Sí' : 'No';
+  }
+  if (typeof valor === 'string') {
+    const v = valor.trim().toLowerCase();
+    if (v === 'sí' || v === 'si') return 'Sí';
+    if (v === 'no') return 'No';
+  }
+  // Si llega cualquier otra cosa (null, undefined, string vacío)
+  return 'No';
 }
+
 
 /** Capitaliza la primera letra de un string */
 export function capitalizar(str: string): string {
