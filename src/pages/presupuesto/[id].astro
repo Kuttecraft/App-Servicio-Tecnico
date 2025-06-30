@@ -1,0 +1,36 @@
+---
+import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
+import PresupuestoForm from '../../components/PresupuestoForm.astro';
+import { supabase } from '../../lib/supabase';
+
+const url = new URL(Astro.request.url);
+const precarga = {
+  monto: url.searchParams.get('monto') ?? undefined,
+  linkPresupuesto: url.searchParams.get('linkPresupuesto') ?? undefined,
+  timestampPresupuesto: url.searchParams.get('timestampPresupuesto') ?? undefined,
+  cobrado: url.searchParams.get('cobrado') ?? undefined,
+  notaTecnico: url.searchParams.get('notaTecnico') ?? undefined,
+  notaInterna: url.searchParams.get('notaInterna') ?? undefined,
+};
+
+const { id } = Astro.params;
+const { data, error } = await supabase.from('TestImpresoras').select('*').eq('id', id).single();
+const equipo = { ...data, ...precarga };
+---
+
+<BasePrivateLayout>
+  {/*
+    ⚡️ Pre-carga por URL: 
+    Aclaración pegar luego de la id:
+    ?monto=9500&cobrado=No&linkPresupuesto=https://ejemplo.com/pdf&timestampPresupuesto=2024-07-02T12:00&notaTecnico=Revisar+motor&notaInterna=Solo+para+administración
+
+    (Todos los campos son opcionales, y el form los completará automáticamente si están presentes)
+  */}
+  <div class="container mt-5">
+    <h2 class="mb-4"><i class="bi bi-receipt me-2"></i> Añadir/Editar presupuesto</h2>
+    {equipo
+      ? <PresupuestoForm equipo={equipo} />
+      : <div class="alert alert-danger">No se encontró el equipo con ID: {id}</div>
+    }
+  </div>
+</BasePrivateLayout>

@@ -1,0 +1,23 @@
+---
+// Props: equipo (opcional si es edición)
+const { equipo } = Astro.props;
+---
+
+<form method="post" action={`/api/actualizarDelivery?id=${equipo?.id ?? ''}`} class="row g-3">
+  <div class="col-md-6">
+    <label class="form-label">Modo delivery</label>
+    <input type="text" class="form-control" name="costoDelivery" value={equipo?.costoDelivery ?? ''} />
+  </div>
+  <div class="col-md-6">
+    <label class="form-label">Info delivery</label>
+    <input type="text" class="form-control" name="infoDelivery" value={equipo?.infoDelivery ?? ''} />
+  </div>
+  <div class="col-md-12">
+    <label class="form-label">Fecha listo (opcional)</label>
+    <input type="datetime-local" class="form-control" name="timestampListo"
+      value={equipo?.timestampListo ? equipo.timestampListo.slice(0, 16) : ''} />
+  </div>
+  <div class="col-12 d-flex justify-content-end">
+    <button type="submit" class="btn btn-success">Guardar delivery</button>
+  </div>
+</form>
