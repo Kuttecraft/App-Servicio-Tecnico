@@ -42,8 +42,9 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 │   │
 │   └── /api/
 │       ├── crearTicket.ts        # Endpoint POST para crear un ticket (modo servidor)
-│       └── actualizarTicket.ts   # Endpoint POST para editar un ticket (modo servidor)
-│       └── eliminarTicket.ts     # Endpoint POST para eliminar un ticket (modo servidor)
+│       ├── actualizarTicket.ts   # Endpoint POST para editar un ticket (modo servidor)
+|       ├── eliminarTicket.ts     # Endpoint POST para eliminar un ticket (modo servidor) 
+│       └── proximoTicket.ts      # Endpoint GET para sugerir el próximo número de ticket disponible
 │
 ├── /data
 │   └── impresoras.json           # Datos de ejemplo para pruebas (mock)

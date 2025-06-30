@@ -40,59 +40,61 @@ const equipo = data;
             style="max-height: 160px; object-fit: contain;" 
           />
         </div>
-        <!-- Cliente y modelo -->
-        <div class="text-center mb-3">
+
+        <!-- Cliente y modelo y detalles centrados -->
+        <div class="text-center mb-4">
           <h4 class="fw-bold text-dark mb-1">{equipo.cliente}</h4>
           <div class="text-muted small">{equipo.modelo}</div>
+        
+          <div class="row row-cols-1 row-cols-md-2 g-4 justify-content-center mt-3">
+            <div class="col"><strong>Ticket:</strong> {equipo.ticket}</div>
+            <div class="col"><strong>Estado:</strong> {equipo.estado}</div>
+            <div class="col"><strong>¿Cobrado?:</strong> {booleanATexto(equipo.cobrado)}</div>
+            <div class="col"><strong>Técnico:</strong> {equipo.tecnico}</div>
+            <div class="col"><strong>DNI/CUIT:</strong> {equipo.dniCuit}</div>
+            <div class="col"><strong>Correo:</strong> {equipo.correo}</div>
+            <div class="col"><strong>WhatsApp:</strong> {equipo.whatsapp}</div>
+            <div class="col"><strong>Fecha formulario:</strong> {equipo.fechaFormulario ? formatearFecha(equipo.fechaFormulario) : '—'}</div>
+            <div class="col"><strong>Fecha listo:</strong> {equipo.timestampListo ? formatearFecha(equipo.timestampListo) : '—'}</div>
+          </div>
         </div>
-        <!-- Detalles como grid -->
-        <div class="row row-cols-1 row-cols-md-2 g-2">
-          <div class="col"><strong>Ticket:</strong> {equipo.ticket}</div>
-          <div class="col"><strong>Estado:</strong> {equipo.estado}</div>
-          <div class="col"><strong>Fecha formulario:</strong> {equipo.fechaFormulario}</div>
-          <div class="col"><strong>Técnico:</strong> {equipo.tecnico}</div>
-          <div class="col"><strong>DNI/CUIT:</strong> {equipo.dniCuit}</div>
-          <div class="col"><strong>WhatsApp:</strong> {equipo.whatsapp}</div>
-          <div class="col"><strong>Correo:</strong> {equipo.correo}</div>
-          <div class="col"><strong>¿Cobrado?:</strong> {booleanATexto(equipo.cobrado)}</div>
-          <div class="col"><strong>Fecha presupuesto:</strong> {equipo.timestampPresupuesto ? formatearFecha(equipo.timestampPresupuesto) : '—'}</div>
-          <div class="col"><strong>Fecha listo:</strong> {equipo.timestampListo ? formatearFecha(equipo.timestampListo) : '—'}</div>
-          <!-- Quitar o agregar más campos relevantes acá según tu necesidad -->
+
+        <!-- Botones Añadir presupuesto | Añadir delivery -->
+        <div class="row mt-4">
+          <div class="col-6 d-flex justify-content-start">
+            <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm w-100">
+              <i class="bi bi-receipt"></i> Añadir presupuesto
+            </a>
+          </div>
+          <div class="col-6 d-flex justify-content-end">
+            <a href={`/delivery/${equipo.id}`} class="btn btn-outline-success btn-sm w-100">
+              <i class="bi bi-truck"></i> Añadir delivery
+            </a>
+          </div>
         </div>
-        {/* Botones extra opcionales */}
-        <div class="mt-4 d-flex justify-content-end gap-2">
-          <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm">
-            <i class="bi bi-receipt"></i> Añadir presupuesto
-          </a>
-          <a href={`/delivery/${equipo.id}`} class="btn btn-outline-success btn-sm">
-            <i class="bi bi-truck"></i> Añadir delivery
-          </a> 
-        </div>
-      </div>
-    </div>
+
     {/* Mensaje si no se encontró equipo */}
     {!equipo && (
       <div class="alert alert-danger mt-4">No se encontró el equipo con ID: {id}</div>
     )}
   </div>
 
-<script>
-  declare global {
-    interface Window {
-      eliminarTicket: (id: string) => void;
+  <script>
+    declare global {
+      interface Window {
+        eliminarTicket: (id: string) => void;
+      }
     }
-  }
-  window.eliminarTicket = async function(id: string) {
-    if (!confirm("¿Estás seguro de que querés eliminar este ticket? Esta acción no se puede deshacer.")) return;
-    const res = await fetch(`/api/eliminarTicket?id=${id}`, { method: 'POST' });
-    const data = await res.json();
-    if (res.ok) {
-      alert("Ticket eliminado correctamente.");
-      window.location.href = '/dashboard';
-    } else {
-      alert("Error al eliminar: " + data.error);
+    window.eliminarTicket = async function(id: string) {
+      if (!confirm("¿Estás seguro de que querés eliminar este ticket? Esta acción no se puede deshacer.")) return;
+      const res = await fetch(`/api/eliminarTicket?id=${id}`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Ticket eliminado correctamente.");
+        window.location.href = '/dashboard';
+      } else {
+        alert("Error al eliminar: " + data.error);
+      }
     }
-  }
-</script>
+  </script>
 </BasePrivateLayout>
-

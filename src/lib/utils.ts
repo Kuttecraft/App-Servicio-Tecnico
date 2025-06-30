@@ -1,14 +1,17 @@
 /** Convierte una fecha ISO a formato DD/MM/AAAA HH:mm (Argentina) */
 export function formatearFecha(fechaISO: string): string {
   const f = new Date(fechaISO);
-  return f.toLocaleDateString('es-AR', {
+  return f.toLocaleString('es-AR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
+    timeZone: 'America/Argentina/Buenos_Aires'
   });
 }
+
 
 
 /** Convierte true/false o string "Sí"/"No" en 'Sí' / 'No' para visualización */
