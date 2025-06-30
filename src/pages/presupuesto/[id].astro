@@ -27,7 +27,7 @@ const equipo = { ...data, ...precarga };
     (Todos los campos son opcionales, y el form los completará automáticamente si están presentes)
   */}
   <div class="container mt-5">
-    <h2 class="mb-4"><i class="bi bi-receipt me-2"></i> Añadir/Editar presupuesto</h2>
+    <h2 class="mb-4"><i class="bi bi-receipt me-2"></i> Editar presupuesto</h2>
     {equipo
       ? <PresupuestoForm equipo={equipo} />
       : <div class="alert alert-danger">No se encontró el equipo con ID: {id}</div>

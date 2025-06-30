@@ -1,27 +1,48 @@
 ---
-// Props: equipo (opcional si es edición)
+/**
+ * Props: equipo (puede ser undefined si es alta, o un objeto si es edición)
+ */
 const { equipo } = Astro.props;
+// Para debug: asegurate de que los datos llegan correctamente
+console.log('PresupuestoForm equipo:', equipo);
 ---
 
 <form method="post" action={`/api/actualizarPresupuesto?id=${equipo?.id ?? ''}`} class="row g-3">
   <div class="col-md-6">
     <label class="form-label">Monto</label>
-    <input type="number" class="form-control" name="monto" value={equipo?.monto ?? ''} required min="0" />
+    <input 
+      type="number" 
+      class="form-control" 
+      name="monto" 
+      value={equipo?.monto ?? ''} 
+      min="0" 
+      required 
+    />
   </div>
   <div class="col-md-6">
     <label class="form-label">Link presupuesto</label>
-    <input type="url" class="form-control" name="linkPresupuesto" value={equipo?.linkPresupuesto ?? ''} />
+    <input 
+      type="url" 
+      class="form-control" 
+      name="linkPresupuesto" 
+      value={equipo?.linkPresupuesto ?? ''} 
+      autocomplete="off"
+    />
   </div>
   <div class="col-md-6">
     <label class="form-label">Fecha presupuesto</label>
-    <input type="datetime-local" class="form-control" name="timestampPresupuesto"
-      value={equipo?.timestampPresupuesto ? equipo.timestampPresupuesto.slice(0, 16) : ''} />
+    <input 
+      type="datetime-local" 
+      class="form-control" 
+      name="timestampPresupuesto"
+      value={equipo?.timestampPresupuesto ? equipo.timestampPresupuesto.slice(0, 16) : ''} 
+    />
   </div>
   <div class="col-md-6">
     <label class="form-label">¿Cobrado?</label>
     <select name="cobrado" class="form-select">
       <option value="Sí" selected={equipo?.cobrado === 'Sí'}>Sí</option>
-      <option value="No" selected={equipo?.cobrado === 'No'}>No</option>
+      <option value="No" selected={equipo?.cobrado === 'No' || !equipo?.cobrado}>No</option>
     </select>
   </div>
   <div class="col-12">
