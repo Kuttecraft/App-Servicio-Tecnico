@@ -15,7 +15,13 @@ const precarga = {
 
 const { id } = Astro.params;
 const { data, error } = await supabase.from('TestImpresoras').select('*').eq('id', id).single();
-const equipo = { ...data, ...precarga };
+const equipo = {
+  ...data,
+  ...Object.fromEntries(
+    Object.entries(precarga).filter(([_, value]) => value !== undefined)
+  )
+};
+
 ---
 
 <BasePrivateLayout>
