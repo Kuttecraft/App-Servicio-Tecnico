@@ -6,6 +6,9 @@
   --bs-secondary: #2f3144;
   --bs-light: #D9D6F2;
   --bs-dark: #1b1b1b;
+
+  --kc-primary: #1305a7;
+  --kc-primary-hover: #0A5ED6;
 }
 
 .card-custom {
@@ -38,4 +41,39 @@
    nav.navbar {
       margin-left: 240px;
     }
+}
+
+.btn-upload-image {
+  display: inline-block;
+  background-color: #0366f1;        /* Azul principal */
+  color: #fff;                      /* Texto blanco */
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  width: 80%;
+  max-width: 100%;
+  transition: background-color 0.2s ease-in-out;
+  border: 1px solid #0366f1;
+}
+
+.btn-upload-image:hover {
+  background-color: #0548a7;        /* Azul más brillante al hover */
+  border-color: #0548a7;
+  color: #fff;                      /* Seguimos con texto blanco */
+}
+
+/* Ocultamos el input real */
+.btn-upload-image input[type="file"] {
+  display: none;
+}
+
+/* Responsive móvil */
+@media (max-width: 768px) {
+  .btn-upload-image {
+    font-size: 1.1rem;
+    padding: 1rem;
+    width: 100%;
+  }
 }

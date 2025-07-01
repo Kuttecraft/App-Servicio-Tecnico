@@ -109,13 +109,22 @@ const cobrado = "No";
       </div>
 
       <div class="col-12">
-        <label class="form-label">Imagen del equipo</label>
-        <input type="file" class="form-control" name="imagenArchivo" accept="image/*" />
+        <div class="text-center">
+        <label class="btn-upload-image mx-auto">
+          <i class="bi bi-upload me-2"></i> Seleccionar imagen
+          <input type="file" name="imagenArchivo" accept="image/*" id="imagenArchivo" />
+        </label>
+
+        <!-- Vista previa -->
+        <div class="mt-3">
+          <img id="previewImagen" src="#" alt="Vista previa" class="img-fluid rounded d-none" />
+        </div>
       </div>
 
-      <div class="col-12">
-        <button type="submit" class="btn btn-primary mt-3">Crear ticket</button>
+      <div class="col-12 text-center">
+        <button type="submit" class="btn btn-primary mt-3 px-5">Crear ticket</button>
       </div>
+
     </form>
   </div>
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js"></script>
