@@ -109,29 +109,42 @@ const equipo = data;
               value={equipo.timestampListo ? equipo.timestampListo.slice(0, 16) : ""} />
           </div>
 
-          {/* Imagen equipo: muestra actual y reemplazo */}
-          <div class="col-md-12">
-                   {/* Imagen equipo: muestra actual y reemplazo */}
-            {equipo.imagen ? (
-              <div class="mb-3 d-flex justify-content-center" id="imagen-actual-container">
-                 <img id="img-actual-o-preview" src={equipo.imagen ? equipo.imagen + '?t=' + Date.now() : '#'}  alt="Imagen actual" style="max-width: 240px; max-height: 240px; object-fit: cover; border-radius: 6px; margin-top: 20px;"/>
-              </div>
-            ) : null}
-            <input 
-              type="file" 
-              class={`form-control${equipo.imagen ? ' d-none' : ''}`} 
-              name="imagenArchivo" 
-              accept="image/*" 
-              id="input-imagen-archivo" 
+     {/* Imagen equipo: muestra actual y reemplazo */}
+         {/* Imagen equipo: muestra actual y reemplazo */}
+      <div class="col-md-12">
+        <div class="mb-4 d-flex flex-column align-items-center" id="imagen-actual-container" style="gap: 1rem;">
+          <div class="position-relative" style="width: 240px; height: 240px;">
+            <img
+              id="img-actual-o-preview"
+              src={equipo.imagen ? equipo.imagen + '?t=' + Date.now() : '/logo.webp'}
+              alt="Imagen actual"
+              class="shadow-sm border"
+              style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px; transition: box-shadow .2s;"
             />
-            <input type="hidden" name="borrarImagen" id="input-borrar-imagen" value="false" />
-            {/* Botones: a la derecha en desktop, apilados en mobile */}
-            <div class="mt-4 d-flex flex-column flex-md-row gap-2 justify-content-center align-items-stretch">
-              <button type="submit" class="btn btn-success order-1 order-md-2">Guardar cambios</button>
-              <button type="button" class="btn btn-warning order-2 order-md-3" id="btn-reemplazar-imagen">Reemplazar imagen</button>
-              <button type="button" class="btn btn-danger order-3 order-md-1" id="btn-eliminar-equipo">Eliminar imagen</button>
-            </div>
           </div>
+
+          {/* Botón custom de upload */}
+          <label class="btn-upload-image mt-3 fw-semibold">
+            <i class="bi bi-upload me-2"></i> Cambiar imagen
+            <input
+              type="file"
+              name="imagenArchivo"
+              accept="image/*"
+              id="input-imagen-archivo"
+            />
+          </label>
+        </div>
+        <input type="hidden" name="borrarImagen" id="input-borrar-imagen" value="false" />
+
+        {/* Botones: a la derecha en desktop, apilados en mobile */}
+        <div class="mt-4 d-flex flex-column flex-md-row gap-2 justify-content-center align-items-stretch">
+          <button type="submit" class="btn btn-success order-1 order-md-2 px-4">Guardar cambios</button>
+          <button type="button" class="btn btn-danger order-3 order-md-1 px-4" id="btn-eliminar-equipo">Eliminar imagen</button>
+        </div>
+      </div>
+
+
+
 
   </div>
 
