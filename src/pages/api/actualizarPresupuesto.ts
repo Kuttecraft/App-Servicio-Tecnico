@@ -20,30 +20,29 @@ export async function POST(context: RequestContext) {
 
   const formData = await req.formData();
 
-  const allowedFields = [
-    "monto",
-    "linkPresupuesto",
-    "timestampPresupuesto",
-    "cobrado",
-    "notaTecnico",
-    "notaInterna"
-  ];
-
+  // --- Mapeo y parseo, como en el primer ejemplo ---
   const fields: Record<string, string> = {};
   formData.forEach((value, key) => {
-    if (typeof value === 'string' && allowedFields.includes(key)) {
-      fields[key] = value;
+    if (typeof value === 'string') {
+      fields[key] = value.trim();
     }
   });
 
-  // Validación extra: monto como número
-  if ("monto" in fields) {
-    fields.monto = isNaN(Number(fields.monto)) ? "0" : String(Number(fields.monto));
-  }
+  // Conversión y validaciones según tu modelo
+  const datosActualizados: any = {
+    monto: isNaN(parseFloat(fields.monto)) ? 0 : parseFloat(fields.monto),
+    linkPresupuesto: fields.linkPresupuesto || null,
+    timestampPresupuesto: fields.timestampPresupuesto || null,
+    cobrado: fields.cobrado === 'true',
+    notaTecnico: fields.notaTecnico || null,
+    notaInterna: fields.notaInterna || null,
+    // Si agregás más campos, los parseás igual aquí
+  };
 
+  // Actualiza la base de datos
   const { error } = await supabase
     .from('TestImpresoras')
-    .update(fields)
+    .update(datosActualizados)
     .eq('id', id);
 
   if (error) {

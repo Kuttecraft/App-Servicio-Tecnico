@@ -20,22 +20,27 @@ export async function POST(context: RequestContext) {
 
   const formData = await req.formData();
 
-  const allowedFields = [
-    "costoDelivery",
-    "infoDelivery",
-    "timestampListo"
-  ];
-
+  // Extraer campos y limpiarlos
   const fields: Record<string, string> = {};
   formData.forEach((value, key) => {
-    if (typeof value === 'string' && allowedFields.includes(key)) {
-      fields[key] = value;
+    if (typeof value === 'string') {
+      fields[key] = value.trim();
     }
   });
 
+  // Parsear los campos antes de guardar
+  const datosActualizados: any = {
+    costoDelivery: isNaN(parseFloat(fields.costoDelivery)) ? 0 : parseFloat(fields.costoDelivery), // número
+    infoDelivery: fields.infoDelivery || null, // string o null
+    timestampListo: fields.timestampListo || null // string (fecha) o null
+  };
+
+  // Opcional: si costoDelivery puede ser null (si no se manda), lo ponés como null:
+  // costoDelivery: fields.costoDelivery ? parseFloat(fields.costoDelivery) : null,
+
   const { error } = await supabase
     .from('TestImpresoras')
-    .update(fields)
+    .update(datosActualizados)
     .eq('id', id);
 
   if (error) {

@@ -111,13 +111,10 @@ const equipo = data;
 
           {/* Imagen equipo: muestra actual y reemplazo */}
           <div class="col-md-12">
+                   {/* Imagen equipo: muestra actual y reemplazo */}
             {equipo.imagen ? (
               <div class="mb-3 d-flex justify-content-center" id="imagen-actual-container">
-                <img 
-                  src={equipo.imagen + '?t=' + Date.now()} 
-                  alt="Imagen actual" 
-                  style="max-width: 240px; max-height: 240px; object-fit: cover; border-radius: 6px; margin-top: 20px;" 
-                />
+                 <img id="img-actual-o-preview" src={equipo.imagen ? equipo.imagen + '?t=' + Date.now() : '#'}  alt="Imagen actual" style="max-width: 240px; max-height: 240px; object-fit: cover; border-radius: 6px; margin-top: 20px;"/>
               </div>
             ) : null}
             <input 
@@ -128,7 +125,6 @@ const equipo = data;
               id="input-imagen-archivo" 
             />
             <input type="hidden" name="borrarImagen" id="input-borrar-imagen" value="false" />
-
             {/* Botones: a la derecha en desktop, apilados en mobile */}
             <div class="mt-4 d-flex flex-column flex-md-row gap-2 justify-content-center align-items-stretch">
               <button type="submit" class="btn btn-success order-1 order-md-2">Guardar cambios</button>

@@ -28,11 +28,10 @@ con las opciones:
 **Vista de detalle ("ver"):**
 - [✓] Añadir opción "Añadir presupuesto" (botón o link visible en la vista).
 - [✓] Añadir opción "Añadir delivery" (botón o link visible en la vista).
-- [ ] En cada opción, mostrar sólo los campos relevantes y quitar los campos que ya no corresponden (ej: notas, garantía, etc).
+- [✓] En cada opción, mostrar sólo los campos relevantes y quitar los campos que ya no corresponden (ej: notas, garantía, etc).
 
 **Otros detalles:**
-- [ ] Los campos que se autocompletan no deben ser editables por el usuario.
-- [ ] Asegurarse de que "añadir presupuesto" y "añadir delivery" abran el formulario correspondiente sólo con los datos necesarios.
+- [✓] Asegurarse de que "añadir presupuesto" y "añadir delivery" abran el formulario correspondiente sólo con los datos necesarios.
 
 ---
 
