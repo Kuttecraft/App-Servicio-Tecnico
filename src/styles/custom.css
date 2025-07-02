@@ -1,41 +1,148 @@
 :root {
   --bs-body-bg: #f8f9fa;
-  --bs-body-color: #2c2c2c;
+  --bs-body-color: #23253a;
 
+  /* Colores principales */
   --bs-primary: #6c63ff;
-  --bs-secondary: #2f3144;
-  --bs-light: #D9D6F2;
-  --bs-dark: #1b1b1b;
+  --bs-primary-light: #c3c0fa;
+  --bs-primary-dark: #534bd8;
 
-  --kc-primary: #1305a7;
-  --kc-primary-hover: #0A5ED6;
+  --bs-secondary: #2f3144;
+  --bs-accent: #00d9c0;
+
+  /* Neutrales */
+  --bs-light: #f1f0fb;
+  --bs-lighter: #f8f9fa;
+  --bs-dark: #1b1b1b;
+  --bs-border: #e2e2f3;
+
+  /* Estados */
+  --bs-success: #24c18a;
+  --bs-danger: #fa6161;
+  --bs-warning: #ffc440;
+  --bs-info: #36b7ff;
+
+  /* Efectos/gradientes */
+  --gradient-main: linear-gradient(90deg, #6c63ff 0%, #817cfa 100%);
+  --gradient-secondary: linear-gradient(90deg, #2f3144 0%, #565874 100%);
 
   --upload-blue: #0366f1;
   --upload-blue-hover: #0548a7;
+
+  --bs-disabled-bg: #e3e3ef;
+  --bs-disabled-text: #a1a1b1;
 }
 
 /* Card personalizada */
 .card-custom {
   background-color: var(--bs-light);
   border: none;
-  border-radius: 0.75rem;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.05);
-  transition: transform 0.2s;
+  border-radius: 1.1rem;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.09);
+  transition: transform 0.25s cubic-bezier(.3,.91,.58,.99), box-shadow 0.22s;
+  padding-bottom: 2.1rem !important;
 }
 .card-custom:hover {
-  transform: scale(1.01);
+  transform: scale(1.025) translateY(-3px);
+  box-shadow: 0 8px 32px rgba(108,99,255,0.13);
 }
 
+/* Botones violeta para card SIN hover */
+.btn-ver-card, .btn-editar-card {
+  background: var(--bs-primary);
+  color: #fff !important;
+  border: 2px solid var(--bs-primary);
+  border-radius: 0.65rem;
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+  box-shadow: 0 3px 16px 0 rgba(108, 99, 255, 0.07);
+  /* Sin transition, ni sombra ni cambios de color en hover */
+  padding: 0.55rem 1.35rem;
+  display: inline-block;
+  text-decoration: none !important;
+  outline: none;
+  margin: 0 !important;
+  cursor: pointer;
+}
+/* Elimina cualquier efecto hover/focus */
+.btn-ver-card:hover,
+.btn-ver-card:focus,
+.btn-editar-card:hover,
+.btn-editar-card:focus {
+  background: var(--bs-primary);
+  border-color: var(--bs-primary);
+  color: #fff !important;
+  text-decoration: none !important;
+  box-shadow: 0 3px 16px 0 rgba(108, 99, 255, 0.07);
+  transform: none;
+}
+
+/* Quita subrayado en todos los enlaces con esas clases */
+a.btn-ver-card,
+a.btn-editar-card {
+  text-decoration: none !important;
+}
+
+/* Espacio entre botones de acción en cards */
+.d-flex.flex-row.gap-2.justify-content-center.mt-2 {
+  gap: 0.8rem !important;
+  margin-top: 1rem !important;
+}
+
+/* Botón editar general (no usar en card, solo otras vistas) */
 .btn-editar {
   background-color: var(--bs-secondary);
   color: #ffffff;
   border: none;
+  border-radius: 0.6rem;
   transition: background-color 0.2s ease-in-out;
 }
-
 .btn-editar:hover {
-  background-color: #4b4e68; 
+  background-color: #4b4e68;
   color: #ffffff;
+}
+
+/* Botón de upload custom */
+.btn-upload-image {
+  display: inline-block;
+  background-color: var(--upload-blue);
+  color: #fff;
+  padding: 0.8rem 1.3rem;
+  border-radius: 0.65rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  border: 1.5px solid var(--upload-blue);
+  transition:
+    background-color 0.19s,
+    border-color 0.18s,
+    box-shadow 0.16s;
+  box-shadow: 0 2px 12px 0 rgba(3, 102, 241, 0.09);
+  min-width: 180px;
+  max-width: 320px;
+  font-size: 1.05rem;
+}
+.btn-upload-image:hover,
+.btn-upload-image:focus {
+  background-color: var(--upload-blue-hover);
+  border-color: var(--upload-blue-hover);
+  color: #fff;
+  box-shadow: 0 6px 18px 0 rgba(5, 72, 167, 0.17);
+}
+.btn-upload-image input[type="file"] {
+  display: none !important;
+}
+
+/* Imagen preview: sombra sutil y hover */
+#img-actual-o-preview {
+  box-shadow: 0 1px 12px 0 rgba(44, 44, 44, 0.11);
+  border: 1.5px solid #ececec;
+  transition: box-shadow 0.17s, border-color 0.18s;
+}
+#img-actual-o-preview:hover {
+  box-shadow: 0 0 0 4px rgba(108, 99, 255, 0.17);
+  border-color: var(--bs-primary);
 }
 
 /* Sidebar/Topbar spacing */
@@ -48,41 +155,12 @@
   }
 }
 
-/* Upload Button Custom */
-.btn-upload-image {
-  display: inline-block;
-  background-color: var(--upload-blue);
-  color: #fff;
-  padding: 0.7rem 1.3rem;
-  border-radius: 0.5rem;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: center;
-  border: 1.5px solid var(--upload-blue);
-  transition: 
-    background-color 0.18s,
-    border-color 0.18s,
-    box-shadow 0.18s;
-  box-shadow: 0 2px 12px 0 rgba(3, 102, 241, 0.06);
-  min-width: 180px;
-  max-width: 320px;
-}
-
-.btn-upload-image:hover,
-.btn-upload-image:focus {
-  background-color: var(--upload-blue-hover);
-  border-color: var(--upload-blue-hover);
-  color: #fff;
-  box-shadow: 0 4px 20px 0 rgba(5, 72, 167, 0.13);
-}
-
-/* Oculta el input real */
-.btn-upload-image input[type="file"] {
-  display: none !important;
-}
-
 /* Responsive: Mobile */
 @media (max-width: 768px) {
+  .card-custom {
+    box-shadow: 0 2px 20px rgba(44, 44, 44, 0.13);
+    padding-bottom: 1.4rem !important;
+  }
   .btn-upload-image {
     font-size: 1.12rem;
     padding: 1rem 1.1rem;
@@ -90,15 +168,15 @@
     width: 100%;
     max-width: 100%;
   }
-}
-
-/* Imagen preview: sombra sutil y hover */
-#img-actual-o-preview {
-  box-shadow: 0 0 8px 0 rgba(44, 44, 44, 0.09);
-  border: 1.5px solid #ececec;
-  transition: box-shadow 0.18s, border-color 0.18s;
-}
-#img-actual-o-preview:hover {
-  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.15);
-  border-color: var(--bs-primary);
+  .btn-ver-card,
+  .btn-editar-card {
+    width: 48% !important;
+    font-size: 1.1rem;
+    margin-bottom: 0;
+  }
+  .d-flex.flex-row.gap-2.justify-content-center.mt-2 {
+    flex-direction: row !important;
+    gap: 0.45rem !important;
+    margin-top: 1rem !important;
+  }
 }
