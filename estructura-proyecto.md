@@ -92,7 +92,7 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 | `README.md`            | Información general del proyecto.                                           |
 | `estructura-proyecto.md` | Este archivo: explica toda la organización del código.                    |
 
-## ✅ Buenas prácticas
+## Buenas prácticas
 
 - Usar **componentes modulares**, legibles y reutilizables en `/components` para poder combinarlos y mantenerlos fácilmente.
 - Centralizar lógica en `/lib/`.
@@ -101,7 +101,7 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 - Actualizar `.env.example` al agregar nuevas variables.
 
 
-## 🔜 Futuras ampliaciones
+## Futuras ampliaciones
 
 - Gestionar perfiles definir que puede o no ver un técnico.
 - Generación de estadísticas a partir de datos de la base.
