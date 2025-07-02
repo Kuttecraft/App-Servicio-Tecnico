@@ -5,6 +5,8 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 - Node.js (para backend local a través de /api)
 - Clerk (para autenticación de usuarios)
 - Bootstrap (para diseño responsivo)
+- Supabase (como base de datos y backend en la nube)
+
 
 ```batch 
 📁 Estructura de carpetas
@@ -59,37 +61,32 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 
 ├── middleware.ts                 # Middleware global para proteger rutas privadas
 
+
 ---
+
 📁 OTRAS CARPETAS IMPORTANTES
 
 /public
 ├── img/ # Imágenes públicas accesibles por URL (fotos de impresoras, usuarios, etc)
 ├── logo.svg # Logo principal de la aplicación (también como imagen por defecto)
-├── eliminar.png # Icono de "eliminar" para tickets (usado en /detalle/[id].astro)
 ├── scripts/ # Scripts JavaScript vanilla para formularios y lógica del frontend
 │ ├── form-crear-ticket.js # Comprime la imagen al crear un ticket. Si el usuario selecciona una imagen, la convierte a WebP optimizado antes de enviarla.
-│ └── form-editar-equipo.js # Permite reemplazar, eliminar o comprimir la imagen de un ticket existente. Controla la UI para mostrar/ocultar la imagen actual y asegura que sólo se pueda guardar si se seleccionó una nueva imagen cuando corresponde.
-│
+│ └── form-editar-equipo.js # Permite reemplazar, eliminar o comprimir la imagen de un ticket existente. Controla la UI/UX
 /.astro # Archivos generados automáticamente por Astro (NO EDITAR)
 /node_modules # Dependencias instaladas por npm (NO EDITAR)
-
-
----
-
+```
 ## 📄 Archivos raíz importantes
 
-| Archivo                 | Descripción                                                             |
-|-------------------------|-------------------------------------------------------------------------|
-| astro.config.ts         | Configuración de Astro. Actualmente usa output: 'server' con @astrojs/node. |
-| tsconfig.json           | Configuración de TypeScript                                             |
-| package.json            | Dependencias, scripts y metadata del proyecto                           |
-| package-lock.json       | Registro exacto de versiones instaladas                                 |
-| .gitignore              | Archivos/carpetas que Git debe ignorar                                  |
-| .env.example            | Plantilla de variables de entorno necesarias para ejecutar el proyecto  |
-| README.md               | Información general del proyecto                                        |
-| estructura-proyecto.md  | Este archivo: explica toda la organización del código                   |
-
----
+| Archivo                | Descripción                                                                 |
+|------------------------|-----------------------------------------------------------------------------|
+| `astro.config.ts`      | Configuración de Astro. Actualmente usa `output: 'server'` con `@astrojs/node`. |
+| `tsconfig.json`        | Configuración de TypeScript.                                                |
+| `package.json`         | Dependencias, scripts y metadata del proyecto.                              |
+| `package-lock.json`    | Registro exacto de versiones instaladas (lockfile de npm).                  |
+| `.gitignore`           | Archivos/carpetas que Git debe ignorar.                                     |
+| `.env.example`         | Plantilla de variables de entorno necesarias para ejecutar el proyecto.     |
+| `README.md`            | Información general del proyecto.                                           |
+| `estructura-proyecto.md` | Este archivo: explica toda la organización del código.                    |
 
 ## ✅ Buenas prácticas
 
@@ -99,14 +96,12 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 - Mantener el código limpio y comentado.
 - Actualizar `.env.example` al agregar nuevas variables.
 
----
 
 ## 🔜 Futuras ampliaciones
 
-- Exportación de informes.
-- Mejorar la estética general.
+- Gestionar perfiles definir que puede o no ver un técnico.
 - Generación de estadísticas a partir de datos de la base.
 
----
+
 
 📌 **Mantené este archivo actualizado si hacés cambios importantes en la estructura o convenciones del proyecto.**
