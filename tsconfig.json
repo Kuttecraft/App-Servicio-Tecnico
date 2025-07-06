@@ -3,9 +3,8 @@
   "compilerOptions": {
     "typeRoots": ["./types", "./node_modules/@types"]
   },
-  "include": ["src", "types", ".astro/types.d.ts"],
+  "include": ["src", "types"],
   "exclude": [
-    "dist",
-    "**/*.astro.d.ts"
+    "dist"
   ]
 }

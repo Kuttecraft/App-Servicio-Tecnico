@@ -19,6 +19,7 @@
     "browser-image-compression": "^2.0.2"
   },
   "devDependencies": {
-    "@clerk/astro": "^2.9.0"
+    "@clerk/astro": "^2.9.0",
+    "typescript": "^5.8.3"
   }
 }

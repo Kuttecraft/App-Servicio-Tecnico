@@ -1,3 +1,42 @@
-import { clerkMiddleware } from '@clerk/astro/server'
+import type { MiddlewareHandler } from 'astro';
+import { clerkMiddleware } from '@clerk/astro/server';
 
-export const onRequest = clerkMiddleware()
+const ALLOWED_EMAILS = [
+  'santiagollamosas10@gmail.com',
+  // otros emails permitidos...
+];
+
+export const onRequest: MiddlewareHandler = async (context, next) => {
+  // Rutas públicas que no requieren validación
+  const publicRoutes = ['/signin', '/signup', '/no-autorizado'];
+  const url = new URL(context.request.url);
+
+  // Si la ruta es pública, dejala pasar sin chequear
+  if (publicRoutes.includes(url.pathname)) {
+    return next();
+  }
+
+  // Resto de rutas protegidas
+  return clerkMiddleware()(context, async () => {
+    let allow = false;
+    const locals = context.locals as typeof context.locals & {
+      authStatus?: string;
+      currentUser?: () => Promise<any>;
+      email?: string;
+    };
+    if (locals.authStatus === 'signed-in') {
+      const user = await locals.currentUser?.();
+      const email = user?.emailAddresses?.[0]?.emailAddress;
+      if (email && ALLOWED_EMAILS.includes(email)) {
+        allow = true;
+        locals.email = email;
+      }
+    }
+    if (!allow) {
+      // Redirigí a una página de error o acceso denegado para evitar loops
+      const denyUrl = new URL('/no-autorizado', context.request.url);
+      return Response.redirect(denyUrl.toString(), 302);
+    }
+    return next();
+  }) as Promise<Response>;
+};

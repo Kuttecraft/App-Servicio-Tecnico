@@ -1,0 +1,70 @@
+---
+---
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Acceso Denegado | Servicio Técnico Kuttecraft</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        background: #f7f7fa;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .card {
+        background: #fff;
+        padding: 2.5rem 2rem 2rem;
+        border-radius: 1rem;
+        box-shadow: 0 6px 32px #0001;
+        max-width: 380px;
+        text-align: center;
+      }
+      h1 {
+        color: #e74c3c;
+        margin-bottom: .5rem;
+      }
+      p {
+        color: #222;
+        margin-bottom: 1.8rem;
+      }
+      a {
+        color: #1565c0;
+        text-decoration: none;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .emoji {
+        font-size: 3rem;
+        margin-bottom: .5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="emoji">⛔</div>
+      <h1>Acceso denegado</h1>
+      <p>
+        Tu cuenta no tiene permisos para ingresar a la aplicación.<br />
+        Si creés que esto es un error o necesitás acceso, por favor <b>contactá al administrador</b>.
+      </p>
+      <a href="#" id="logout-link">Volver al inicio de sesión</a>
+    </div>
+    <script>
+      document.getElementById('logout-link').addEventListener('click', async function (e) {
+        e.preventDefault();
+        if (window.Clerk && window.Clerk.signOut) {
+          await window.Clerk.signOut();
+        }
+        window.location.href = '/signin';
+      });
+    </script>
+  </body>
+</html>
