@@ -58,13 +58,16 @@
       <a href="#" id="logout-link">Volver al inicio de sesión</a>
     </div>
     <script>
-      document.getElementById('logout-link').addEventListener('click', async function (e) {
-        e.preventDefault();
-        if (window.Clerk && window.Clerk.signOut) {
-          await window.Clerk.signOut();
-        }
-        window.location.href = '/signin';
-      });
+      const logoutLink = document.getElementById('logout-link');
+      if (logoutLink) {
+        logoutLink.addEventListener('click', async function (e) {
+          e.preventDefault();
+          if (window.Clerk && window.Clerk.signOut) {
+            await window.Clerk.signOut();
+          }
+          window.location.href = '/signin';
+        });
+      }
     </script>
   </body>
 </html>
