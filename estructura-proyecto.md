@@ -66,6 +66,12 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 
 📁 OTRAS CARPETAS IMPORTANTES
 
+/types
+├── astro.d.ts      # Extensiones de tipos de Astro (ej: locals.user)
+├── clerk.d.ts      # Tipado de `window.Clerk`, etc.
+└── env.d.ts        # Tipos para las variables de entorno
+
+
 /public
 ├── img/ # Imágenes públicas accesibles por URL (fotos de impresoras, usuarios, etc)
 ├── logo.svg # Logo principal de la aplicación (también como imagen por defecto)
@@ -91,6 +97,7 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 | `.env.example`         | Plantilla de variables de entorno necesarias para ejecutar el proyecto.     |
 | `README.md`            | Información general del proyecto.                                           |
 | `estructura-proyecto.md` | Este archivo: explica toda la organización del código.                    |
+| `/types` | Tipos TypeScript globales y de integraciones.                    |
 
 ## Buenas prácticas
 
