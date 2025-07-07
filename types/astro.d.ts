@@ -6,5 +6,6 @@ declare module "astro" {
     email?: string;
     authStatus?: string;
     currentUser?: () => Promise<User | null>;
+    perfil?: any; 
   }
 }

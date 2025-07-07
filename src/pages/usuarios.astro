@@ -1,0 +1,79 @@
+---
+import { supabase } from '../lib/supabase';
+import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
+
+// Pedir los usuarios y permisos
+const { data: usuarios, error } = await supabase.from('usuarios_perfil').select('*');
+const PERMISOS = ['dashboard', 'tickets', 'clientes', 'estadisticas'];
+---
+
+<BasePrivateLayout>
+  <div class="container mt-5">
+    <h2>Gestión de permisos de usuarios</h2>
+
+    {error && <div class="alert alert-danger">Error al cargar usuarios: {error.message}</div>}
+
+    <form method="post" action="/api/actualizarPermisosUsuarios">
+      <table class="table table-bordered mt-4">
+        <thead>
+          <tr>
+            <th>Email</th>
+            {PERMISOS.map((permiso) => <th>{permiso}</th>)}
+            <th>Admin</th>
+            <th>Eliminar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {usuarios?.map((usuario, idx) => (
+            <tr>
+              <td>
+                <input
+                  type="email"
+                  name={`usuarios[${idx}][email]`}
+                  value={usuario.email}
+                  class="form-control"
+                  readonly
+                />
+              </td>
+              {PERMISOS.map((permiso) => (
+                <td class="text-center">
+                  <input
+                    type="checkbox"
+                    name={`usuarios[${idx}][${permiso}]`}
+                    checked={usuario[permiso] === true || usuario[permiso] === 1}
+                  />
+                </td>
+              ))}
+              <td class="text-center">
+                <input
+                  type="checkbox"
+                  name={`usuarios[${idx}][admin]`}
+                  checked={usuario.rol === 'admin'}
+                />
+              </td>
+              <td class="text-center">
+                <input type="checkbox" name={`usuarios[${idx}][eliminar]`} />
+              </td>
+            </tr>
+          ))}
+          {/* Fila para agregar nuevo */}
+          <tr>
+            <td>
+              <input type="email" name="nuevo[email]" placeholder="nuevo@gmail.com" class="form-control" />
+            </td>
+            {PERMISOS.map((permiso) => (
+              <td class="text-center">
+                <input type="checkbox" name={`nuevo[${permiso}]`} />
+              </td>
+            ))}
+            <td class="text-center">
+              <input type="checkbox" name="nuevo[admin]" />
+            </td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      <button type="submit" class="btn btn-primary mt-3">Guardar cambios</button>
+    </form>
+  </div>
+</BasePrivateLayout>

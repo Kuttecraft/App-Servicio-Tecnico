@@ -33,6 +33,7 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 │   ├── addTicket.astro           # Formulario para crear nuevos tickets
 │   ├── signin.astro              # Página de ingreso (Clerk)
 │   ├── signup.astro              # Registro de usuarios
+│   ├── usuarios.astro            # panel para agregar o quitar usuarios y permisos 
 │   ├── clientes.astro            # (pendiente) vista para gestión de técnicos/clientes
 │   ├── estadisticas.astro        # (pendiente) panel con métricas
 |   |

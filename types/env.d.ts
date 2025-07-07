@@ -12,3 +12,10 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// Extiende el tipo Locals de Astro para incluir la propiedad 'perfil'.
+declare namespace App {
+  interface Locals {
+    perfil?: any; // Cambia 'any' por el tipo real de perfil si lo conoces
+  }
+}
