@@ -14,7 +14,7 @@ export async function POST({ request }: APIContext) {
       const campo = match[2];
 
       if (!usuarios[idx]) usuarios[idx] = {};
-      usuarios[idx][campo] = ['dashboard','tickets','clientes','estadisticas','eliminar'].includes(campo)
+      usuarios[idx][campo] = ['dashboard', 'tickets', 'usuarios', 'estadisticas', 'admin', 'eliminar'].includes(campo)
         ? value === "on" || value === "true" || String(value) === "true"
         : value;
       continue;
@@ -23,7 +23,7 @@ export async function POST({ request }: APIContext) {
     const nuevoMatch = key.match(/^nuevo\[([a-zA-Z_]+)\]$/);
     if (nuevoMatch) {
       const campo = nuevoMatch[1];
-      nuevoUsuario[campo] = ['dashboard','tickets','clientes','estadisticas'].includes(campo)
+      nuevoUsuario[campo] = ['dashboard', 'tickets', 'usuarios', 'estadisticas', 'admin'].includes(campo)
         ? value === "on" || value === "true" || value === true
         : value;
     }
@@ -42,13 +42,15 @@ export async function POST({ request }: APIContext) {
       continue;
     }
     if (u.email) {
+      const rol = u.admin ? 'admin' : 'tecnico';
       const { error } = await supabase
         .from('usuarios_perfil')
         .update({
           dashboard: !!u.dashboard,
           tickets: !!u.tickets,
-          clientes: !!u.clientes,
+          usuarios: !!u.usuarios,
           estadisticas: !!u.estadisticas,
+          rol,
         })
         .eq('email', u.email);
 
@@ -60,14 +62,15 @@ export async function POST({ request }: APIContext) {
 
   // Agregar nuevo usuario
   if (nuevoUsuario.email) {
+    const rol = nuevoUsuario.admin ? 'admin' : 'tecnico';
     const { error } = await supabase
       .from('usuarios_perfil')
       .upsert({
         email: nuevoUsuario.email,
-        rol: nuevoUsuario.rol === 'admin' || nuevoUsuario.admin ? 'admin' : 'tecnico',
+        rol,
         dashboard: !!nuevoUsuario.dashboard,
         tickets: !!nuevoUsuario.tickets,
-        clientes: !!nuevoUsuario.clientes,
+        usuarios: !!nuevoUsuario.usuarios,
         estadisticas: !!nuevoUsuario.estadisticas,
         activo: true,
       }, { onConflict: 'email' });
@@ -76,7 +79,6 @@ export async function POST({ request }: APIContext) {
     }
   }
 
-  // Redirigir a /usuarios
   const url = new URL('/usuarios', request.url);
   return Response.redirect(url.toString(), 302);
 }

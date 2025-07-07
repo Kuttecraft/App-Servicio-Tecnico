@@ -4,7 +4,7 @@ import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 
 // Pedir los usuarios y permisos
 const { data: usuarios, error } = await supabase.from('usuarios_perfil').select('*');
-const PERMISOS = ['dashboard', 'tickets', 'clientes', 'estadisticas'];
+const PERMISOS = ['dashboard', 'tickets', 'usuarios', 'estadisticas'];
 ---
 
 <BasePrivateLayout>
