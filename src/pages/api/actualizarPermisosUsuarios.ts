@@ -60,20 +60,23 @@ export async function POST({ request }: APIContext) {
     }
   }
 
-  // Agregar nuevo usuario
+  // Agregar nuevo usuario (sin id)
   if (nuevoUsuario.email) {
     const rol = nuevoUsuario.admin ? 'admin' : 'tecnico';
+    const nuevoObjeto = {
+      email: nuevoUsuario.email,
+      rol,
+      dashboard: !!nuevoUsuario.dashboard,
+      tickets: !!nuevoUsuario.tickets,
+      usuarios: !!nuevoUsuario.usuarios,
+      estadisticas: !!nuevoUsuario.estadisticas,
+      activo: true,
+    };
+
     const { error } = await supabase
       .from('usuarios_perfil')
-      .upsert({
-        email: nuevoUsuario.email,
-        rol,
-        dashboard: !!nuevoUsuario.dashboard,
-        tickets: !!nuevoUsuario.tickets,
-        usuarios: !!nuevoUsuario.usuarios,
-        estadisticas: !!nuevoUsuario.estadisticas,
-        activo: true,
-      }, { onConflict: 'email' });
+      .upsert(nuevoObjeto, { onConflict: 'email' });
+
     if (error) {
       console.error(`Error agregando usuario ${nuevoUsuario.email}:`, error);
     }
