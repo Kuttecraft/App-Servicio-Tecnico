@@ -8,11 +8,16 @@ const ALLOWED_EMAILS = [
 
 export const onRequest: MiddlewareHandler = async (context, next) => {
   // Rutas públicas que no requieren validación
-  const publicRoutes = ['/signin', '/signup', '/no-autorizado'];
+  const publicRoutes = [
+    '/signin',
+    '/signup',
+    '/no-autorizado',
+    '/api/proximoTicket' 
+  ];
   const url = new URL(context.request.url);
 
-  // Si la ruta es pública, dejala pasar sin chequear
-  if (publicRoutes.includes(url.pathname)) {
+  // Si la ruta es pública (o inicia con /api/proximoTicket por si querés admitir query params), dejala pasar sin chequear
+  if (publicRoutes.includes(url.pathname) || url.pathname.startsWith('/api/proximoTicket')) {
     return next();
   }
 
