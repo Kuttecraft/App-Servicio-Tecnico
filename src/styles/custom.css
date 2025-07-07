@@ -34,14 +34,16 @@
 }
 
 /* Card personalizada */
-.card-custom {
-  background-color: var(--bs-light);
-  border: none;
-  border-radius: 1.1rem;
-  box-shadow: 0 4px 32px rgba(0,0,0,0.09);
-  transition: transform 0.25s cubic-bezier(.3,.91,.58,.99), box-shadow 0.22s;
-  padding-bottom: 2.1rem !important;
+.card-img-equip {
+  width: 170px;
+  height: 170px;
+  max-width: 100%;
+  max-height: 170px;
+  object-fit: cover;
+  border-radius: 9px;
+  transition: box-shadow 0.2s;
 }
+
 .card-custom:hover {
   transform: scale(1.025) translateY(-3px);
   box-shadow: 0 8px 32px rgba(108,99,255,0.13);
