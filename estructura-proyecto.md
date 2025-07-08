@@ -76,18 +76,21 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 ```batch 
 
 /public
-├── img/ # Imágenes públicas accesibles por URL (fotos de impresoras, usuarios, etc)
-├── logo.svg # Logo principal de la aplicación (también como imagen por defecto)
+├── img/                   # Imágenes públicas accesibles por URL (fotos de impresoras, usuarios, etc)
+├── logo.svg               # Logo principal de la aplicación (también como imagen por defecto)
 |
-├── scripts/ # Scripts JavaScript vanilla para formularios y lógica del frontend
-|          | 
-│          ├── formUser-eliminar-user.js # Gestiona la alerta y el flujo de eliminación de usuarios en la gestión de permisos.
-│          ├── form-crear-ticket.js      # Comprime la imagen al crear un ticket. Si el usuario selecciona una imagen, la convierte a WebP optimizado antes de enviarla.
-│          └── form-editar-equipo.js     # Permite reemplazar, eliminar o comprimir la imagen de un ticket existente. Controla la UI/UX
+├── scripts/                      # Scripts JavaScript vanilla para formularios y lógica del frontend
+|   ├── formUser-eliminar-user.js  # Gestiona la alerta y el flujo de eliminación de usuarios en la gestión de permisos.
+|   ├── form-crear-ticket.js       # Comprime la imagen al crear un ticket. Si el usuario selecciona una imagen, la convierte a WebP optimizado antes de enviarla.
+|   └── form-editar-equipo.js      # Permite reemplazar, eliminar o comprimir la imagen de un ticket existente. Controla la UI/UX.
 |
-|/.astro # Archivos generados automáticamente por Astro (NO EDITAR)
+/database
+├── schema_supabase.sql    # Respaldo de la estructura SQL de las tablas principales de la base (Supabase/PostgreSQL).
+├── schema_info.md         # Explicación de los campos, convenciones y detalles del schema de la base de datos.
 |
-|/node_modules # Dependencias instaladas por npm (NO EDITAR)
+/.astro                    # Archivos generados automáticamente por Astro (NO EDITAR)
+/node_modules              # Dependencias instaladas por npm (NO EDITAR)
+
 
 ```
 ## 📄 Archivos raíz importantes
