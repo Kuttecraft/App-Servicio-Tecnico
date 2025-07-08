@@ -1,5 +1,3 @@
-# ℹ️ schema_info.md
-
 ## Descripción general
 
 Este archivo documenta la estructura de las principales tablas de la base de datos utilizada en el proyecto **App Servicio Técnico - Kuttecraft**, especialmente aquellas migradas o adaptadas desde los flujos originales en Google Sheets/AppSheet.
