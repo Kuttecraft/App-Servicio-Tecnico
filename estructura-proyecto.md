@@ -8,8 +8,9 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 - Supabase (como base de datos y backend en la nube)
 
 
+# 📁 Estructura de carpetas
 ```batch 
-📁 Estructura de carpetas
+
 
 /src
 │
@@ -69,11 +70,10 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 │
 ├── middleware.ts                 # Middleware global para proteger rutas privadas
 
+```
 
-
----
-
-📁 OTRAS CARPETAS IMPORTANTES
+## 📁 OTRAS CARPETAS IMPORTANTES
+```batch 
 
 /public
 ├── img/ # Imágenes públicas accesibles por URL (fotos de impresoras, usuarios, etc)
