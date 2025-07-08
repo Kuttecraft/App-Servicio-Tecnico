@@ -81,8 +81,9 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 |
 ├── scripts/ # Scripts JavaScript vanilla para formularios y lógica del frontend
 |          | 
-│          ├── form-crear-ticket.js # Comprime la imagen al crear un ticket. Si el usuario selecciona una imagen, la convierte a WebP optimizado antes de enviarla.
-│          └── form-editar-equipo.js # Permite reemplazar, eliminar o comprimir la imagen de un ticket existente. Controla la UI/UX
+│          ├── formUser-eliminar-user.js # Gestiona la alerta y el flujo de eliminación de usuarios en la gestión de permisos.
+│          ├── form-crear-ticket.js      # Comprime la imagen al crear un ticket. Si el usuario selecciona una imagen, la convierte a WebP optimizado antes de enviarla.
+│          └── form-editar-equipo.js     # Permite reemplazar, eliminar o comprimir la imagen de un ticket existente. Controla la UI/UX
 |
 |/.astro # Archivos generados automáticamente por Astro (NO EDITAR)
 |
