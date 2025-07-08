@@ -1,6 +1,3 @@
-// env.d.ts
-// Puedes agregar aquí cualquier tipo relacionado a variables de entorno si lo necesitas en el futuro.
-
 /// <reference types="astro/client" />
 
 interface ImportMetaEnv {

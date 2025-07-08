@@ -11,7 +11,6 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 ```batch 
 📁 Estructura de carpetas
 
-
 /src
 │
 ├── /components
@@ -33,45 +32,48 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 │   ├── addTicket.astro           # Formulario para crear nuevos tickets
 │   ├── signin.astro              # Página de ingreso (Clerk)
 │   ├── signup.astro              # Registro de usuarios
-│   ├── usuarios.astro            # panel para agregar o quitar usuarios y permisos 
-│   ├── clientes.astro            # (pendiente) vista para gestión de técnicos/clientes
-│   ├── estadisticas.astro        # (pendiente) panel con métricas
-|   |
+│   ├── usuarios.astro            # Panel para agregar o quitar usuarios y permisos 
+│   ├── estadisticas.astro        # Panel con métricas
+│   ├── no-autorizado.astro       # Página de acceso denegado (usuarios sin permisos)
+│   │
 │   ├── /detalle/
-│   │   └── [id].astro            # Vista dinámica de detalle del ticket y poder eliminar en caso de ser necesario
-|   |
+│   │   └── [id].astro            # Vista dinámica de detalle del ticket (con opción de eliminar)
+│   │
 │   ├── /editar/
-│   │   └── [id].astro            # Vista dinámica del ticket para editar
+│   │   └── [id].astro            # Vista dinámica para editar un ticket
+│   │
+│   ├── /delivery/
+│   │   └── [id].astro            # Vista dinámica con información del delivery asociado a un ticket
+│   │
+│   ├── /presupuesto/
+│   │   └── [id].astro            # Vista dinámica para ver/gestionar presupuestos de un ticket
 │   │
 │   └── /api/
-│       ├── crearTicket.ts        # Endpoint POST para crear un ticket (modo servidor)
-│       ├── actualizarTicket.ts   # Endpoint POST para editar un ticket (modo servidor)
-|       ├── eliminarTicket.ts     # Endpoint POST para eliminar un ticket (modo servidor) 
-│       └── proximoTicket.ts      # Endpoint GET para sugerir el próximo número de ticket disponible
+│       ├── crearTicket.ts               # Endpoint POST para crear un ticket
+│       ├── actualizarTicket.ts          # Endpoint POST para editar un ticket
+│       ├── eliminarTicket.ts            # Endpoint POST para eliminar un ticket
+│       ├── proximoTicket.ts             # Endpoint GET para sugerir el próximo número de ticket
+│       ├── actualizarDelivery.ts        # Endpoint POST para actualizar los datos de un delivery (por id)
+│       ├── actualizarPermisosUsuarios.ts# Endpoint POST para actualizar los permisos de un usuario (en 'usuarios_perfil')
+│       └── actualizarPresupuesto.ts     # Endpoint POST para actualizar datos de presupuesto (por id, en 'TestImpresoras')
 │
 ├── /data
 │   └── impresoras.json           # Datos de ejemplo para pruebas (mock)
 │
 ├── /styles
-│   └── Custom.css                # Estilos personalizados (Bootstrap + overrides)
+│   └── custom.css                # Estilos personalizados (Bootstrap + overrides)
 │
 ├── /types
-│   ├── astro.d.ts                # Extensiones de tipos de Astro (ej: locals.user)
-│   ├── clerk.d.ts                # Tipado de `window.Clerk`, etc.
-│   └── env.d.ts                  # Tipos para las variables de entorno
-
+│   ├── astro.d.ts                # Extensiones de tipos de Astro (ej: locals.user, email, authStatus, perfil)
+│   └── env.d.ts                  # Tipos para las variables de entorno (PUBLIC_SUPABASE_URL, etc)
+│
 ├── middleware.ts                 # Middleware global para proteger rutas privadas
+
 
 
 ---
 
 📁 OTRAS CARPETAS IMPORTANTES
-
-/types
-├── astro.d.ts      # Extensiones de tipos de Astro (ej: locals.user)
-├── clerk.d.ts      # Tipado de `window.Clerk`, etc.
-└── env.d.ts        # Tipos para las variables de entorno
-
 
 /public
 ├── img/ # Imágenes públicas accesibles por URL (fotos de impresoras, usuarios, etc)
@@ -85,20 +87,21 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 |/.astro # Archivos generados automáticamente por Astro (NO EDITAR)
 |
 |/node_modules # Dependencias instaladas por npm (NO EDITAR)
+
 ```
 ## 📄 Archivos raíz importantes
 
-| Archivo                | Descripción                                                                 |
-|------------------------|-----------------------------------------------------------------------------|
-| `astro.config.ts`      | Configuración de Astro. Actualmente usa `output: 'server'` con `@astrojs/node`. |
-| `tsconfig.json`        | Configuración de TypeScript.                                                |
-| `package.json`         | Dependencias, scripts y metadata del proyecto.                              |
-| `package-lock.json`    | Registro exacto de versiones instaladas (lockfile de npm).                  |
-| `.gitignore`           | Archivos/carpetas que Git debe ignorar.                                     |
-| `.env.example`         | Plantilla de variables de entorno necesarias para ejecutar el proyecto.     |
-| `README.md`            | Información general del proyecto.                                           |
-| `estructura-proyecto.md` | Este archivo: explica toda la organización del código.                    |
-| `/types` | Tipos TypeScript globales y de integraciones.                    |
+| Archivo                  | Descripción                                                             |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `astro.config.ts`        | Configuración de Astro. Usa `output: 'server'` con `@astrojs/node`.     |
+| `tsconfig.json`          | Configuración de TypeScript.                                            |
+| `package.json`           | Dependencias, scripts y metadata del proyecto.                          |
+| `package-lock.json`      | Registro exacto de versiones instaladas (lockfile de npm).              |
+| `.gitignore`             | Archivos/carpetas que Git debe ignorar.                                 |
+| `.env.example`           | Plantilla de variables de entorno necesarias para ejecutar el proyecto. |
+| `README.md`              | Información general del proyecto.                                       |
+| `estructura-proyecto.md` | Este archivo: explica toda la organización del código.                  |
+| `/types`                 | Tipos TypeScript globales y de integraciones.                           |           |
 
 ## Buenas prácticas
 
