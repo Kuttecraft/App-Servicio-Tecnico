@@ -2,9 +2,13 @@
 import { supabase } from '../lib/supabase';
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 
-// Pedir los usuarios y permisos
 const { data: usuarios, error } = await supabase.from('usuarios_perfil').select('*');
-const PERMISOS = ['dashboard', 'tickets', 'usuarios', 'estadisticas'];
+const PERMISOS = [
+  { nombre: 'dashboard', label: 'Inicio' },
+  { nombre: 'tickets', label: 'Tickets' },
+  { nombre: 'usuarios', label: 'Usuarios' },
+  { nombre: 'estadisticas', label: 'Estadísticas' },
+];
 ---
 
 <BasePrivateLayout>
@@ -13,67 +17,83 @@ const PERMISOS = ['dashboard', 'tickets', 'usuarios', 'estadisticas'];
 
     {error && <div class="alert alert-danger">Error al cargar usuarios: {error.message}</div>}
 
-    <form method="post" action="/api/actualizarPermisosUsuarios">
-      <table class="table table-bordered mt-4">
-        <thead>
-          <tr>
-            <th>Email</th>
-            {PERMISOS.map((permiso) => <th>{permiso}</th>)}
-            <th>Admin</th>
-            <th>Eliminar</th>
-          </tr>
-        </thead>
-        <tbody>
-          {usuarios?.map((usuario, idx) => (
+    <form id="form-permisos" method="post" action="/api/actualizarPermisosUsuarios">
+      <div class="table-responsive">
+        <table class="table table-bordered mt-4">
+          <thead>
             <tr>
-              <td>
-                <input
-                  type="email"
-                  name={`usuarios[${idx}][email]`}
-                  value={usuario.email}
-                  class="form-control"
-                  readonly
-                />
-              </td>
-              {PERMISOS.map((permiso) => (
+              <th>Email</th>
+              {PERMISOS.map((permiso) => <th>{permiso.label}</th>)}
+              <th>Admin</th>
+              <th>Eliminar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {usuarios?.map((usuario, idx) => (
+              <tr>
+                <td>
+                  <input
+                    type="email"
+                    name={`usuarios[${idx}][email]`}
+                    value={usuario.email}
+                    class="form-control"
+                    readonly
+                  />
+                </td>
+                {PERMISOS.map((permiso) => (
+                  <td class="text-center">
+                    <input
+                      type="checkbox"
+                      class="form-check-input"
+                      name={`usuarios[${idx}][${permiso.nombre}]`}
+                      checked={usuario[permiso.nombre] === true || usuario[permiso.nombre] === 1}
+                    />
+                  </td>
+                ))}
                 <td class="text-center">
                   <input
                     type="checkbox"
-                    name={`usuarios[${idx}][${permiso}]`}
-                    checked={usuario[permiso] === true || usuario[permiso] === 1}
+                    class="form-check-input"
+                    name={`usuarios[${idx}][admin]`}
+                    checked={usuario.rol === 'admin'}
                   />
+                </td>
+                <td class="text-center">
+                  <input
+                    type="checkbox"
+                    class="form-check-input eliminar-checkbox"
+                    name={`usuarios[${idx}][eliminar]`}
+                    id={`eliminar-${idx}`}
+                  />
+                </td>
+              </tr>
+            ))}
+            {/* Fila para agregar nuevo */}
+            <tr>
+              <td>
+                <input type="email" name="nuevo[email]" placeholder="nuevo@gmail.com" class="form-control" />
+              </td>
+              {PERMISOS.map((permiso) => (
+                <td class="text-center">
+                  <input type="checkbox" class="form-check-input" name={`nuevo[${permiso.nombre}]`} />
                 </td>
               ))}
               <td class="text-center">
-                <input
-                  type="checkbox"
-                  name={`usuarios[${idx}][admin]`}
-                  checked={usuario.rol === 'admin'}
-                />
+                <input type="checkbox" class="form-check-input" name="nuevo[admin]" />
               </td>
-              <td class="text-center">
-                <input type="checkbox" name={`usuarios[${idx}][eliminar]`} />
-              </td>
+              <td></td>
             </tr>
-          ))}
-          {/* Fila para agregar nuevo */}
-          <tr>
-            <td>
-              <input type="email" name="nuevo[email]" placeholder="nuevo@gmail.com" class="form-control" />
-            </td>
-            {PERMISOS.map((permiso) => (
-              <td class="text-center">
-                <input type="checkbox" name={`nuevo[${permiso}]`} />
-              </td>
-            ))}
-            <td class="text-center">
-              <input type="checkbox" name="nuevo[admin]" />
-            </td>
-            <td></td>
-          </tr>
-        </tbody>
-      </table>
-      <button type="submit" class="btn btn-primary mt-3">Guardar cambios</button>
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-3 d-flex flex-wrap gap-2">
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        <button type="button" class="btn btn-danger" id="btn-eliminar">Eliminar seleccionados</button>
+      </div>
     </form>
+
+    {/* Enlaza tu script externo de eliminación */}
+    <script src="/scripts/formUser-eliminar-user.js" is:inline></script>
   </div>
 </BasePrivateLayout>
+
