@@ -23,3 +23,6 @@ node_modules/
 
 # ─── Clerk temporary sessions (por si algún SDK los genera localmente) ─────
 .clerk
+
+# ─── Archivos CSV ─────────────────────────────
+*.csv
