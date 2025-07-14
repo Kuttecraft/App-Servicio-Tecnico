@@ -40,7 +40,7 @@ def menu_ver_datos():
 def menu_normalizar_csv():
     limpiar_consola()
     print("1. Normalizar encabezados de un CSV")
-    print("2. (Próximamente) Fusionar columnas similares")
+    print("2. Cortar y exportar columnas a un nuevo CSV")
     print("3. Volver al menú principal")
     return input("\nSeleccione una opción: ").strip()
 
@@ -97,8 +97,7 @@ def main():
                 if subop == "1":
                     normalizar_csv()
                 elif subop == "2":
-                    print("Función en desarrollo. Próximamente...")
-                    input("ENTER para volver...")
+                    cortar_columnas_csv()
                 elif subop == "3":
                     break
                 else:
@@ -109,6 +108,7 @@ def main():
             break
         else:
             print("Opción no válida. Intente de nuevo.")
+
 
 # <----------- Acciones por consola ----------->
 
@@ -402,6 +402,36 @@ def normalizar_csv():
 
     df.to_csv(salida, index=False)
     print(f"\nEncabezados normalizados y fechas convertidas (si aplica).\nArchivo guardado como:\n{salida}\n")
+    input("Presione ENTER para volver al menú...")
+
+def cortar_columnas_csv():
+    limpiar_consola()
+    print("\n=== Cortar y exportar columnas de un CSV ===\n")
+    entrada = input("Ingrese la ruta absoluta del archivo CSV: ").strip()
+    if not os.path.isfile(entrada):
+        print(f"\nEl archivo {entrada} no existe.")
+        input("Presione ENTER para volver al menú...")
+        return
+
+    df = pd.read_csv(entrada, encoding='utf-8')
+    print("\nColumnas disponibles:")
+    for i, col in enumerate(df.columns):
+        print(f"{i+1}. {col}")
+
+    nombre = input("\nNombre del archivo a crear (sin .csv): ").strip()
+    seleccion = input("Ingrese los NÚMEROS de las columnas a usar, separados por coma (ej: 1,3,5): ").strip()
+    try:
+        indices = [int(x.strip())-1 for x in seleccion.split(',') if x.strip().isdigit()]
+        columnas_seleccionadas = [df.columns[i] for i in indices]
+    except Exception as e:
+        print("Error en los índices ingresados. Inténtalo de nuevo.")
+        input("Presione ENTER para volver al menú...")
+        return
+
+    df_nuevo = df[columnas_seleccionadas]
+    nuevo_csv = f"{nombre}.csv"
+    df_nuevo.to_csv(nuevo_csv, index=False)
+    print(f"\nArchivo creado: {nuevo_csv} con columnas: {', '.join(columnas_seleccionadas)}")
     input("Presione ENTER para volver al menú...")
 
 if __name__ == "__main__":
