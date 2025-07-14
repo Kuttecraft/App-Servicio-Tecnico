@@ -1,10 +1,17 @@
-## Descripción general
+# Descripción general
 
-Este archivo documenta la estructura de las principales tablas de la base de datos utilizada en el proyecto **App Servicio Técnico - Kuttecraft**, especialmente aquellas migradas o adaptadas desde los flujos originales en Google Sheets/AppSheet.
+## ⚠️ ATENCIÓN
 
-Aquí se detallan los campos, el propósito de cada uno y algunas recomendaciones para futuras ampliaciones o migraciones.
+- Este archivo documenta la estructura de las tablas originales utilizadas en el proyecto App Servicio Técnico - Kuttecraft, principalmente durante la primera fase del sistema y en la migración inicial desde Google Sheets/AppSheet.
 
----
+- A partir de la implementación del modelo relacional, este esquema deja de estar en uso activo y ha sido reemplazado por la nueva estructura normalizada, definida en el archivo
+schema_supabase_kuttercraft.sql.
+
+- Se mantiene esta documentación por motivos históricos, para referencia, o en caso de consultas sobre datos legados.
+
+Aquí se detallan los campos de la tabla principal utilizada anteriormente, el propósito de cada uno y algunas recomendaciones realizadas antes de la migración.
+
+
 
 ## Tabla principal: `TestImpresoras`
 
@@ -60,19 +67,6 @@ Controla los permisos, roles y estado de cada usuario del sistema.
 | `estadisticas`| boolean       | Permiso para ver panel de estadísticas                        |
 | `activo`      | boolean       | Si el usuario está habilitado                                 |
 | `creado_en`   | timestamp tz  | Fecha de alta en el sistema                                   |
-
----
-
-## Recomendaciones y convenciones
-
-- **Tipos booleanos:** Donde sea posible, migrar campos como `cubreGarantia` a boolean para mayor claridad y control.
-- **Nombres de campos:** Usar siempre nombres claros, en minúscula y sin espacios. Preferir snake_case en SQL.
-- **Ampliación:**  
-  Si en el futuro se suman más campos de workflow, componentes, imágenes (varias fotos), o relación a otras tablas (clientes, equipos, localidades), documentarlos aquí.
-- **Backup:**  
-  Este archivo junto con `schema_supabase.sql` permite restaurar la estructura de la base en caso de ser necesario.
-
----
 
 ## Última actualización
 
