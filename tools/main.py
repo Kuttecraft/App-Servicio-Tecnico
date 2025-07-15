@@ -8,9 +8,10 @@ from ver_datos.buscar_valor_columna import buscar_valor_columna
 from normalizar_csv.normalizar_encabezado import normalizar_csv
 from normalizar_csv.cortar_columnas import cortar_columnas_csv
 from encabezados_sugeridos.gestionar_encabezados import (
-    obtener_y_guardar_encabezados,
-    cargar_encabezados_personalizados,
-    ver_encabezados_cargados
+    obtener_y_ver_encabezados,
+    ver_encabezados_csv,
+    generar_estructura_desde_csv,
+    cortar_columnas_csv  # Usamos esta función mejorada aquí también
 )
 
 def menu_principal():
@@ -45,6 +46,28 @@ def menu_normalizar_csv():
     print("2. Cortar y exportar columnas a un nuevo CSV")
     print("3. Volver al menú principal")
     return input("\nSeleccione una opción: ").strip()
+
+def menu_encabezados_sugeridos():
+    path_guardado = None
+    while True:
+        limpiar_consola()
+        print("=== Gestión de encabezados sugeridos ===\n")
+        print("1. Obtener y visualizar encabezados del CSV (previsualizar y guardar)")
+        print("2. Ver un archivo de encabezados (previsualizar CSV ya existente)")
+        print("3. Generar estructura de tablas desde CSV de definición")
+        print("4. Volver al menú principal")
+        subop = input("\nSeleccione una opción: ").strip()
+        if subop == "1":
+            path_guardado = obtener_y_ver_encabezados()
+        elif subop == "2":
+            ver_encabezados_csv()
+        elif subop == "3":
+            generar_estructura_desde_csv()
+        elif subop == "4":
+            break
+        else:
+            print("Opción no válida.")
+
 
 def main():
     while True:
@@ -87,33 +110,13 @@ def main():
                 else:
                     print("Opción no válida.")
         elif opcion == "4":
-            while True:
-                limpiar_consola()
-                print("=== Gestión de encabezados sugeridos ===\n")
-                print("1. Obtener y guardar encabezados del CSV como sugerencia")
-                print("2. Cargar un archivo de encabezados personalizados para trabajar")
-                print("3. Ver encabezados cargados")
-                print("4. Volver al menú principal")
-                subop = input("\nSeleccione una opción: ").strip()
-                if subop == "1":
-                    obtener_y_guardar_encabezados()
-                elif subop == "2":
-                    cargar_encabezados_personalizados()
-                elif subop == "3":
-                    ver_encabezados_cargados()
-                elif subop == "4":
-                    break
-                else:
-                    print("Opción no válida.")
+            menu_encabezados_sugeridos()
         elif opcion == "5":
             limpiar_consola()
-            print("\nSaliendo de Kuttecraft CSV Toolkit...\n")
+            print("\nSaliendo de KuttecraftToolsCSV ...\n")
             break
         else:
             print("Opción no válida. Intente de nuevo.")
 
-
-
 if __name__ == "__main__":
     main()
-
