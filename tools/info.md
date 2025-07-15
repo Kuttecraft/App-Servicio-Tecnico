@@ -15,21 +15,65 @@ pip install -r requirements.txt
 
 **requirements.txt** contiene:
 ```bash
-pandas==2.3.1
-tabulate==0.9.0
 numpy==2.3.1
+pandas==2.3.1
 python-dateutil==2.9.0.post0
 pytz==2025.2
 six==1.17.0
+tabulate==0.9.0
 tzdata==2025.2
 ```
 
 ---
+## Estructura de Carpetas
+```bash
+KuttecraftToolsCSV/
+│
+├── main.py
+│
+├── obtener_datos/
+│     ├── __init__.py
+│     ├── obtener_columnas.py
+│     ├── obtener_filas.py
+│     ├── obtener_estadisticas.py
+│
+├── ver_datos/
+│     ├── __init__.py
+│     ├── ver_columnas.py
+│     ├── ver_filas_rango.py
+│     ├── buscar_valor_columna.py
+│
+├── normalizar_csv/
+│     ├── __init__.py
+│     ├── normalizar_encabezado.py
+│     ├── normalizar_csv.py
+│     ├── cortar_columnas.py
+│
+├── encabezados_sugeridos/
+│     ├── __init__.py
+│     ├── gestionar_encabezados.py
+│
+├── utils/
+│     ├── __init__.py
+│     ├── consola.py
+│     ├── rutas.py
+│     ├── estructura_csv.py
+│
+├── csv/
+│    ├── .gitkeep
+│    ├── Tablas/
+│    │    ├── .gitkeep
+│    ├── Analisis/
+│         ├── .gitkeep
+│
+└── tablas.csv   # (opcional: si usás definición dinámica de tablas)
 
+```
 
 ### **Scripts principales**
 
-#### `KuttecraftToolsCSV.py` (recomendado, menú multifunción)
+#### `main.py` (menú multifunción, modular)
+Funcionalidades principales:
 
 Funcionalidades:
 
@@ -50,6 +94,9 @@ Funcionalidades:
 5. **Integración automática de nuevas funciones**  
    Fácil de agregar nuevas herramientas: solo sumar la función y agregarla al menú.
 
+6. **Modularidad y expansión fácil**  
+   Cada función está separada en su módulo; podés sumar scripts nuevos agregando archivos y enlazando en el menú.
+
 ---
 
 
@@ -59,7 +106,7 @@ Funcionalidades:
 2. Ejecutá el script con:
 
     ```bash
-    python KuttecraftToolsCSV.py
+    python main.py
     ```
 
 3. Seguí las instrucciones en pantalla.
@@ -69,15 +116,23 @@ Funcionalidades:
 
 ### **Notas para desarrolladores / futuros usuarios**
 
-- Todos los archivos de salida se generan en la raíz del proyecto por defecto.
-- Si hacés un script nuevo, documentalo debajo de esta línea y sumá la funcionalidad al menú del script principal.
-- Si agregás más dependencias, **actualizá requirements.txt**.
-- El código maneja automáticamente la limpieza de consola y la visualización amigable con `tabulate`.
+- No se suben archivos de datos reales.
+Solo .gitkeep para mantener la estructura en el repo.
+
+- Todos los scripts guardan archivos de salida en la estructura /csv según corresponda (o en raíz si no hay carpeta).
+
+- Si agregás funcionalidades nuevas, creá un archivo Python en la carpeta correspondiente y sumalo al menú en main.py.
+
+- Si agregás dependencias, no olvides actualizar requirements.txt.
+
+- El sistema limpia la consola automáticamente y muestra tablas amigables usando tabulate.
+
+- Podés definir las tablas dinámicamente con tablas.csv si querés una arquitectura aún más flexible.
 
 ---
 
 
 ### **Autor**
 - [`Santiago Llamosas`](https://github.com/Llamosas21)
-- **Última actualización:** 10/7/2025
+- **Última actualización:** 15/7/2025
 
