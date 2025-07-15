@@ -25,4 +25,19 @@ node_modules/
 .clerk
 
 # ─── Archivos CSV ─────────────────────────────
-*.csv
+# Ignora todos los archivos y subcarpetas dentro de /csv
+/csv/*
+
+# Pero NO ignores estos .gitkeep especiales (uno por carpeta clave)
+!/csv/.gitkeep
+!/csv/Analisis/.gitkeep
+!/csv/Tablas/.gitkeep
+
+# Además, NO ignores los .gitkeep dentro de cada tabla
+!/csv/Tablas/clientes/.gitkeep
+!/csv/Tablas/tecnicos/.gitkeep
+!/csv/Tablas/impresoras/.gitkeep
+!/csv/Tablas/tickets/.gitkeep
+!/csv/Tablas/presupuestos/.gitkeep
+!/csv/Tablas/delivery/.gitkeep
+!/csv/Tablas/usuarios_permisos/.gitkeep
