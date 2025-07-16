@@ -32,32 +32,15 @@ KuttecraftToolsCSV/
 ├── main.py
 │
 ├── obtener_datos/
-│     ├── __init__.py
 │     ├── obtener_columnas.py
 │     ├── obtener_filas.py
 │     ├── obtener_estadisticas.py
 │
-├── ver_datos/
-│     ├── __init__.py
-│     ├── ver_columnas.py
-│     ├── ver_filas_rango.py
-│     ├── buscar_valor_columna.py
-│
-├── normalizar_csv/
-│     ├── __init__.py
-│     ├── normalizar_encabezado.py
-│     ├── normalizar_csv.py
-│     ├── cortar_columnas.py
-│
-├── encabezados_sugeridos/
-│     ├── __init__.py
+├── gestionar_encabezados/
 │     ├── gestionar_encabezados.py
 │
 ├── utils/
-│     ├── __init__.py
 │     ├── consola.py
-│     ├── rutas.py
-│     ├── estructura_csv.py
 │
 ├── csv/
 │    ├── .gitkeep
@@ -83,13 +66,15 @@ Funcionalidades:
 2. **Obtener filas**  
    Extrae filas específicas de un CSV (desde el principio o final).
 
-3. **Ver columnas del CSV**  
-   Muestra los encabezados detectados.
+3. **Gestión de encabezados y tablas**  
+   - Visualizar y guardar encabezados de un CSV
+   - Ver archivos de encabezados
+   - Generar estructura de tablas desde CSV de definición
+   - Cortar y exportar columnas a un nuevo CSV
+   - Copiar CSV original en archivos separados por tabla con datos reales
 
-4. **Normalizar encabezados de un CSV**  
-   - Convierte todos los encabezados a *snake_case* sin tildes ni caracteres extraños, sin saltos de línea.
-   - Convierte automáticamente a formato fecha/hora ISO para columnas con nombres tipo "fecha", "timestamp", etc.
-   - Si una columna tiene números enteros en formato "436.0", los convierte a integer real para evitar errores en bases de datos tipo Postgres/Supabase.
+4. **Obtener estadísticas básicas**  
+   Muestra tipo de dato, nulos, % nulos, valores únicos y ejemplos para cada columna.
 
 5. **Integración automática de nuevas funciones**  
    Fácil de agregar nuevas herramientas: solo sumar la función y agregarla al menú.
