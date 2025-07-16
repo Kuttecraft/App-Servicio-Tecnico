@@ -41,3 +41,6 @@ node_modules/
 !/csv/Tablas/presupuestos/.gitkeep
 !/csv/Tablas/delivery/.gitkeep
 !/csv/Tablas/usuarios_permisos/.gitkeep
+
+# ─── Python ───────────────────────────────
+__pycache__/
