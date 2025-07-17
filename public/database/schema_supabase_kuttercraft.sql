@@ -1,6 +1,7 @@
 -- Clientes OK
-CREATE TABLE clientes (
-    id SERIAL PRIMARY KEY, --
+CREATE TABLE cliente (
+    id uuid NOT NULL DEFAULT gen_random_uuid(), --
+    cliente VARCHAR(100) NOT NULL,--
     nombre VARCHAR(100) NOT NULL,--
     apellido VARCHAR(100) NOT NULL,--
     dni_cuit VARCHAR(30), --
