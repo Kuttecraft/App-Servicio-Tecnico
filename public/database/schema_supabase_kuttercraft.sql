@@ -128,15 +128,15 @@ CREATE TABLE tickets_mian (
     cliente_id BIGINT NOT NULL REFERENCES cliente(id) ON DELETE RESTRICT,
     tecnico_id BIGINT REFERENCES tecnicos(id) ON DELETE SET NULL,
     impresora_id BIGINT REFERENCES impresoras(id) ON DELETE SET NULL,
-    marca_temporal TIMESTAMP DEFAULT NOW(),
+    marca_temporal TEXT,
     ticket BIGINT, 
     notas_del_cliente TEXT,
     notas_del_tecnico TEXT,
     fecha_de_reparacion TEXT,
-    estado VARCHAR(50),
-    dias_en_taller INTEGER,
-    maquina_reparada BOOLEAN DEFAULT FALSE,
-    devolver_maquina BOOLEAN DEFAULT FALSE,
+    estado TEXT,
+    dias_en_taller TEXT,
+    maquina_reparada TEXT,
+    devolver_maquina TEXT,
     imagen TEXT
 );
 
