@@ -66,6 +66,7 @@ Incluye detalles de carpetas, archivos clave, buenas prácticas y planes de esca
 
 - Fecha de inicio: **22/05/2025**
 - Proyecto creado por  [`Santiago Llamosas`](https://github.com/Llamosas21)
+- Colaborador  [`JuanPabloLucio`](https://github.com/JuanPabloLucio)
 
 
 ---
