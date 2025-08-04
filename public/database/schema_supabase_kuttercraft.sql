@@ -89,7 +89,7 @@ CREATE TABLE usuarios_permisos (
 );
 
 /*
--- 1. Clientes
+-- 1. Clientes OK
 CREATE TABLE cliente (
     id BIGSERIAL PRIMARY KEY,
     cliente VARCHAR(100) NOT NULL,
@@ -103,7 +103,7 @@ CREATE TABLE cliente (
     informacion_adicional_usuario TEXT
 );
 
--- 2. Técnicos
+-- 2. Técnicos OK
 CREATE TABLE tecnicos (
     id BIGSERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
@@ -113,7 +113,7 @@ CREATE TABLE tecnicos (
     creado_en TIMESTAMPTZ DEFAULT now()
 );
 
--- 3. Impresoras
+-- 3. Impresoras OK
 CREATE TABLE impresoras (
     id BIGSERIAL PRIMARY KEY,
     modelo VARCHAR(100) NOT NULL,
@@ -122,7 +122,7 @@ CREATE TABLE impresoras (
     tamano_de_boquilla VARCHAR(80)
 );
 
--- 4. Tickets
+-- 4. Tickets OK
 CREATE TABLE tickets_mian (
     id BIGSERIAL PRIMARY KEY,
     cliente_id BIGINT NOT NULL REFERENCES cliente(id) ON DELETE RESTRICT,
@@ -144,28 +144,30 @@ CREATE TABLE tickets_mian (
 CREATE TABLE presupuestos (
     id BIGSERIAL PRIMARY KEY,
     ticket_id BIGINT NOT NULL REFERENCES tickets_mian(id) ON DELETE CASCADE,
-    componentes TEXT[],
-    precio_componente NUMERIC[],
-    enviar_presupuesto BOOLEAN DEFAULT FALSE,
+    componentes TEXT,
+    precio_componente TEXT,
+    enviar_presupuesto TEXT,
     presupuesto TEXT,
     link_presupuesto TEXT,
-    presupuesto_aprobado BOOLEAN DEFAULT FALSE,
-    garantia_activa BOOLEAN DEFAULT FALSE,
+    presupuesto_aprobado TEXT,
+    garantia_activa TEXT,
     notas_administracion TEXT,
-    monto NUMERIC
+    monto TEXT
 );
 
 -- 6. Delivery
 CREATE TABLE delivery (
     id BIGSERIAL PRIMARY KEY,
     ticket_id BIGINT NOT NULL REFERENCES tickets_mian(id) ON DELETE CASCADE,
-    cotizar_delivery BOOLEAN DEFAULT FALSE,
+    cotizar_delivery TEXT,
     informacion_adicional_delivery TEXT,
-    medio_de_entrega VARCHAR(100),
-    fecha_de_entrega DATE,
-    forma_de_pago VARCHAR(100),
-    pagado BOOLEAN DEFAULT FALSE
+    medio_de_entrega TEXT,
+    fecha_de_entrega TEXT,
+    forma_de_pago TEXT,
+    pagado TEXT
 );
+
+
 */
 /* Esta es aparte 
 -- 7. Permisos de usuario (por técnico)
