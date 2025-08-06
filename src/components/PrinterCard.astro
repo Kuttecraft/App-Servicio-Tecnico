@@ -1,37 +1,33 @@
 ---
-// ...props
 const {
-  cliente = "Nombre del Cliente",
-  estado = "Estado",
-  modelo = "Modelo",
-  imagen,
+  id,
+  modelo = "Desconocido",           // cliente
+  maquina = "Desconocido",          // modelo de la impresora
+  numero_de_serie = "Sin estado",   // estado
+  tamano_de_boquilla = "No especificado", // whatsapp
   onClickUrl = "#",
-  onClickUrlEditar = "#",
-  ticket = "",
-  whatsapp = ""
+  onClickUrlEditar = "#"
 } = Astro.props;
-
-const imgPorDefecto = "/logo.webp";
-const imagenFinal = imagen && imagen.trim() !== "" ? imagen : imgPorDefecto;
-const esPorDefecto = imagenFinal === imgPorDefecto;
-const srcImagen = esPorDefecto ? imgPorDefecto : imagenFinal + '?t=' + Date.now();
 ---
+
 <div class="card card-custom text-center p-3 shadow-sm mb-4" style="border-radius: 15px; min-width: 220px;">
-  <img 
-    src={srcImagen}
-    alt="Imagen impresora"
+  <img
+    src="/logo.webp"
+    alt={`Imagen genérica para cliente ${modelo}`}
     loading="lazy"
-    style="max-height: 170px; max-width: 170px; object-fit: cover; border-radius: 9px; transition: box-shadow 0.2s;"
+    style="max-height: 170px; max-width: 170px; object-fit: cover; border-radius: 9px;"
     class="mx-auto mt-1 mb-2 shadow-sm border"
   />
 
-  <h6 class="fw-bold text-dark mt-2 mb-1" style="font-size: 1.12rem;">{cliente}</h6>
+  <h6 class="fw-bold text-dark mt-2 mb-1" style="font-size: 1.12rem;">
+    {modelo}
+  </h6>
 
-  <ul class="list-unstyled mb-3 small" style="color: var(--bs-secondary);">
-    <li><strong>Ticket:</strong> {ticket}</li>
-    <li><strong>Modelo:</strong> {modelo}</li>
-    <li><strong>Estado:</strong> {estado}</li>
-    <li><strong>WhatsApp:</strong> {whatsapp}</li>
+  <ul class="list-unstyled mb-3 small text-secondary">
+    <li><strong>Ticket:</strong> {id}</li>
+    <li><strong>Modelo:</strong> {maquina}</li>
+    <li><strong>Estado:</strong> {numero_de_serie}</li>
+    <li><strong>WhatsApp:</strong> {tamano_de_boquilla}</li>
   </ul>
 
   <div class="d-flex flex-row gap-2 justify-content-center mt-2">
