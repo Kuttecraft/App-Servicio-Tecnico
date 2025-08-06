@@ -1,23 +1,49 @@
 ---
-// Props: equipo (opcional si es edición)
+// Props: equipo (viene del detalle del ticket)
 const { equipo } = Astro.props;
 ---
 
-<form method="post" action={`/api/actualizarDelivery?id=${equipo?.id ?? ''}`} class="row g-3">
+<form method="POST" action={`/api/actualizarDelivery?id=${equipo.ticketId}`} class="row g-3">
   <div class="col-md-6">
-    <label class="form-label">Modo delivery</label>
-    <input type="text" class="form-control" name="costoDelivery" value={equipo?.costoDelivery ?? ''} />
+    <label class="form-label">Costo delivery</label>
+    <input type="text" class="form-control" name="cotizar_delivery" value={equipo.cotizar_delivery ?? ''} placeholder="Ej: 500.00" />
   </div>
+
   <div class="col-md-6">
-    <label class="form-label">Info delivery</label>
-    <input type="text" class="form-control" name="infoDelivery" value={equipo?.infoDelivery ?? ''} />
+    <label class="form-label">Medio de entrega</label>
+    <input type="text" class="form-control" name="medio_de_entrega" value={equipo.medio_de_entrega ?? ''} placeholder="Moto, correo, etc." />
   </div>
-  <div class="col-md-12">
-    <label class="form-label">Fecha listo (opcional)</label>
-    <input type="datetime-local" class="form-control" name="timestampListo"
-      value={equipo?.timestampListo ? equipo.timestampListo.slice(0, 16) : ''} />
+
+  <div class="col-md-6">
+    <label class="form-label">Fecha de entrega</label>
+    <input type="datetime-local" class="form-control" name="fecha_de_entrega"
+      value={equipo.fecha_de_entrega ? equipo.fecha_de_entrega.slice(0, 16) : ''} />
   </div>
+
+  <div class="col-md-6">
+    <label class="form-label">Forma de pago</label>
+    <input type="text" class="form-control" name="forma_de_pago" value={equipo.forma_de_pago ?? ''} placeholder="Transferencia, efectivo..." />
+  </div>
+
+  <div class="col-12">
+    <label class="form-label">Información adicional</label>
+    <textarea class="form-control" name="informacion_adicional_delivery" rows="3" placeholder="Notas, referencias, aclaraciones...">
+      {equipo.informacion_adicional_delivery ?? ''}
+    </textarea>
+  </div>
+
+  <div class="col-12">
+    <label class="form-label">¿Pagado?</label>
+    <select name="pagado" class="form-select">
+      <option value="">Seleccionar</option>
+      <option value="true" selected={equipo.pagado === 'true'}>Sí</option>
+      <option value="false" selected={equipo.pagado === 'false'}>No</option>
+    </select>
+  </div>
+
   <div class="col-12 d-flex justify-content-end">
-    <button type="submit" class="btn btn-success">Guardar delivery</button>
+    <button type="submit" class="btn btn-success">
+      <i class="bi bi-save me-1"></i> Guardar delivery
+    </button>
   </div>
 </form>

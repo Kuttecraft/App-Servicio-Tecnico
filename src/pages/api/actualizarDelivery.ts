@@ -1,18 +1,12 @@
 import { supabase } from '../../lib/supabase';
 
-interface RequestContext {
-  request: Request;
-  params: Record<string, string>;
-  url: URL;
-  site: URL | undefined;
-}
-
-export async function POST(context: RequestContext) {
+export async function POST(context: { request: Request }) {
   const req = context.request;
   const url = new URL(req.url);
-  const id = url.searchParams.get('id');
-  if (!id) {
-    return new Response(JSON.stringify({ error: 'Falta el parámetro id' }), {
+  const ticketId = url.searchParams.get('id');
+
+  if (!ticketId) {
+    return new Response(JSON.stringify({ error: 'Falta el parámetro id (ticket_id)' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -20,7 +14,7 @@ export async function POST(context: RequestContext) {
 
   const formData = await req.formData();
 
-  // Extraer campos y limpiarlos
+  // Extraer y limpiar campos
   const fields: Record<string, string> = {};
   formData.forEach((value, key) => {
     if (typeof value === 'string') {
@@ -28,20 +22,38 @@ export async function POST(context: RequestContext) {
     }
   });
 
-  // Parsear los campos antes de guardar
-  const datosActualizados: any = {
-    costoDelivery: isNaN(parseFloat(fields.costoDelivery)) ? 0 : parseFloat(fields.costoDelivery), // número
-    infoDelivery: fields.infoDelivery || null, // string o null
-    timestampListo: fields.timestampListo || null // string (fecha) o null
+  // Estructura final con valores limpios
+  const datosDelivery = {
+    cotizar_delivery: fields.cotizar_delivery || null,
+    informacion_adicional_delivery: fields.informacion_adicional_delivery || null,
+    medio_de_entrega: fields.medio_de_entrega || null,
+    fecha_de_entrega: fields.fecha_de_entrega || null,
+    forma_de_pago: fields.forma_de_pago || null,
+    pagado: fields.pagado || null,
+    ticket_id: parseInt(ticketId, 10),
   };
 
-  // Opcional: si costoDelivery puede ser null (si no se manda), lo ponés como null:
-  // costoDelivery: fields.costoDelivery ? parseFloat(fields.costoDelivery) : null,
+  // Verificar si ya existe un registro de delivery
+  const { data: existingDelivery } = await supabase
+    .from('delivery')
+    .select('id')
+    .eq('ticket_id', ticketId)
+    .maybeSingle();
 
-  const { error } = await supabase
-    .from('TestImpresoras')
-    .update(datosActualizados)
-    .eq('id', id);
+  let error = null;
+
+  if (existingDelivery) {
+    // Si existe, actualizar
+    ({ error } = await supabase
+      .from('delivery')
+      .update(datosDelivery)
+      .eq('ticket_id', ticketId));
+  } else {
+    // Si no existe, insertar nuevo
+    ({ error } = await supabase
+      .from('delivery')
+      .insert([datosDelivery]));
+  }
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
@@ -52,6 +64,6 @@ export async function POST(context: RequestContext) {
 
   return new Response(null, {
     status: 303,
-    headers: { Location: `/detalle/${id}` },
+    headers: { Location: `/detalle/${ticketId}` },
   });
 }

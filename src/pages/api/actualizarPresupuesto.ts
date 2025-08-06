@@ -1,18 +1,12 @@
 import { supabase } from '../../lib/supabase';
 
-interface RequestContext {
-  request: Request;
-  params: Record<string, string>;
-  url: URL;
-  site: URL | undefined;
-}
-
-export async function POST(context: RequestContext) {
+export async function POST(context: { request: Request }) {
   const req = context.request;
   const url = new URL(req.url);
-  const id = url.searchParams.get('id');
-  if (!id) {
-    return new Response(JSON.stringify({ error: 'Falta el parámetro id' }), {
+  const ticketId = url.searchParams.get('id');
+
+  if (!ticketId) {
+    return new Response(JSON.stringify({ error: 'Falta el parámetro id (ticket_id)' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -20,7 +14,7 @@ export async function POST(context: RequestContext) {
 
   const formData = await req.formData();
 
-  // --- Mapeo y parseo, como en el primer ejemplo ---
+  // Parseo y limpieza
   const fields: Record<string, string> = {};
   formData.forEach((value, key) => {
     if (typeof value === 'string') {
@@ -28,22 +22,36 @@ export async function POST(context: RequestContext) {
     }
   });
 
-  // Conversión y validaciones según tu modelo
-  const datosActualizados: any = {
-    monto: isNaN(parseFloat(fields.monto)) ? 0 : parseFloat(fields.monto),
-    linkPresupuesto: fields.linkPresupuesto || null,
-    timestampPresupuesto: fields.timestampPresupuesto || null,
-    cobrado: fields.cobrado === 'true',
-    notaTecnico: fields.notaTecnico || null,
-    notaInterna: fields.notaInterna || null,
-    // Si agregás más campos, los parseás igual aquí
+  const datos = {
+    monto: fields.monto || null,
+    link_presupuesto: fields.link_presupuesto || null,
+    presupuesto_aprobado: fields.presupuesto_aprobado || null,
+    garantia_activa: fields.garantia_activa || null,
+    notas_administracion: fields.notas_administracion || null,
+    ticket_id: parseInt(ticketId, 10),
   };
 
-  // Actualiza la base de datos
-  const { error } = await supabase
-    .from('TestImpresoras')
-    .update(datosActualizados)
-    .eq('id', id);
+  // Verificar si ya existe presupuesto para el ticket
+  const { data: existing } = await supabase
+    .from('presupuestos')
+    .select('id')
+    .eq('ticket_id', ticketId)
+    .maybeSingle();
+
+  let error = null;
+
+  if (existing) {
+    // Actualizar
+    ({ error } = await supabase
+      .from('presupuestos')
+      .update(datos)
+      .eq('ticket_id', ticketId));
+  } else {
+    // Insertar
+    ({ error } = await supabase
+      .from('presupuestos')
+      .insert([datos]));
+  }
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
@@ -54,6 +62,6 @@ export async function POST(context: RequestContext) {
 
   return new Response(null, {
     status: 303,
-    headers: { Location: `/detalle/${id}` },
+    headers: { Location: `/detalle/${ticketId}` },
   });
 }
