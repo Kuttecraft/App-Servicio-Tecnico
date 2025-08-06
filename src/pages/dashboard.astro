@@ -26,7 +26,7 @@ const { data: impresoras } = await supabase
       whatsapp
     )
   `)
-  .order('id', { ascending: true }) 
+  .order('id', { ascending: false }) 
   .range(from, to);
 ---
 
@@ -44,8 +44,8 @@ const { data: impresoras } = await supabase
               maquina={item.impresora?.modelo || 'Desconocido'}
               estado={item.estado || 'Desconocido'}
               whatsapp={item.cliente?.whatsapp || 'No especificado'}
-              onClickUrl={`/impresoras/detalle/${item.id}`}
-              onClickUrlEditar={`/impresoras/editar/${item.id}`}
+              onClickUrl={`/detalle/${item.id}`}
+              onClickUrlEditar={`/editar/${item.id}`}
             />
           </div>
         ))}

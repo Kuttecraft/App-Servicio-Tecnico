@@ -3,11 +3,27 @@ import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import { supabase } from '../../lib/supabase';
 import { formatearFecha, booleanATexto, formatearMoneda } from '../../lib/utils';
 
-const { id } = Astro.params as { id: string }; 
+const { id } = Astro.params as { id: string };
 
+// Obtener el ticket con joins a cliente, técnico y delivery
 const { data, error } = await supabase
-  .from('TestImpresoras')
-  .select('*')
+  .from('tickets_mian')
+  .select(`
+    *,
+    cliente:cliente_id (
+      dni_cuit,
+      correo_electronico,
+      whatsapp,
+      cliente
+    ),
+    tecnico:tecnico_id (
+      nombre,
+      apellido
+    ),
+    delivery (
+      pagado
+    )
+  `)
   .eq('id', id)
   .single();
 
@@ -33,29 +49,32 @@ const equipo = data;
       <div class="card-body">
         <!-- Imagen -->
         <div class="text-center mb-4">
-          <img 
-            src={equipo.imagen ? equipo.imagen + '?t=' + Date.now() : '/logo.webp'} 
-            alt="Imagen impresora" 
-            class="rounded img-fluid shadow-sm" 
-            style="max-height: 160px; object-fit: contain;" 
+          <img
+            src={equipo.imagen ? equipo.imagen + '?t=' + Date.now() : '/logo.webp'}
+            alt="Imagen impresora"
+            class="rounded img-fluid shadow-sm"
+            style="max-height: 160px; object-fit: contain;"
           />
         </div>
 
         <!-- Cliente y modelo y detalles centrados -->
         <div class="text-center mb-4">
-          <h4 class="fw-bold text-dark mb-1">{equipo.cliente}</h4>
-          <div class="text-muted small">{equipo.modelo}</div>
-        
+          <h4 class="fw-bold text-dark mb-1">{equipo.cliente?.cliente ?? '—'}</h4>
+          <div class="text-muted small">{equipo.maquina_reparada ?? 'Modelo no especificado'}</div>
+
           <div class="row row-cols-1 row-cols-md-2 g-4 justify-content-center mt-3">
-            <div class="col"><strong>Ticket:</strong> {equipo.ticket}</div>
-            <div class="col"><strong>Estado:</strong> {equipo.estado}</div>
-            <div class="col"><strong>¿Cobrado?:</strong> {booleanATexto(equipo.cobrado)}</div>
-            <div class="col"><strong>Técnico:</strong> {equipo.tecnico}</div>
-            <div class="col"><strong>DNI/CUIT:</strong> {equipo.dniCuit}</div>
-            <div class="col"><strong>Correo:</strong> {equipo.correo}</div>
-            <div class="col"><strong>WhatsApp:</strong> {equipo.whatsapp}</div>
-            <div class="col"><strong>Fecha formulario:</strong> {equipo.fechaFormulario ? formatearFecha(equipo.fechaFormulario) : '—'}</div>
-            <div class="col"><strong>Fecha listo:</strong> {equipo.timestampListo ? formatearFecha(equipo.timestampListo) : '—'}</div>
+            <div class="col"><strong>Ticket:</strong> {equipo.ticket ?? '—'}</div>
+            <div class="col"><strong>Estado:</strong> {equipo.estado ?? '—'}</div>
+            <div class="col"><strong>¿Cobrado?:</strong> {booleanATexto(equipo.delivery?.pagado === 'true')}</div>
+            <div class="col">
+              <strong>Técnico:</strong> 
+              {equipo.tecnico ? `${equipo.tecnico.nombre} ${equipo.tecnico.apellido}` : '—'}
+            </div>
+            <div class="col"><strong>DNI/CUIT:</strong> {equipo.cliente?.dni_cuit ?? '—'}</div>
+            <div class="col"><strong>Correo:</strong> {equipo.cliente?.correo_electronico ?? '—'}</div>
+            <div class="col"><strong>WhatsApp:</strong> {equipo.cliente?.whatsapp ?? '—'}</div>
+            <div class="col"><strong>Fecha formulario:</strong> {equipo.marca_temporal ? formatearFecha(equipo.marca_temporal) : '—'}</div>
+            <div class="col"><strong>Fecha listo:</strong> {equipo.fecha_de_reparacion ? formatearFecha(equipo.fecha_de_reparacion) : '—'}</div>
           </div>
         </div>
 
@@ -73,10 +92,12 @@ const equipo = data;
           </div>
         </div>
 
-    {/* Mensaje si no se encontró equipo */}
-    {!equipo && (
-      <div class="alert alert-danger mt-4">No se encontró el equipo con ID: {id}</div>
-    )}
+        {/* Mensaje si no se encontró equipo */}
+        {!equipo && (
+          <div class="alert alert-danger mt-4">No se encontró el equipo con ID: {id}</div>
+        )}
+      </div>
+    </div>
   </div>
 
   <script>
