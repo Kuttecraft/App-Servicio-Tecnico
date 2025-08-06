@@ -1,15 +1,8 @@
 ---
+// Layout y componentes
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
-import ImpresoraCard from '../components/PrinterCard.astro';
+import PrinterCard from '../components/PrinterCard.astro';
 import { supabase } from '../lib/supabase';
-
-interface ImpresoraData {
-  id: number;
-  modelo: string;
-  cliente: string;
-  estado: string;
-  whatsapp: string;
-}
 
 // Paginación
 const pageParam = Astro.url.searchParams.get('page') || '1';
@@ -18,8 +11,8 @@ const itemsPerPage = 500;
 const from = (currentPage - 1) * itemsPerPage;
 const to = from + itemsPerPage - 1;
 
-// Consulta combinada
-const { data: impresoras, error } = await supabase
+// Consulta combinada (ahora también se trae el ticket)
+const { data: impresoras } = await supabase
   .from('tickets_mian')
   .select(`
     id,
@@ -33,6 +26,7 @@ const { data: impresoras, error } = await supabase
       whatsapp
     )
   `)
+  .order('id', { ascending: true }) 
   .range(from, to);
 ---
 
@@ -43,12 +37,13 @@ const { data: impresoras, error } = await supabase
       <div class="row g-4">
         {impresoras.map((item: any) => (
           <div class="col-sm-6 col-md-4 col-lg-3">
-            <ImpresoraCard
-              id={item.ticket}
-              modelo={item.cliente?.cliente || 'Desconocido'}
+            <PrinterCard
+              id={item.id}
+              ticket={item.ticket || 'Sin ticket'}
+              cliente={item.cliente?.cliente || 'Desconocido'}
               maquina={item.impresora?.modelo || 'Desconocido'}
-              numero_de_serie={item.estado || 'Desconocido'}
-              tamano_de_boquilla={item.cliente?.whatsapp || 'No especificado'}
+              estado={item.estado || 'Desconocido'}
+              whatsapp={item.cliente?.whatsapp || 'No especificado'}
               onClickUrl={`/impresoras/detalle/${item.id}`}
               onClickUrlEditar={`/impresoras/editar/${item.id}`}
             />
