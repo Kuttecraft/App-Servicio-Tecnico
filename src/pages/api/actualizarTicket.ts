@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase';
 
+
 export async function POST(context: RequestContext) {
   const req = context.request;
   const url = new URL(req.url);
@@ -25,26 +26,35 @@ export async function POST(context: RequestContext) {
   });
 
   // Conversión de tipos y validaciones específicas
-  const datosActualizados: any = {
-    estado: fields.estado,
-    modelo: fields.modelo,
-    fechaFormulario: fields.fechaFormulario || null,
-    tecnico: fields.tecnico,
-    notaTecnico: fields.notaTecnico,
-    notaAdmin: fields.notaAdmin,
-    comentarios: fields.comentarios,
-    notaInterna: fields.notaInterna,
-    cubreGarantia: fields.cubreGarantia === 'true',
-    cobrado: fields.cobrado === 'true',
-    monto: isNaN(parseFloat(fields.monto)) ? 0 : parseFloat(fields.monto),
-    linkPresupuesto: fields.linkPresupuesto,
-    costoDelivery: fields.costoDelivery,
-    infoDelivery: fields.infoDelivery,
-    dniCuit: fields.dniCuit,
-    whatsapp: fields.whatsapp,
-    correo: fields.correo,
-    timestampPresupuesto: fields.timestampPresupuesto || null,
-    timestampListo: fields.timestampListo || null
+ const datosTicketsMian: any = {
+  estado: fields.estado,
+  marca_temporal: fields.fechaFormulario || null,
+  fecha_de_reparacion: fields.timestampListo || null,
+  notas_del_tecnico: fields.notaTecnico,
+
+  // ❌ nota_admin no existe en la tabla `tickets_mian`, por eso se comenta
+  // nota_admin: fields.notaAdmin || null,
+};
+
+
+  const datosCliente: any = {
+    dni_cuit: fields.dniCuit || null,
+    whatsapp: fields.whatsapp || null,
+    correo_electronico: fields.correo || null,
+    comentario: fields.comentario || null
+  };
+
+  const datosDelivery: any = {
+    pagado: fields.cobrado === 'true' ? 'true' : 'false',
+    cotizar_delivery: fields.costoDelivery || null,
+    informacion_adicional_delivery: fields.infoDelivery || null
+  };
+
+  const datosPresupuesto: any = {
+    monto: isNaN(parseFloat(fields.monto)) ? '0' : String(parseFloat(fields.monto)),
+    link_presupuesto: fields.linkPresupuesto || null,
+    cubre_garantia: fields.cubreGarantia === 'true' ? 'true' : 'false',
+    fecha_presupuesto: fields.timestampPresupuesto || null
   };
 
   const nombreArchivo = `public/${id}.webp`;
@@ -75,27 +85,92 @@ export async function POST(context: RequestContext) {
       .from('imagenes')
       .getPublicUrl(nombreArchivo);
 
-    datosActualizados.imagen = publicUrl.publicUrl;
+    datosTicketsMian.imagen = publicUrl.publicUrl;
 
-  // CASO 2: Eligió borrar imagen (sin subir nada)
+    // CASO 2: Eligió borrar imagen (sin subir nada)
   } else if (borrarImagen === "delete") {
     await supabase.storage.from('imagenes').remove([nombreArchivo]);
-    datosActualizados.imagen = null;
+    datosTicketsMian.imagen = null;
 
-  // CASO 3: No tocó nada de la imagen (ni sube ni borra)
+    // CASO 3: No tocó nada de la imagen (ni sube ni borra)
   } // No se modifica el campo "imagen"
 
-  // ---- Actualizar base de datos ----
-  const { error } = await supabase
-    .from('TestImpresoras')
-    .update(datosActualizados)
-    .eq('id', id);
+  // ---- Obtener IDs relacionados ----
+  const { data: ticketData, error: ticketError } = await supabase
+    .from('tickets_mian')
+    .select('cliente_id, delivery(id), presupuestos(id)')
+    .eq('id', id)
+    .single();
 
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  if (ticketError || !ticketData) {
+    return new Response(JSON.stringify({ error: 'No se pudo obtener el ticket y sus relaciones' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  const clienteId = ticketData.cliente_id;
+  const deliveryData = ticketData.delivery as any;
+  const presupuestosData = ticketData.presupuestos as any;
+  const deliveryId = Array.isArray(deliveryData) ? deliveryData?.[0]?.id : deliveryData?.id;
+  const presupuestoId = Array.isArray(presupuestosData) ? presupuestosData?.[0]?.id : presupuestosData?.id;
+
+  // ---- Actualizar tickets_mian ----
+  const { error: ticketUpdateError } = await supabase
+    .from('tickets_mian')
+    .update(datosTicketsMian)
+    .eq('id', id);
+
+  if (ticketUpdateError) {
+    return new Response(JSON.stringify({ error: 'Error al actualizar ticket: ' + ticketUpdateError.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // ---- Actualizar cliente ----
+  if (clienteId) {
+    const { error: clienteError } = await supabase
+      .from('cliente')
+      .update(datosCliente)
+      .eq('id', clienteId);
+
+    if (clienteError) {
+      return new Response(JSON.stringify({ error: 'Error al actualizar cliente: ' + clienteError.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
+  // ---- Actualizar delivery ----
+  if (deliveryId) {
+    const { error: deliveryError } = await supabase
+      .from('delivery')
+      .update(datosDelivery)
+      .eq('id', deliveryId);
+
+    if (deliveryError) {
+      return new Response(JSON.stringify({ error: 'Error al actualizar delivery: ' + deliveryError.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
+  // ---- Actualizar presupuesto ----
+  if (presupuestoId) {
+    const { error: presupuestoError } = await supabase
+      .from('presupuestos')
+      .update(datosPresupuesto)
+      .eq('id', presupuestoId);
+
+    if (presupuestoError) {
+      return new Response(JSON.stringify({ error: 'Error al actualizar presupuesto: ' + presupuestoError.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   // Redirige al detalle del equipo

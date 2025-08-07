@@ -1,8 +1,8 @@
 ---
-// Layout y componentes
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 import PrinterCard from '../components/PrinterCard.astro';
 import { supabase } from '../lib/supabase';
+
 
 // Paginación
 const pageParam = Astro.url.searchParams.get('page') || '1';
@@ -11,13 +11,14 @@ const itemsPerPage = 500;
 const from = (currentPage - 1) * itemsPerPage;
 const to = from + itemsPerPage - 1;
 
-// Consulta combinada (ahora también se trae el ticket)
+// Consulta combinada (ahora también se trae la imagen)
 const { data: impresoras } = await supabase
   .from('tickets_mian')
   .select(`
     id,
     ticket,
     estado,
+    imagen,
     impresora:impresoras (
       modelo
     ),
@@ -44,6 +45,7 @@ const { data: impresoras } = await supabase
               maquina={item.impresora?.modelo || 'Desconocido'}
               estado={item.estado || 'Desconocido'}
               whatsapp={item.cliente?.whatsapp || 'No especificado'}
+              imagen={item.imagen || null}          
               onClickUrl={`/detalle/${item.id}`}
               onClickUrlEditar={`/editar/${item.id}`}
             />

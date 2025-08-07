@@ -121,8 +121,8 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 
 ## Futuras ampliaciones
 
-- Gestionar perfiles definir que puede o no ver un técnico.
 - Generación de estadísticas a partir de datos de la base.
+- Añadir filtros por maquina reparada archivadda y demas
 
 
 

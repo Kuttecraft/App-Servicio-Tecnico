@@ -7,14 +7,15 @@ const {
   estado = "Sin estado",
   whatsapp = "No especificado",
   onClickUrl = "#",
-  onClickUrlEditar = "#"
+  onClickUrlEditar = "#",
+  imagen = null  // ✅ Imagen ahora es parte de las props
 } = Astro.props;
 ---
 
 <div class="card card-custom text-center p-3 shadow-sm mb-4" style="border-radius: 15px; min-width: 220px;">
   <img
-    src="/logo.webp"
-    alt={`Imagen genérica para cliente ${cliente}`}
+    src={imagen ? `${imagen}?t=${Date.now()}` : "/logo.webp"} 
+    alt={`Imagen del equipo de ${cliente}`}
     loading="lazy"
     style="max-height: 170px; max-width: 170px; object-fit: cover; border-radius: 9px;"
     class="mx-auto mt-1 mb-2 shadow-sm border"

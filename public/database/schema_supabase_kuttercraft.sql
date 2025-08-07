@@ -100,6 +100,7 @@ CREATE TABLE cliente (
     correo_electronico VARCHAR(100),
     direccion VARCHAR(255),
     localidad VARCHAR(100),
+    comentarios TEXT,
     informacion_adicional_usuario TEXT
 );
 
@@ -137,6 +138,7 @@ CREATE TABLE tickets_mian (
     dias_en_taller TEXT,
     maquina_reparada TEXT,
     devolver_maquina TEXT,
+    nota_admin TEXT,
     imagen TEXT
 );
 
@@ -152,7 +154,9 @@ CREATE TABLE presupuestos (
     presupuesto_aprobado TEXT,
     garantia_activa TEXT,
     notas_administracion TEXT,
-    monto TEXT
+    monto TEXT,
+    cubre_garantia TEXT,
+    fecha_presupuesto TEXT
 );
 
 -- 6. Delivery
