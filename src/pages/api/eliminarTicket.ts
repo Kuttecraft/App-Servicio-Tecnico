@@ -1,5 +1,12 @@
 import { supabase } from '../../lib/supabase';
 
+// Tipado para Astro server output
+interface RequestContext {
+  request: Request;
+  params: Record<string, string>;
+  url: URL;
+  site: URL | undefined;
+}
 
 export async function POST(context: RequestContext) {
   const url = new URL(context.request.url);
@@ -13,10 +20,11 @@ export async function POST(context: RequestContext) {
   }
 
   // 1. Buscar el registro para obtener la URL de la imagen
+  //    IMPORTANTE: ahora buscamos en 'tickets_mian' (no en TestImpresoras)
   const { data, error: fetchError } = await supabase
-    .from('TestImpresoras')
+    .from('tickets_mian')
     .select('imagen')
-    .eq('id', id)
+    .eq('id', Number(id))
     .single();
 
   if (fetchError) {
@@ -30,8 +38,11 @@ export async function POST(context: RequestContext) {
   if (data && data.imagen) {
     // Supongamos que guardás en la DB algo así como: https://xxxx.supabase.co/storage/v1/object/public/<bucket>/<path>
     try {
+      // Quitar querystring (p.ej. '?t=123') por si vino cache-buster
+      const imagenSinQS = data.imagen.split('?')[0];
+
       // Extraer bucket y ruta del archivo
-      const match = data.imagen.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+      const match = imagenSinQS.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
       if (match) {
         const bucket = match[1];
         const filePath = match[2];
@@ -42,6 +53,19 @@ export async function POST(context: RequestContext) {
           // No detiene el proceso, pero lo loguea
           console.error('Error eliminando imagen del Storage:', storageError.message);
         }
+      } else {
+        // Manejo de caso: si en la DB guardaste solo la "ruta" (bucket/path) en lugar de la URL pública
+        // Ejemplos válidos: 'tickets/123/imagen.jpg' con bucket 'tickets'
+        // Intento heurístico simple: si no matchea la URL pública, probamos con un bucket por defecto
+        // Ajustá 'tickets' si tu bucket real se llama de otra forma
+        const posibleRuta = imagenSinQS;
+        if (!posibleRuta.startsWith('http')) {
+          const defaultBucket = 'tickets';
+          const { error: storageError2 } = await supabase.storage.from(defaultBucket).remove([posibleRuta]);
+          if (storageError2) {
+            console.error('Error eliminando imagen del Storage (ruta simple):', storageError2.message);
+          }
+        }
       }
     } catch (e) {
       // Manejo de errores por si no matchea la URL
@@ -50,10 +74,12 @@ export async function POST(context: RequestContext) {
   }
 
   // 3. Eliminar el registro
+  //    OJO: 'presupuestos' y 'delivery' tienen FK a tickets_mian con ON DELETE CASCADE,
+  //    así que se borran solos al eliminar el ticket aquí.
   const { error } = await supabase
-    .from('TestImpresoras')
+    .from('tickets_mian')
     .delete()
-    .eq('id', id);
+    .eq('id', Number(id));
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
@@ -66,13 +92,4 @@ export async function POST(context: RequestContext) {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
-}
-
-
-// Tipado para Astro server output
-interface RequestContext {
-  request: Request;
-  params: Record<string, string>;
-  url: URL;
-  site: URL | undefined;
 }

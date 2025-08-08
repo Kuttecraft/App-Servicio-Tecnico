@@ -1,28 +1,20 @@
 import { supabase } from '../../lib/supabase';
 
 export async function GET() {
-  // Buscar el ticket de mayor valor (NO null)
+  // Busca el ticket numérico más grande (ignora nulls)
   const { data, error } = await supabase
-    .from('TestImpresoras')
+    .from('tickets_mian')
     .select('ticket')
     .not('ticket', 'is', null)
-    .order('ticket', { ascending: false }) // DESCENDENTE: el más alto primero
+    .order('ticket', { ascending: false })
     .limit(1)
     .maybeSingle();
 
   let sugerido = 1;
-  let ticketEncontrado = null;
-  if (data && typeof data.ticket === "number" && !isNaN(data.ticket)) {
-    ticketEncontrado = data.ticket;
-    sugerido = ticketEncontrado + 1;
-  }
 
-  // === Zona de test/debug: descomentá para ver logs ===
-  // console.log(
-  //   `[DEBUG proximoTicket] Ticket más grande encontrado: ${ticketEncontrado !== null ? ticketEncontrado : 'NINGUNO'} | Sugerido: ${sugerido}`,
-  //   { data, error }
-  // );
-  // === Fin zona de test/debug ===
+  if (!error && data && typeof data.ticket === 'number' && !isNaN(data.ticket)) {
+    sugerido = data.ticket + 1;
+  }
 
   return new Response(JSON.stringify({ sugerido }), {
     headers: { 'Content-Type': 'application/json' },
