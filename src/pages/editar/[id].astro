@@ -213,7 +213,7 @@ if (error) {
           {/* Imagen equipo: muestra actual y reemplazo */}
           <div class="col-md-12">
             <div class="mb-4 d-flex flex-column align-items-center" id="imagen-actual-container" style="gap: 1rem;">
-              <div class="position-relative" style="width: 240px; height: 240px;">
+              <div class="position-relative" style="max-height: 300px; max-width: 300px; object-fit: cover; border-radius: 15px;">
                 <img
                   id="img-actual-o-preview"
                   src={equipo.imagen ? equipo.imagen + '?t=' + Date.now() : '/logo.webp'}
