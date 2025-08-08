@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Compresión y conversión a WebP
     try {
       const compressedWebP = await window.imageCompression(file, {
-        maxSizeMB: 0.09,
+        maxSizeMB: 0.1,
         maxWidthOrHeight: 500,
         useWebWorker: true,
         fileType: 'image/webp'
