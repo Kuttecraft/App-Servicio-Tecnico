@@ -12,8 +12,11 @@ export async function GET() {
 
   let sugerido = 1;
 
-  if (!error && data && typeof data.ticket === 'number' && !isNaN(data.ticket)) {
-    sugerido = data.ticket + 1;
+  if (!error && data) {
+    const ticketNum = Number(data.ticket);
+    if (!isNaN(ticketNum) && ticketNum > 0) {
+      sugerido = ticketNum + 1;
+    }
   }
 
   return new Response(JSON.stringify({ sugerido }), {

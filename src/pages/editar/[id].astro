@@ -12,6 +12,8 @@ interface EquipoCompleto {
   cliente_id: number;
   impresora_id: number | null;
   imagen: string | null;
+  imagen_ticket: string | null;
+  imagen_extra: string | null;
   notas_del_tecnico: string | null;
 
   cliente?: {
@@ -32,7 +34,7 @@ const { id } = Astro.params;
 const { data } = await supabase
   .from('tickets_mian')
   .select(`
-    id, ticket, estado, marca_temporal, fecha_de_reparacion, tecnico_id, cliente_id, impresora_id, imagen, notas_del_tecnico,
+    id, ticket, estado, marca_temporal, fecha_de_reparacion, tecnico_id, cliente_id, impresora_id, imagen, imagen_ticket, imagen_extra, notas_del_tecnico,
     cliente:cliente_id (dni_cuit, correo_electronico, whatsapp, comentario),
     tecnicos:tecnico_id (nombre, apellido),
     impresoras:impresora_id (modelo),
@@ -62,7 +64,7 @@ const equipo = {
         action={`/api/actualizarTicket?id=${equipo.id}`}
         enctype="multipart/form-data"
         class="card p-4 shadow-sm"
-        style="max-width: 800px; margin: auto;"
+        style="max-width: 900px; margin: auto;"
         id="form-editar-equipo"
       >
         <div class="row g-3">
@@ -158,10 +160,11 @@ const equipo = {
             <input name="timestampListo" type="date" class="form-control" value={equipo.fecha_de_reparacion?.slice(0, 10) || ''} />
           </div>
 
-          {/* Imagen equipo */}
+          {/* Imagen equipo (principal) */}
           <div class="col-md-12">
+            <h6 class="mt-3">Imagen principal</h6>
             <div class="mb-3 d-flex flex-column align-items-center" style="gap: 1rem;">
-              <div class="rounded shadow-sm border overflow-hidden" style="max-width: 320px; max-height: 320px; border-radius: 15px; ">
+              <div class="rounded shadow-sm border overflow-hidden" style="max-width: 320px; max-height: 320px; border-radius: 15px;">
                 <img
                   id="img-actual-o-preview"
                   src={equipo.imagen || '/logo.webp'}
@@ -171,20 +174,65 @@ const equipo = {
                   loading="lazy"
                 />
               </div>
-
-              {/* Botón de subir - estilo Bootstrap azul */}
               <label class="btn btn-primary fw-semibold">
                 <i class="bi bi-upload me-2"></i> Cambiar imagen
                 <input type="file" name="imagenArchivo" accept="image/*" id="input-imagen-archivo" style="display:none;" />
               </label>
             </div>
-
             <input type="hidden" name="borrarImagen" id="input-borrar-imagen" value="false" />
-
-            {/* Botones */}
             <div class="mt-2 d-flex flex-column flex-md-row gap-2 justify-content-center align-items-stretch">
               <button type="button" class="btn btn-danger order-2 order-md-1 px-4" id="btn-eliminar-equipo">Eliminar imagen</button>
               <button type="submit" class="btn btn-success order-1 order-md-2 px-4">Guardar cambios</button>
+            </div>
+          </div>
+
+          {/* Imagen de ticket */}
+          <div class="col-md-12">
+            <h6 class="mt-4">Imagen del ticket</h6>
+            <div class="mb-3 d-flex flex-column align-items-center" style="gap: 1rem;">
+              <div class="rounded shadow-sm border overflow-hidden" style="max-width: 320px; max-height: 320px; border-radius: 15px;">
+                <img
+                  id="img-ticket-preview"
+                  src={equipo.imagen_ticket || '/logo.webp'}
+                  alt="Imagen ticket"
+                  class="img-fluid"
+                  style="width: 100%; height: 100%; object-fit: cover;"
+                  loading="lazy"
+                />
+              </div>
+              <label class="btn btn-primary fw-semibold">
+                <i class="bi bi-upload me-2"></i> Cambiar imagen ticket
+                <input type="file" name="imagenTicketArchivo" accept="image/*" id="input-imagen-ticket" style="display:none;" />
+              </label>
+            </div>
+            <input type="hidden" name="borrarImagenTicket" id="input-borrar-imagen-ticket" value="false" />
+            <div class="mt-2 d-flex flex-column flex-md-row gap-2 justify-content-center align-items-stretch">
+              <button type="button" class="btn btn-danger px-4" id="btn-eliminar-imagen-ticket">Eliminar imagen ticket</button>
+            </div>
+          </div>
+
+          {/* Imagen extra */}
+          <div class="col-md-12">
+            <h6 class="mt-4">Imagen extra</h6>
+            <div class="mb-3 d-flex flex-column align-items-center" style="gap: 1rem;">
+              <div class="rounded shadow-sm border overflow-hidden" style="max-width: 320px; max-height: 320px; border-radius: 15px;">
+                <img
+                  id="img-extra-preview"
+                  src={equipo.imagen_extra || '/logo.webp'}
+                  alt="Imagen extra"
+                  class="img-fluid"
+                  style="width: 100%; height: 100%; object-fit: cover;"
+                  loading="lazy"
+                />
+              </div>
+              <label class="btn btn-primary fw-semibold">
+                <i class="bi bi-upload me-2"></i> Cambiar imagen extra
+                <input type="file" name="imagenExtraArchivo" accept="image/*" id="input-imagen-extra" style="display:none;" />
+              </label>
+            </div>
+            <input type="hidden" name="borrarImagenExtra" id="input-borrar-imagen-extra" value="false" />
+            <div class="mt-2 d-flex flex-column flex-md-row gap-2 justify-content-center align-items-stretch">
+              <button type="button" class="btn btn-danger px-4" id="btn-eliminar-imagen-extra">Eliminar imagen extra</button>
             </div>
           </div>
         </div>
@@ -195,38 +243,8 @@ const equipo = {
   </div>
 
   <!-- Compresión (si la usás en tu JS) -->
-  <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js"></script>
+  <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
 
-  <script is:inline>
-    // Preview local sin tocar la imagen original hasta guardar
-    const inputFile = document.getElementById('input-imagen-archivo');
-    const img = document.getElementById('img-actual-o-preview');
-    const borrarInput = document.getElementById('input-borrar-imagen');
-    const btnEliminar = document.getElementById('btn-eliminar-equipo');
-    const originalSrc = img?.getAttribute('src');
-
-    inputFile?.addEventListener('change', async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) {
-        img.src = originalSrc || img.src;
-        return;
-      }
-      try {
-        const options = { maxSizeMB: 1, maxWidthOrHeight: 1600, useWebWorker: true };
-        const compressed = await window.imageCompression(file, options);
-        img.src = URL.createObjectURL(compressed);
-      } catch {
-        img.src = URL.createObjectURL(file);
-      }
-      borrarInput.value = "false";
-    });
-
-    btnEliminar?.addEventListener('click', () => {
-      borrarInput.value = "true";
-      img.src = '/logo.webp';
-      if (inputFile) inputFile.value = "";
-    });
-  </script>
-
-  <script src="/scripts/form-editar-equipo.js" is:inline></script>
+  <!-- Lógica separada para manejar 3 imágenes -->
+  <script src="/scripts/form-mas-imagenes.js?v=1" defer></script>
 </BasePrivateLayout>

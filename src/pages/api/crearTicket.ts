@@ -73,11 +73,8 @@ function partirNombreApellido(completo: string): { nombre: string; apellido: str
 // Helper para normalizar el MIME de la imagen que llega del front
 function normalizarMime(file: File | null): string | null {
   if (!file) return null;
-  const raw = (file.type || '').toLowerCase();
-  if (!raw || raw === 'application/octet-stream') return 'image/webp';
-  // Podrías forzar siempre 'image/webp' si querés homogeneidad:
-  // return 'image/webp';
-  return raw;
+  // Forzamos WebP para homogeneidad en Storage y servir
+  return 'image/webp';
 }
 
 export async function POST({ request }: { request: Request }) {
@@ -96,7 +93,10 @@ export async function POST({ request }: { request: Request }) {
     const ticketRaw      = form.get('ticket');
     const ticketNumero   = ticketRaw ? Number(ticketRaw) : null;
 
-    const archivoImagen  = (form.get('imagenArchivo') as File | null) ?? null;
+    // Archivos opcionales:
+    const archivoImagen       = (form.get('imagenArchivo') as File | null) ?? null;        // -> tickets_mian.imagen
+    const archivoImagenTicket = (form.get('imagenTicketArchivo') as File | null) ?? null;  // -> tickets_mian.imagen_ticket
+    const archivoImagenExtra  = (form.get('imagenExtraArchivo') as File | null) ?? null;   // -> tickets_mian.imagen_extra
     // const imagenDataURL  = await fileToDataURL(archivoImagen); // ❌ ya no guardamos dataURL
 
     // === Validaciones simples ===
@@ -200,7 +200,7 @@ export async function POST({ request }: { request: Request }) {
       ticket: ticketNumero,                  // BIGINT (no unique)
       notas_del_cliente: comentarios || null,
       estado: estado || null,
-      // ❗ OJO: NO ponemos 'imagen' acá. Primero creamos el ticket y obtenemos su id.
+      // ❗ OJO: NO ponemos 'imagen', 'imagen_ticket' ni 'imagen_extra' acá. Primero creamos el ticket y obtenemos su id.
     };
 
     const { data: tInsert, error: tErr } = await supabase
@@ -227,51 +227,86 @@ export async function POST({ request }: { request: Request }) {
 
     const nuevoId = tInsert!.id as number;
 
-    // === Subir IMAGEN a Supabase Storage y guardar URL pública (https) ===
-    // Solo si el usuario subió un archivo válido
-    if (archivoImagen && (archivoImagen as any).size > 0) {
-      // Normalizamos MIME; forzamos .webp para mantener compatibilidad con tu update
-      const mime = normalizarMime(archivoImagen) || 'image/webp';
-      const nombreArchivo = `public/${nuevoId}.webp`;
+    // === Subir imágenes a Supabase Storage y guardar URL pública (https) ===
+    // Helper local para subir y devolver URL pública
+    const subirYObtenerUrl = async (file: File | null, nombreArchivo: string) => {
+      if (!file || (file as any).size <= 0) return null;
+
+      // Límite rápido de 5MB
+      const MAX_BYTES = 5 * 1024 * 1024;
+      if ((file as any).size > MAX_BYTES) {
+        throw new Error('La imagen supera el tamaño máximo permitido (5MB).');
+      }
+
+      const mime = normalizarMime(file) || 'image/webp';
 
       // Por si subieron antes un archivo con el mismo nombre (no debería en alta, pero es idempotente)
-      await supabase.storage.from('imagenes').remove([nombreArchivo]).catch(() => {});
+      try { await supabase.storage.from('imagenes').remove([nombreArchivo]); } catch {}
 
       const { error: uploadError } = await supabase.storage
         .from('imagenes')
-        .upload(nombreArchivo, archivoImagen, {
+        .upload(nombreArchivo, file, {
           cacheControl: '3600',
           upsert: true,
           contentType: mime, // ayuda a servir con el tipo correcto
         });
 
       if (uploadError) {
-        // Ticket quedó creado pero sin imagen: devolvemos 500 para que lo veas,
-        // o podés elegir redirigir igual con un flag ?img=0
-        return new Response(
-          JSON.stringify({ error: `Error al subir imagen: ${uploadError.message}` }),
-          { status: 500, headers: { 'Content-Type': 'application/json' } }
-        );
+        throw new Error(uploadError.message);
       }
 
-      // URL pública https
       const { data: publicUrl } = supabase.storage
         .from('imagenes')
         .getPublicUrl(nombreArchivo);
 
-      const imagenHttps = publicUrl.publicUrl;
+      return publicUrl.publicUrl as string;
+    };
 
-      // Actualizamos el ticket con la URL pública
-      const { error: updErr } = await supabase
+    // Intentamos cada imagen por separado (todas son opcionales)
+    let imagenUrl: string | null = null;
+    let imagenTicketUrl: string | null = null;
+    let imagenExtraUrl: string | null = null;
+
+    // ⚠️ Manejo de errores PARCIAL: si una falla, seguimos con el resto y no rompemos el alta del ticket.
+    if (archivoImagen && (archivoImagen as any).size > 0) {
+      try {
+        imagenUrl = await subirYObtenerUrl(archivoImagen, `public/${nuevoId}.webp`);
+      } catch (e: any) {
+        console.error('Error subiendo imagen principal:', e?.message || e);
+      }
+    }
+
+    if (archivoImagenTicket && (archivoImagenTicket as any).size > 0) {
+      try {
+        imagenTicketUrl = await subirYObtenerUrl(archivoImagenTicket, `public/${nuevoId}_ticket.webp`);
+      } catch (e: any) {
+        console.error('Error subiendo imagen de ticket:', e?.message || e);
+      }
+    }
+
+    if (archivoImagenExtra && (archivoImagenExtra as any).size > 0) {
+      try {
+        imagenExtraUrl = await subirYObtenerUrl(archivoImagenExtra, `public/${nuevoId}_extra.webp`);
+      } catch (e: any) {
+        console.error('Error subiendo imagen extra:', e?.message || e);
+      }
+    }
+
+    // Si subimos alguna, actualizamos el registro con las URLs correspondientes
+    if (imagenUrl || imagenTicketUrl || imagenExtraUrl) {
+      const updateImages: Record<string, any> = {};
+      if (imagenUrl) updateImages.imagen = imagenUrl;
+      if (imagenTicketUrl) updateImages.imagen_ticket = imagenTicketUrl;
+      if (imagenExtraUrl) updateImages.imagen_extra = imagenExtraUrl;
+
+      const { error: updImgErr } = await supabase
         .from('tickets_mian')
-        .update({ imagen: imagenHttps })
+        .update(updateImages)
         .eq('id', nuevoId);
 
-      if (updErr) {
-        return new Response(
-          JSON.stringify({ error: 'Ticket creado pero no se pudo guardar la URL de imagen: ' + updErr.message }),
-          { status: 500, headers: { 'Content-Type': 'application/json' } }
-        );
+      if (updImgErr) {
+        // No tiramos 500: dejamos creado el ticket y avisamos por consola
+        console.error('Ticket creado, pero no se pudieron guardar las URLs de imagen:', updImgErr.message);
       }
     }
 

@@ -139,7 +139,9 @@ CREATE TABLE tickets_mian (
     maquina_reparada TEXT,
     devolver_maquina TEXT,
     nota_admin TEXT,
-    imagen TEXT
+    imagen TEXT,
+    imagen_ticket TEXT,
+    imagen_extra TEXT
 );
 
 -- 5. Presupuestos

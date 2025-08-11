@@ -1,6 +1,5 @@
 import { supabase } from '../../lib/supabase';
 
-
 export async function POST(context: RequestContext) {
   const req = context.request;
   const url = new URL(req.url);
@@ -14,8 +13,16 @@ export async function POST(context: RequestContext) {
   }
 
   const formData = await req.formData();
+
+  // Archivos e indicadores de borrado
   const imagenArchivo = formData.get("imagenArchivo") as File | null;
   const borrarImagen = formData.get("borrarImagen");
+
+  const imagenTicketArchivo = formData.get("imagenTicketArchivo") as File | null;
+  const borrarImagenTicket = formData.get("borrarImagenTicket");
+
+  const imagenExtraArchivo = formData.get("imagenExtraArchivo") as File | null;
+  const borrarImagenExtra = formData.get("borrarImagenExtra");
 
   // Parse fields
   const fields: Record<string, string> = {};
@@ -26,16 +33,14 @@ export async function POST(context: RequestContext) {
   });
 
   // Conversión de tipos y validaciones específicas
- const datosTicketsMian: any = {
-  estado: fields.estado,
-  marca_temporal: fields.fechaFormulario || null,
-  fecha_de_reparacion: fields.timestampListo || null,
-  notas_del_tecnico: fields.notaTecnico,
-
-  // ❌ nota_admin no existe en la tabla `tickets_mian`, por eso se comenta
-  // nota_admin: fields.notaAdmin || null,
-};
-
+  const datosTicketsMian: any = {
+    estado: fields.estado,
+    marca_temporal: fields.fechaFormulario || null,
+    fecha_de_reparacion: fields.timestampListo || null,
+    notas_del_tecnico: fields.notaTecnico,
+    // ❌ nota_admin no existe en la tabla `tickets_mian`, por eso se comenta
+    // nota_admin: fields.notaAdmin || null,
+  };
 
   const datosCliente: any = {
     dni_cuit: fields.dniCuit || null,
@@ -57,43 +62,50 @@ export async function POST(context: RequestContext) {
     fecha_presupuesto: fields.timestampPresupuesto || null
   };
 
-  const nombreArchivo = `public/${id}.webp`;
-
-  // ---- Lógica de imagen ----
-  // CASO 1: Subió imagen nueva (siempre reemplaza)
-  if (imagenArchivo && imagenArchivo.size > 0) {
-    // Borra anterior (por las dudas, puede no existir)
-    await supabase.storage.from('imagenes').remove([nombreArchivo]);
-
-    // Sube nueva imagen
+  // ---- Lógica de imágenes ----
+  const subirImagen = async (archivo: File, nombreArchivo: string, campo: string) => {
+    await supabase.storage.from('imagenes').remove([nombreArchivo]); // Borra anterior (si existe)
     const { error: uploadError } = await supabase.storage
       .from('imagenes')
-      .upload(nombreArchivo, imagenArchivo, {
+      .upload(nombreArchivo, archivo, {
         cacheControl: '3600',
         upsert: true,
       });
-
     if (uploadError) {
-      return new Response(JSON.stringify({ error: `Error al subir imagen: ${uploadError.message}` }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      throw new Error(`Error al subir ${campo}: ${uploadError.message}`);
     }
+    const { data: publicUrl } = supabase.storage.from('imagenes').getPublicUrl(nombreArchivo);
+    datosTicketsMian[campo] = publicUrl.publicUrl;
+  };
 
-    // Guarda URL pública
-    const { data: publicUrl } = supabase.storage
-      .from('imagenes')
-      .getPublicUrl(nombreArchivo);
-
-    datosTicketsMian.imagen = publicUrl.publicUrl;
-
-    // CASO 2: Eligió borrar imagen (sin subir nada)
-  } else if (borrarImagen === "delete") {
+  const borrarImagenCampo = async (nombreArchivo: string, campo: string) => {
     await supabase.storage.from('imagenes').remove([nombreArchivo]);
-    datosTicketsMian.imagen = null;
+    datosTicketsMian[campo] = null;
+  };
 
-    // CASO 3: No tocó nada de la imagen (ni sube ni borra)
-  } // No se modifica el campo "imagen"
+  // imagen
+  const nombreArchivo = `public/${id}.webp`;
+  if (imagenArchivo && imagenArchivo.size > 0) {
+    await subirImagen(imagenArchivo, nombreArchivo, 'imagen');
+  } else if (borrarImagen === "delete") {
+    await borrarImagenCampo(nombreArchivo, 'imagen');
+  }
+
+  // imagen_ticket
+  const nombreArchivoTicket = `public/${id}_ticket.webp`;
+  if (imagenTicketArchivo && imagenTicketArchivo.size > 0) {
+    await subirImagen(imagenTicketArchivo, nombreArchivoTicket, 'imagen_ticket');
+  } else if (borrarImagenTicket === "delete") {
+    await borrarImagenCampo(nombreArchivoTicket, 'imagen_ticket');
+  }
+
+  // imagen_extra
+  const nombreArchivoExtra = `public/${id}_extra.webp`;
+  if (imagenExtraArchivo && imagenExtraArchivo.size > 0) {
+    await subirImagen(imagenExtraArchivo, nombreArchivoExtra, 'imagen_extra');
+  } else if (borrarImagenExtra === "delete") {
+    await borrarImagenCampo(nombreArchivoExtra, 'imagen_extra');
+  }
 
   // ---- Obtener IDs relacionados ----
   const { data: ticketData, error: ticketError } = await supabase

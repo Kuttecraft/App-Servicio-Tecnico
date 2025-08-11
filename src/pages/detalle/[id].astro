@@ -1,7 +1,7 @@
 ---
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import { supabase } from '../../lib/supabase';
-import { formatearFecha, booleanATexto, formatearMoneda } from '../../lib/utils';
+import { formatearFecha, booleanATexto } from '../../lib/utils';
 
 const { id } = Astro.params as { id: string };
 
@@ -28,17 +28,40 @@ const { data, error } = await supabase
   .single();
 
 const equipo = data;
+
+// Lógica de prioridad para imagen principal
+const imagenPrincipal =
+  equipo?.imagen_ticket ||
+  equipo?.imagen ||
+  equipo?.imagen_extra ||
+  '/logo.webp';
+
+// Construyo la lista de imágenes disponibles (sin nulls/undefined/duplicados)
+const imagenes: string[] = Array.from(
+  new Set(
+    [equipo?.imagen_ticket, equipo?.imagen, equipo?.imagen_extra].filter(Boolean) as string[]
+  )
+);
 ---
 
 <BasePrivateLayout>
+  <style>
+    .thumbs { display: flex; gap: .5rem; justify-content: center; }
+    .thumb {
+      height: 60px; width: 60px; border-radius: 8px; object-fit: cover; cursor: pointer;
+      border: 2px solid transparent; transition: transform .15s ease, border-color .15s ease;
+      outline: none;
+    }
+    .thumb:hover { transform: scale(1.04); }
+    .thumb:focus-visible { outline: 2px solid #0d6efd; outline-offset: 2px; }
+    .thumb.active { border-color: #0d6efd; }
+  </style>
+
   <div class="container mt-4 position-relative">
     <div class="card mx-auto shadow" style="max-width: 650px;">
-      <!-- Cabecera de la card -->
+      <!-- Cabecera -->
       <div class="card-header bg-white d-flex align-items-center justify-content-between">
-        <h3 class="h5 mb-0 fw-bold text-primary">
-          Detalle del equipo
-        </h3>
-        <!-- Botón eliminar -->
+        <h3 class="h5 mb-0 fw-bold text-primary">Detalle del equipo</h3>
         <button
           class="btn btn-sm btn-outline-danger d-flex align-items-center"
           onclick={`eliminarTicket('${equipo.id}')`}
@@ -46,32 +69,44 @@ const equipo = data;
           <i class="bi bi-trash"></i>
         </button>
       </div>
+
       <div class="card-body">
-        <!-- Imagen -->
-        <div class="text-center mb-4">
+        <!-- Imagen principal -->
+        <div class="text-center mb-3">
           <img
             id="imagen-equipo"
-            src={equipo.imagen ? equipo.imagen + '?t=' + Date.now() : '/logo.webp'}
+            src={`${imagenPrincipal}?t=${Date.now()}`}
             alt="Imagen impresora"
             class="rounded img-fluid shadow-sm"
             style="max-height: 300px; max-width: 300px; object-fit: cover; border-radius: 15px; cursor: zoom-in;"
           />
-          
         </div>
 
-        <!-- Cliente y modelo y detalles centrados -->
+        <!-- Miniaturas -->
+        {imagenes.length > 0 && (
+          <div class="thumbs mb-4" id="thumbs">
+            {imagenes.map((src) => (
+              <img
+                src={`${src}?t=${Date.now()}`}
+                data-src={src}
+                alt="Miniatura"
+                class={`thumb ${src === imagenPrincipal ? 'active' : ''}`}
+                role="button"
+                tabindex="0"
+              />
+            ))}
+          </div>
+        )}
+
+        <!-- Datos -->
         <div class="text-center mb-4">
           <h4 class="fw-bold text-dark mb-1">{equipo.cliente?.cliente ?? '—'}</h4>
           <div class="text-muted small">{equipo.maquina_reparada ?? 'Modelo no especificado'}</div>
-
           <div class="row row-cols-1 row-cols-md-2 g-4 justify-content-center mt-3">
             <div class="col"><strong>Ticket:</strong> {equipo.ticket ?? '—'}</div>
             <div class="col"><strong>Estado:</strong> {equipo.estado ?? '—'}</div>
             <div class="col"><strong>¿Cobrado?:</strong> {booleanATexto(equipo.delivery?.pagado === 'true')}</div>
-            <div class="col">
-              <strong>Técnico:</strong> 
-              {equipo.tecnico ? `${equipo.tecnico.nombre} ${equipo.tecnico.apellido}` : '—'}
-            </div>
+            <div class="col"><strong>Técnico:</strong> {equipo.tecnico ? `${equipo.tecnico.nombre} ${equipo.tecnico.apellido}` : '—'}</div>
             <div class="col"><strong>DNI/CUIT:</strong> {equipo.cliente?.dni_cuit ?? '—'}</div>
             <div class="col"><strong>Correo:</strong> {equipo.cliente?.correo_electronico ?? '—'}</div>
             <div class="col"><strong>WhatsApp:</strong> {equipo.cliente?.whatsapp ?? '—'}</div>
@@ -80,7 +115,7 @@ const equipo = data;
           </div>
         </div>
 
-        <!-- Botones Añadir presupuesto | Añadir delivery -->
+        <!-- Botones -->
         <div class="row mt-4">
           <div class="col-6 d-flex justify-content-start">
             <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm w-100">
@@ -94,7 +129,6 @@ const equipo = data;
           </div>
         </div>
 
-        {/* Mensaje si no se encontró equipo */}
         {!equipo && (
           <div class="alert alert-danger mt-4">No se encontró el equipo con ID: {id}</div>
         )}
@@ -102,14 +136,8 @@ const equipo = data;
     </div>
   </div>
 
-  <!-- Script para eliminar ticket (se mantiene tal cual) -->
   <script>
-    declare global {
-      interface Window {
-        eliminarTicket: (id: string) => void;
-      }
-    }
-    window.eliminarTicket = async function(id: string) {
+    (window as any).eliminarTicket = async function(id) {
       if (!confirm("¿Estás seguro de que querés eliminar este ticket? Esta acción no se puede deshacer.")) return;
       const res = await fetch(`/api/eliminarTicket?id=${id}`, { method: 'POST' });
       const data = await res.json();
@@ -122,6 +150,8 @@ const equipo = data;
     }
   </script>
 
-  <!-- Script para ampliar la imagen (overlay + zoom) -->
+  <!-- Zoom/overlay que ya usabas -->
   <script src="/scripts/form-ampliar-imagen.js" defer></script>
+  <!-- ✅ Swap de miniaturas a principal -->
+  <script src="/scripts/detalle-galeria.js?v=1" defer></script>
 </BasePrivateLayout>

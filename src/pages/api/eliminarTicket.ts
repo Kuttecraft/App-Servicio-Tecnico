@@ -19,11 +19,56 @@ export async function POST(context: RequestContext) {
     });
   }
 
+  // Helper para extraer bucket y ruta desde una URL pública de Supabase Storage.
+  // Ej: https://xxxx.supabase.co/storage/v1/object/public/<bucket>/<path>
+  function extraerBucketYPath(desdeUrl: string): { bucket: string; filePath: string } | null {
+    // Quitar querystring (p.ej. '?t=123') por si vino cache-buster
+    const sinQS = (desdeUrl || '').split('?')[0];
+    const m = sinQS.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+    if (m) return { bucket: m[1], filePath: m[2] };
+    return null;
+  }
+
+  // Helper para intentar eliminar una imagen dada una URL pública o una ruta simple
+  async function eliminarImagenDeStorage(valor: string | null) {
+    if (!valor) return;
+
+    try {
+      // 1) Caso URL pública
+      const parsed = extraerBucketYPath(valor);
+      if (parsed) {
+        const { error: storageError } = await supabase.storage
+          .from(parsed.bucket)
+          .remove([parsed.filePath]);
+        if (storageError) {
+          console.error('Error eliminando imagen del Storage:', storageError.message, parsed);
+        }
+        return;
+      }
+
+      // 2) Caso: guardaste una "ruta simple" en la DB en lugar de la URL pública
+      // Intento heurístico simple: si no es http, probamos con un bucket por defecto
+      if (!/^https?:\/\//i.test(valor)) {
+        const defaultBucket = 'imagenes'; // ⚠️ ajustá si tu bucket real es otro
+        const { error: storageError2 } = await supabase.storage
+          .from(defaultBucket)
+          .remove([valor]);
+        if (storageError2) {
+          console.error('Error eliminando imagen del Storage (ruta simple):', storageError2.message, { defaultBucket, valor });
+        }
+      }
+    } catch (e) {
+      // Manejo de errores por si no matchea la URL
+      console.error('No se pudo procesar/eliminar la imagen:', valor, e);
+    }
+  }
+
   // 1. Buscar el registro para obtener la URL de la imagen
   //    IMPORTANTE: ahora buscamos en 'tickets_mian' (no en TestImpresoras)
+  //    Además, traemos imagen, imagen_ticket e imagen_extra
   const { data, error: fetchError } = await supabase
     .from('tickets_mian')
-    .select('imagen')
+    .select('imagen, imagen_ticket, imagen_extra')
     .eq('id', Number(id))
     .single();
 
@@ -34,43 +79,13 @@ export async function POST(context: RequestContext) {
     });
   }
 
-  // 2. Si existe imagen, eliminar del Storage
-  if (data && data.imagen) {
-    // Supongamos que guardás en la DB algo así como: https://xxxx.supabase.co/storage/v1/object/public/<bucket>/<path>
-    try {
-      // Quitar querystring (p.ej. '?t=123') por si vino cache-buster
-      const imagenSinQS = data.imagen.split('?')[0];
-
-      // Extraer bucket y ruta del archivo
-      const match = imagenSinQS.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
-      if (match) {
-        const bucket = match[1];
-        const filePath = match[2];
-
-        // Eliminar imagen del Storage
-        const { error: storageError } = await supabase.storage.from(bucket).remove([filePath]);
-        if (storageError) {
-          // No detiene el proceso, pero lo loguea
-          console.error('Error eliminando imagen del Storage:', storageError.message);
-        }
-      } else {
-        // Manejo de caso: si en la DB guardaste solo la "ruta" (bucket/path) en lugar de la URL pública
-        // Ejemplos válidos: 'tickets/123/imagen.jpg' con bucket 'tickets'
-        // Intento heurístico simple: si no matchea la URL pública, probamos con un bucket por defecto
-        // Ajustá 'tickets' si tu bucket real se llama de otra forma
-        const posibleRuta = imagenSinQS;
-        if (!posibleRuta.startsWith('http')) {
-          const defaultBucket = 'tickets';
-          const { error: storageError2 } = await supabase.storage.from(defaultBucket).remove([posibleRuta]);
-          if (storageError2) {
-            console.error('Error eliminando imagen del Storage (ruta simple):', storageError2.message);
-          }
-        }
-      }
-    } catch (e) {
-      // Manejo de errores por si no matchea la URL
-      console.error('No se pudo parsear la URL de la imagen:', e);
-    }
+  // 2. Si existen imágenes, eliminar del Storage (todas las que haya)
+  if (data) {
+    await Promise.all([
+      eliminarImagenDeStorage(data.imagen),
+      eliminarImagenDeStorage(data.imagen_ticket),
+      eliminarImagenDeStorage(data.imagen_extra),
+    ]);
   }
 
   // 3. Eliminar el registro
@@ -88,7 +103,7 @@ export async function POST(context: RequestContext) {
     });
   }
 
-  return new Response(JSON.stringify({ message: 'Ticket e imagen eliminados correctamente' }), {
+  return new Response(JSON.stringify({ message: 'Ticket e imágenes eliminados correctamente' }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });

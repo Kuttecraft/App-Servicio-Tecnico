@@ -8,13 +8,26 @@ const {
   whatsapp = "No especificado",
   onClickUrl = "#",
   onClickUrlEditar = "#",
-  imagen = null  // ✅ Imagen ahora es parte de las props
+  imagen = null,         // Imagen principal
+  imagen_ticket = null,  // Nueva imagen_ticket
+  imagen_extra = null    // Nueva imagen_extra
 } = Astro.props;
+
+// Lógica de prioridad de imágenes:
+// 1. imagen_ticket
+// 2. imagen
+// 3. imagen_extra
+// 4. logo por defecto
+const imagenFinal =
+  imagen_ticket ||
+  imagen ||
+  imagen_extra ||
+  "/logo.webp";
 ---
 
 <div class="card card-custom text-center p-3 shadow-sm mb-4" style="border-radius: 15px; min-width: 220px;">
   <img
-    src={imagen ? `${imagen}?t=${Date.now()}` : "/logo.webp"} 
+    src={`${imagenFinal}?t=${Date.now()}`}
     alt={`Imagen del equipo de ${cliente}`}
     loading="lazy"
     style="max-height: 200px; max-width: 200px; object-fit: cover; border-radius: 15px;"
