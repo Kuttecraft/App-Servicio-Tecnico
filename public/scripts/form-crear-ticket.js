@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!file) return;
 
     const options = {
-      maxSizeMB: 0.1,
+      maxSizeMB: 5,
       maxWidthOrHeight: 500,
       useWebWorker: true,
       fileType: 'image/webp'
