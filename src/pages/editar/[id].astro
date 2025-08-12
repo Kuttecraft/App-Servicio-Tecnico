@@ -52,6 +52,13 @@ const equipo = {
   delivery: Array.isArray(data?.delivery) ? data?.delivery[0] : data?.delivery,
   presupuestos: Array.isArray(data?.presupuestos) ? data?.presupuestos[0] : data?.presupuestos,
 } as EquipoCompleto;
+
+/* ✅ Lista de estados oficial (misma que en "crear ticket") */
+const estados = [
+  "Retirar","Presupuestar","Enviar presupuesto","P. Enviado",
+  "Reparación","Prueba","Lista","Entregada",
+  "Feedback Enviado","Archivada","No realizada"
+];
 ---
 
 <BasePrivateLayout>
@@ -71,7 +78,12 @@ const equipo = {
           {/* Campos principales */}
           <div class="col-md-6">
             <label class="form-label">Estado</label>
-            <input name="estado" type="text" class="form-control" value={equipo.estado} />
+            {/* ⬇️ Antes era <input type="text">. Ahora usamos un <select> con la lista fija */}
+            <select name="estado" class="form-select" required>
+              {estados.map((op) => (
+                <option value={op} selected={op === equipo.estado}>{op}</option>
+              ))}
+            </select>
           </div>
 
           <div class="col-md-6">
