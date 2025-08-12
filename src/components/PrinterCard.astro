@@ -8,13 +8,39 @@ const {
   whatsapp = "No especificado",
   onClickUrl = "#",
   onClickUrlEditar = "#",
-  imagen = null,
-  imagen_ticket = null,
-  imagen_extra = null
+  imagen = null,         // Imagen principal
+  imagen_ticket = null,  // Nueva imagen_ticket
+  imagen_extra = null    // Nueva imagen_extra
 } = Astro.props;
 
+// Lógica de prioridad de imágenes:
+// 1. imagen_ticket
+// 2. imagen
+// 3. imagen_extra
+// 4. logo por defecto
 const imagenFinal =
-  imagen_ticket || imagen || imagen_extra || "/logo.webp";
+  imagen_ticket ||
+  imagen ||
+  imagen_extra ||
+  "/logo.webp";
+
+// 🎨 Mapa de colores pastel SUAVES (punto medio-bajo de saturación)
+const estadoColores = {
+  "Retirar": "#FFE9CC",           // Naranja suave claro
+  "Presupuestar": "#FFD9D9",      // Rojo suave claro
+  "Enviar presupuesto": "#E9FCEC",// Verde menta suave claro
+  "P. Enviado": "#D9EBFF",        // Azul cielo suave claro
+  "Reparación": "#FFFDE1",        // Amarillo suave claro
+  "Prueba": "#E3DBFF",            // Lila suave claro
+  "Lista": "#FFE3DC",             // Durazno suave claro
+  "Entregada": "#E6F6FF",         // Celeste hielo suave
+  "Feedback Enviado": "#FAE4F6",  // Rosa-lila suave claro
+  "Archivada": "#EDEDED",         // Gris claro
+  "No realizada": "#FFF1D9"       // Amarillo crema suave
+};
+
+// Color actual o blanco si no está en el mapa
+const colorEstado = estadoColores[estado] || "#FFFFFF";
 ---
 
 <style>
@@ -24,6 +50,13 @@ const imagenFinal =
     flex-direction: column;
     border-radius: 15px;
     min-width: 220px;
+    transition: transform 0.15s ease;
+    border: 1px solid rgba(0,0,0,.06); /* contorno sutil */
+  }
+
+  /* Pequeña animación al pasar el mouse */
+  .pcard:hover {
+    transform: translateY(-3px);
   }
 
   /* Contenedor cuadrado para la imagen */
@@ -55,7 +88,9 @@ const imagenFinal =
   }
 </style>
 
-<div class="card shadow-sm p-3 mb-4 text-center pcard h-100">
+<!-- Fondo de la tarjeta dinámico según el estado -->
+<div class="card shadow-sm p-3 mb-4 text-center pcard h-100"
+     style={`background-color: ${colorEstado}`}>
   <div class="pcard__imgwrap">
     <img
       class="pcard__img"
