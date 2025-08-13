@@ -3,6 +3,21 @@ import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 import PrinterCard from '../components/PrinterCard.astro';
 import { supabase } from '../lib/supabase';
 
+// Lista fija de estados
+const ESTADOS = [
+  "Retirar",
+  "Presupuestar",
+  "Enviar presupuesto",
+  "P. Enviado",
+  "Reparación",
+  "Prueba",
+  "Lista",
+  "Entregada",
+  "Feedback Enviado",
+  "Archivada",
+  "No realizada"
+];
+
 // Parámetros de filtro
 const by = Astro.url.searchParams.get('by') || 'id';
 const rawQ = Astro.url.searchParams.get('q') || '';
@@ -60,7 +75,7 @@ if (q) {
       query = qNum !== null ? query.eq('ticket', qNum) : query.eq('ticket', -1);
       break;
     case 'estado':
-      query = query.ilike('estado', `%${q}%`);
+      query = query.eq('estado', q); // ahora usa igualdad por el select
       break;
     case 'cliente':
       query = query.ilike('cliente.cliente', `%${q}%`);
@@ -85,24 +100,39 @@ if (error) console.error('Error supabase:', error);
   <div class="container mt-4">
 
     <!-- Filtros -->
-    <form method="get" class="row g-2 align-items-end mb-3">
-      <div class="col-12 col-sm-6 col-md-auto">
-        <input
-          type="text"
-          name="q"
-          value={Astro.url.searchParams.get('q') || ''}
-          placeholder="Buscar…"
-          class="form-control"
-        />
+    <form method="get" class="row g-2 align-items-end mb-3" id="filterForm">
+      <div
+        class="col-12 col-sm-6 col-md-auto"
+        id="q-container"
+        data-estados={encodeURIComponent(JSON.stringify(ESTADOS))}
+      >
+        {by === 'estado' ? (
+          <!-- Si el filtro es por estado, mostramos un select con opciones predefinidas -->
+          <select name="q" class="form-select">
+            <option value="">Seleccioná estado…</option>
+            {ESTADOS.map((e) => (
+              <option value={e} selected={q === e}>{e}</option>
+            ))}
+          </select>
+        ) : (
+          <!-- Si no es estado, mostramos el input de texto -->
+          <input
+            type="text"
+            name="q"
+            value={Astro.url.searchParams.get('q') || ''}
+            placeholder="Buscar…"
+            class="form-control"
+          />
+        )}
       </div>
 
       <div class="col-12 col-sm-6 col-md-auto">
-        <select name="by" class="form-select">
-          <option value="id" selected={Astro.url.searchParams.get('by') === 'id' || !Astro.url.searchParams.get('by')}>ID</option>
-          <option value="ticket" selected={Astro.url.searchParams.get('by') === 'ticket'}>Ticket</option>
-          <option value="cliente" selected={Astro.url.searchParams.get('by') === 'cliente'}>Cliente</option>
-          <option value="estado" selected={Astro.url.searchParams.get('by') === 'estado'}>Estado</option>
-          <option value="maquina" selected={Astro.url.searchParams.get('by') === 'maquina'}>Máquina</option>
+        <select name="by" class="form-select" id="by-select">
+          <option value="id" selected={by === 'id'}>ID</option>
+          <option value="ticket" selected={by === 'ticket'}>Ticket</option>
+          <option value="cliente" selected={by === 'cliente'}>Cliente</option>
+          <option value="estado" selected={by === 'estado'}>Estado</option>
+          <option value="maquina" selected={by === 'maquina'}>Máquina</option>
         </select>
       </div>
 
@@ -169,4 +199,11 @@ if (error) console.error('Error supabase:', error);
     </div>
 
   </div>
+
+  <!-- Pasamos ESTADOS del servidor al cliente como JSON seguro -->
+  <script type="application/json" id="estados-data">{JSON.stringify(ESTADOS)}</script>
+
+  <!-- Cargamos JS externo para actualizar el campo en vivo -->
+  <!-- Los archivos dentro de /public se sirven desde la raíz: /scripts/... -->
+  <script defer src="/scripts/form-actualizar-filtro.js"></script>
 </BasePrivateLayout>
