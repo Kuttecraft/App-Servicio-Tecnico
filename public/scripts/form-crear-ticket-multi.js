@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!file || !file.type || !file.type.startsWith('image/')) return null;
     try {
       const options = {
-        maxSizeMB: 5,
+        maxSizeMB: 2,
         maxWidthOrHeight: 1600,
         useWebWorker: true,
         fileType: 'image/webp'

@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Opciones de compresión/conversión
     const options = {
-      maxSizeMB: 5,
+      maxSizeMB: 2,
       maxWidthOrHeight: 500,
       useWebWorker: true,
       fileType: 'image/webp'
