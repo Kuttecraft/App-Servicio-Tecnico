@@ -45,17 +45,6 @@ if (by === 'maquina') {
     cliente:cliente (cliente, whatsapp)
   `;
 }
-// Búsqueda global: unimos ambas relaciones como INNER para poder filtrarlas en la misma consulta
-if (by === 'global') {
-  selectStr = `
-    id,
-    ticket,
-    estado,
-    imagen,
-    impresora:impresoras!inner (modelo),
-    cliente:cliente!inner (cliente, whatsapp)
-  `;
-}
 
 let query = supabase.from('tickets_mian').select(selectStr);
 
@@ -79,19 +68,6 @@ if (q) {
     case 'maquina':
       query = query.ilike('impresora.modelo', `%${q}%`);
       break;
-    case 'global': {
-      // OR con varios campos. Para los numéricos, solo agregamos si q es numérico.
-      const parts: string[] = [
-        `estado.ilike.%${q}%`,
-        `cliente.cliente.ilike.%${q}%`,
-        `impresora.modelo.ilike.%${q}%`
-      ];
-      if (qNum !== null) {
-        parts.push(`id.eq.${qNum}`, `ticket.eq.${qNum}`);
-      }
-      query = query.or(parts.join(','));
-      break;
-    }
     default:
       break;
   }
@@ -107,7 +83,7 @@ const impresoras = Array.isArray(data) ? data : [];
 if (error) console.error('Error supabase:', error, { by, q });
 ---
 
-<BasePrivateLayout>
+<BasePrivateLayout showFilters={true}>
   <div class="container mt-4">
 
     <!-- Resultados -->

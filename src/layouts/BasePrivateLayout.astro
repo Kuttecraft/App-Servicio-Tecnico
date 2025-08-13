@@ -9,6 +9,9 @@ import Topbar from '../components/Topbar.astro';
 
 // Siempre intentá primero con Astro.props, luego con Astro.locals (por si es layout usado como página)
 const perfil = Astro.props?.perfil ?? Astro.locals?.perfil ?? null;
+
+// NUEVO: prop para mostrar/ocultar filtros en el topbar (default: false)
+const showFilters = Astro.props?.showFilters ?? false;
 ---
 <SignedIn>
   <!DOCTYPE html>
@@ -27,7 +30,7 @@ const perfil = Astro.props?.perfil ?? Astro.locals?.perfil ?? null;
         </aside>
         <!-- Contenido principal -->
         <div class="flex-grow-1 d-flex flex-column">
-          <Topbar />
+          <Topbar showFilters={showFilters} />
           <main class="p-3 flex-grow-1 overflow-auto ms-md-240">
             <slot />
           </main>
