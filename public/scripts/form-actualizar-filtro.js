@@ -30,7 +30,7 @@
     // 3) Último fallback: lista por defecto (para que nunca quede vacío)
     if (!Array.isArray(estados)) estados = [];
     if (estados.length === 0) {
-      console.warn('[dashboard] Lista de ESTADOS vacía; usando lista por defecto de emergencia.');
+      console.warn('[filters] Lista de ESTADOS vacía; usando lista por defecto.');
       estados = [
         "Retirar",
         "Presupuestar",

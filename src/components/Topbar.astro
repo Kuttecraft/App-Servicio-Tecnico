@@ -1,5 +1,25 @@
 ---
 import { UserButton } from '@clerk/astro/components';
+
+// Lista fija de estados
+const ESTADOS = [
+  "Retirar",
+  "Presupuestar",
+  "Enviar presupuesto",
+  "P. Enviado",
+  "Reparación",
+  "Prueba",
+  "Lista",
+  "Entregada",
+  "Feedback Enviado",
+  "Archivada",
+  "No realizada"
+];
+
+// Leemos los parámetros actuales para hidratar el formulario
+const by = Astro.url.searchParams.get('by') || 'id';
+const rawQ = Astro.url.searchParams.get('q') || '';
+const q = rawQ.trim();
 ---
 
 <nav class="navbar bg-white border-bottom px-3 py-2 shadow-sm sticky-top">
@@ -16,29 +36,73 @@ import { UserButton } from '@clerk/astro/components';
       ☰
     </button>
 
-    <!-- Buscador móvil (solo visible en mobile) -->
-    <form class="d-flex d-md-none flex-grow-1 me-2" role="search">
-      <input
-        class="form-control"
-        type="search"
-        placeholder="Buscar..."
-        aria-label="Buscar"
-      />
-    </form>
+    <!-- Formulario de filtros -->
+    <form
+      id="filterForm"
+      class="row g-2 justify-content-center w-100 mx-2"
+      method="get"
+      action="/dashboard"
+    >
+      <!-- Campo dinámico (input o select de estado) -->
+      <div
+        id="q-container"
+        class="col-12 col-md-6"
+        data-estados={encodeURIComponent(JSON.stringify(ESTADOS))}
+      >
+        {by === 'estado' ? (
+          <select name="q" class="form-select w-100">
+            <option value="">Seleccioná estado…</option>
+            {ESTADOS.map((e) => (
+              <option value={e} selected={q === e}>{e}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type="text"
+            name="q"
+            value={q}
+            placeholder="Buscar…"
+            class="form-control w-100"
+          />
+        )}
+      </div>
 
-    <!-- Buscador desktop -->
-    <form class="d-none d-md-flex flex-grow-1 mx-3" role="search">
-      <input
-        class="form-control"
-        type="search"
-        placeholder="Buscar..."
-        aria-label="Buscar"
-      />
+      <!-- Selector de columna -->
+      <div class="col-12 col-md-3">
+        <select name="by" class="form-select w-100" id="by-select">
+          <option value="id" selected={by === 'id'}>ID</option>
+          <option value="ticket" selected={by === 'ticket'}>Ticket</option>
+          <option value="cliente" selected={by === 'cliente'}>Cliente</option>
+          <option value="estado" selected={by === 'estado'}>Estado</option>
+          <option value="maquina" selected={by === 'maquina'}>Máquina</option>
+        </select>
+      </div>
+
+      <!-- Botones siempre juntos en una fila -->
+      <div class="col-12">
+        <div class="row g-2 justify-content-center">
+          <div class="col-6 col-md-3">
+            <button class="btn btn-primary w-100" type="submit">Filtrar</button>
+          </div>
+          <div class="col-6 col-md-3">
+            <a href="/dashboard" class="btn btn-outline-secondary w-100">Limpiar</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paginación: al filtrar, siempre arrancamos en 1 -->
+      <input type="hidden" name="page" value="1" />
     </form>
 
     <!-- User (Clerk) -->
-    <div class="ms-auto">
+    <div class="ms-auto d-none d-md-block">
       <UserButton />
     </div>
   </div>
+
+  <!-- Pasamos ESTADOS del servidor al cliente como JSON seguro (para el JS) -->
+  <script type="application/json" id="estados-data">{JSON.stringify(ESTADOS)}</script>
+
+  <!-- Cargamos JS externo para actualizar el campo en vivo -->
+  <script defer src="/scripts/form-actualizar-filtro.js"></script>
 </nav>

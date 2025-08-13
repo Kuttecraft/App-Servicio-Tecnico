@@ -3,22 +3,7 @@ import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 import PrinterCard from '../components/PrinterCard.astro';
 import { supabase } from '../lib/supabase';
 
-// Lista fija de estados
-const ESTADOS = [
-  "Retirar",
-  "Presupuestar",
-  "Enviar presupuesto",
-  "P. Enviado",
-  "Reparación",
-  "Prueba",
-  "Lista",
-  "Entregada",
-  "Feedback Enviado",
-  "Archivada",
-  "No realizada"
-];
-
-// Parámetros de filtro
+// Parámetros de filtro (la UI vive ahora en el Topbar)
 const by = Astro.url.searchParams.get('by') || 'id';
 const rawQ = Astro.url.searchParams.get('q') || '';
 const q = rawQ.trim();
@@ -60,6 +45,17 @@ if (by === 'maquina') {
     cliente:cliente (cliente, whatsapp)
   `;
 }
+// Búsqueda global: unimos ambas relaciones como INNER para poder filtrarlas en la misma consulta
+if (by === 'global') {
+  selectStr = `
+    id,
+    ticket,
+    estado,
+    imagen,
+    impresora:impresoras!inner (modelo),
+    cliente:cliente!inner (cliente, whatsapp)
+  `;
+}
 
 let query = supabase.from('tickets_mian').select(selectStr);
 
@@ -75,7 +71,7 @@ if (q) {
       query = qNum !== null ? query.eq('ticket', qNum) : query.eq('ticket', -1);
       break;
     case 'estado':
-      query = query.eq('estado', q); // ahora usa igualdad por el select
+      query = query.eq('estado', q); // igualdad por el select
       break;
     case 'cliente':
       query = query.ilike('cliente.cliente', `%${q}%`);
@@ -83,6 +79,19 @@ if (q) {
     case 'maquina':
       query = query.ilike('impresora.modelo', `%${q}%`);
       break;
+    case 'global': {
+      // OR con varios campos. Para los numéricos, solo agregamos si q es numérico.
+      const parts: string[] = [
+        `estado.ilike.%${q}%`,
+        `cliente.cliente.ilike.%${q}%`,
+        `impresora.modelo.ilike.%${q}%`
+      ];
+      if (qNum !== null) {
+        parts.push(`id.eq.${qNum}`, `ticket.eq.${qNum}`);
+      }
+      query = query.or(parts.join(','));
+      break;
+    }
     default:
       break;
   }
@@ -92,60 +101,17 @@ if (q) {
 query = query.order('id', { ascending: false }).range(from, to);
 
 // Ejecutar
-const { data: impresoras = [], error } = await query;
-if (error) console.error('Error supabase:', error);
+const { data, error } = await query;
+// Blindamos: nunca dejar que impresoras sea null/undefined para evitar .length de null
+const impresoras = Array.isArray(data) ? data : [];
+if (error) console.error('Error supabase:', error, { by, q });
 ---
 
 <BasePrivateLayout>
   <div class="container mt-4">
 
-    <!-- Filtros -->
-    <form method="get" class="row g-2 align-items-end mb-3" id="filterForm">
-      <div
-        class="col-12 col-sm-6 col-md-auto"
-        id="q-container"
-        data-estados={encodeURIComponent(JSON.stringify(ESTADOS))}
-      >
-        {by === 'estado' ? (
-          <!-- Si el filtro es por estado, mostramos un select con opciones predefinidas -->
-          <select name="q" class="form-select">
-            <option value="">Seleccioná estado…</option>
-            {ESTADOS.map((e) => (
-              <option value={e} selected={q === e}>{e}</option>
-            ))}
-          </select>
-        ) : (
-          <!-- Si no es estado, mostramos el input de texto -->
-          <input
-            type="text"
-            name="q"
-            value={Astro.url.searchParams.get('q') || ''}
-            placeholder="Buscar…"
-            class="form-control"
-          />
-        )}
-      </div>
-
-      <div class="col-12 col-sm-6 col-md-auto">
-        <select name="by" class="form-select" id="by-select">
-          <option value="id" selected={by === 'id'}>ID</option>
-          <option value="ticket" selected={by === 'ticket'}>Ticket</option>
-          <option value="cliente" selected={by === 'cliente'}>Cliente</option>
-          <option value="estado" selected={by === 'estado'}>Estado</option>
-          <option value="maquina" selected={by === 'maquina'}>Máquina</option>
-        </select>
-      </div>
-
-      <!-- Botones: centrados en móvil, alineados a la izquierda en md+ -->
-      <div class="col-12 col-md-auto d-flex justify-content-center justify-content-md-start gap-2 mt-2 mt-md-0">
-        <button class="btn btn-primary" type="submit">Filtrar</button>
-        <a href="/dashboard" class="btn btn-outline-secondary">Limpiar</a>
-      </div>
-
-      <input type="hidden" name="page" value="1" />
-    </form>
-
-    {impresoras && impresoras.length > 0 ? (
+    <!-- Resultados -->
+    {Array.isArray(impresoras) && impresoras.length > 0 ? (
       <div class="row g-4">
         {impresoras.map((item: any) => (
           <div class="col-sm-6 col-md-4 col-lg-3">
@@ -184,7 +150,7 @@ if (error) console.error('Error supabase:', error);
         </a>
       )}
       <span class="align-self-center">Página {currentPage}</span>
-      {impresoras.length === itemsPerPage && (
+      {Array.isArray(impresoras) && impresoras.length === itemsPerPage && (
         <a
           href={`?${new URLSearchParams({
             q,
@@ -199,11 +165,4 @@ if (error) console.error('Error supabase:', error);
     </div>
 
   </div>
-
-  <!-- Pasamos ESTADOS del servidor al cliente como JSON seguro -->
-  <script type="application/json" id="estados-data">{JSON.stringify(ESTADOS)}</script>
-
-  <!-- Cargamos JS externo para actualizar el campo en vivo -->
-  <!-- Los archivos dentro de /public se sirven desde la raíz: /scripts/... -->
-  <script defer src="/scripts/form-actualizar-filtro.js"></script>
 </BasePrivateLayout>
