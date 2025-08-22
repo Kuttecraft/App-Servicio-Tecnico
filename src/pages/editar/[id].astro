@@ -20,7 +20,7 @@ interface EquipoCompleto {
     dni_cuit: string | null;
     correo_electronico: string | null;
     whatsapp: string | null;
-    comentario: string | null;
+    comentarios: string | null; // columna real en schema
   };
 
   tecnicos?: { nombre: string; apellido: string };
@@ -35,7 +35,7 @@ const { data } = await supabase
   .from('tickets_mian')
   .select(`
     id, ticket, estado, marca_temporal, fecha_de_reparacion, tecnico_id, cliente_id, impresora_id, imagen, imagen_ticket, imagen_extra, notas_del_tecnico,
-    cliente:cliente_id (dni_cuit, correo_electronico, whatsapp, comentario),
+    cliente:cliente_id (dni_cuit, correo_electronico, whatsapp, comentarios),
     tecnicos:tecnico_id (nombre, apellido),
     impresoras:impresora_id (modelo),
     delivery (pagado, cotizar_delivery, informacion_adicional_delivery),
@@ -53,12 +53,21 @@ const equipo = {
   presupuestos: Array.isArray(data?.presupuestos) ? data?.presupuestos[0] : data?.presupuestos,
 } as EquipoCompleto;
 
-/* ✅ Lista de estados oficial (misma que en "crear ticket") */
+/* Lista de estados */
 const estados = [
   "Retirar","Presupuestar","Enviar presupuesto","P. Enviado",
   "Reparación","Prueba","Lista","Entregada",
   "Feedback Enviado","Archivada","No realizada"
 ];
+
+/* Fallbacks a Storage si imagen* es NULL en DB */
+const urlMain   = equipo?.imagen        || supabase.storage.from('imagenes').getPublicUrl(`public/${id}.webp`).data.publicUrl;
+const urlTicket = equipo?.imagen_ticket || supabase.storage.from('imagenes').getPublicUrl(`public/${id}_ticket.webp`).data.publicUrl;
+const urlExtra  = equipo?.imagen_extra  || supabase.storage.from('imagenes').getPublicUrl(`public/${id}_extra.webp`).data.publicUrl;
+
+// valores controlados para selects booleanos
+const valorCubreGarantia = (equipo?.presupuestos?.cubre_garantia === 'true') ? 'true' : 'false';
+const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
 ---
 
 <BasePrivateLayout>
@@ -68,20 +77,22 @@ const estados = [
     {equipo ? (
       <form
         method="POST"
-        action={`/api/actualizarTicket?id=${equipo.id}`}
+        action={`/api/actualizarTicket?id=${encodeURIComponent(String(equipo.id))}`}
         enctype="multipart/form-data"
         class="card p-4 shadow-sm"
         style="max-width: 900px; margin: auto;"
         id="form-editar-equipo"
       >
+        <!-- fuerza el id también por query además de los hidden -->
+        <input type="hidden" name="ticketId" value={String(equipo.id)} />
+        <input type="hidden" name="id"        value={String(equipo.id)} />
+
         <div class="row g-3">
-          {/* Campos principales */}
           <div class="col-md-6">
             <label class="form-label">Estado</label>
-            {/* ⬇️ Antes era <input type="text">. Ahora usamos un <select> con la lista fija */}
-            <select name="estado" class="form-select" required>
+            <select name="estado" class="form-select" required value={equipo.estado || ''}>
               {estados.map((op) => (
-                <option value={op} selected={op === equipo.estado}>{op}</option>
+                <option value={op}>{op}</option>
               ))}
             </select>
           </div>
@@ -93,7 +104,7 @@ const estados = [
 
           <div class="col-md-6">
             <label class="form-label">Fecha formulario</label>
-            <input name="fechaFormulario" type="date" class="form-control" value={equipo.marca_temporal?.slice(0, 10)} />
+            <input name="fechaFormulario" type="date" class="form-control" value={equipo.marca_temporal?.slice(0, 10) || ''} />
           </div>
 
           <div class="col-md-6">
@@ -108,12 +119,12 @@ const estados = [
 
           <div class="col-md-12">
             <label class="form-label">Comentarios</label>
-            <textarea name="comentarios" class="form-control">{equipo.cliente?.comentario || ''}</textarea>
+            <textarea name="comentarios" class="form-control">{equipo.cliente?.comentarios || ''}</textarea>
           </div>
 
           <div class="col-md-6">
             <label class="form-label">¿Cubre garantía?</label>
-            <select name="cubreGarantia" class="form-select" value={equipo.presupuestos?.cubre_garantia === 'true' ? 'true' : 'false'}>
+            <select name="cubreGarantia" class="form-select" value={valorCubreGarantia}>
               <option value="true">Sí</option>
               <option value="false">No</option>
             </select>
@@ -121,7 +132,7 @@ const estados = [
 
           <div class="col-md-6">
             <label class="form-label">¿Cobrado?</label>
-            <select name="cobrado" class="form-select" value={equipo.delivery?.pagado === 'true' ? 'true' : 'false'}>
+            <select name="cobrado" class="form-select" value={valorCobrado}>
               <option value="true">Sí</option>
               <option value="false">No</option>
             </select>
@@ -172,15 +183,16 @@ const estados = [
             <input name="timestampListo" type="date" class="form-control" value={equipo.fecha_de_reparacion?.slice(0, 10) || ''} />
           </div>
 
-          {/* Imagen equipo (principal) */}
+          {/* Imagen principal */}
           <div class="col-md-12">
             <h6 class="mt-3">Imagen principal</h6>
             <div class="mb-3 d-flex flex-column align-items-center" style="gap: 1rem;">
               <div class="rounded shadow-sm border overflow-hidden" style="max-width: 320px; max-height: 320px; border-radius: 15px;">
                 <img
                   id="img-actual-o-preview"
-                  src={equipo.imagen || '/logo.webp'}
+                  src={urlMain}
                   alt="Imagen actual"
+                  onerror="this.onerror=null;this.src='/logo.webp';"
                   class="img-fluid"
                   style="width: 100%; height: 100%; object-fit: cover;"
                   loading="lazy"
@@ -198,15 +210,16 @@ const estados = [
             </div>
           </div>
 
-          {/* Imagen de ticket */}
+          {/* Imagen del ticket */}
           <div class="col-md-12">
             <h6 class="mt-4">Imagen del ticket</h6>
             <div class="mb-3 d-flex flex-column align-items-center" style="gap: 1rem;">
               <div class="rounded shadow-sm border overflow-hidden" style="max-width: 320px; max-height: 320px; border-radius: 15px;">
                 <img
                   id="img-ticket-preview"
-                  src={equipo.imagen_ticket || '/logo.webp'}
+                  src={urlTicket}
                   alt="Imagen ticket"
+                  onerror="this.onerror=null;this.src='/logo.webp';"
                   class="img-fluid"
                   style="width: 100%; height: 100%; object-fit: cover;"
                   loading="lazy"
@@ -230,8 +243,9 @@ const estados = [
               <div class="rounded shadow-sm border overflow-hidden" style="max-width: 320px; max-height: 320px; border-radius: 15px;">
                 <img
                   id="img-extra-preview"
-                  src={equipo.imagen_extra || '/logo.webp'}
+                  src={urlExtra}
                   alt="Imagen extra"
+                  onerror="this.onerror=null;this.src='/logo.webp';"
                   class="img-fluid"
                   style="width: 100%; height: 100%; object-fit: cover;"
                   loading="lazy"
@@ -254,9 +268,6 @@ const estados = [
     )}
   </div>
 
-  <!-- Compresión (si la usás en tu JS) -->
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
-
-  <!-- Lógica separada para manejar 3 imágenes -->
   <script src="/scripts/form-mas-imagenes.js?v=1" defer></script>
 </BasePrivateLayout>
