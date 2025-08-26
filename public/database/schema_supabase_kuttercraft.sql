@@ -177,7 +177,7 @@ CREATE TABLE delivery (
 */
 /* Esta es aparte 
 -- 7. Permisos de usuario (por técnico)
-CREATE TABLE usuarios_permisos (
+CREATE TABLE usuarios_perfil (
     id BIGSERIAL PRIMARY KEY,
     tecnico_id BIGINT NOT NULL REFERENCES tecnicos(id) ON DELETE CASCADE,
     rol TEXT NOT NULL DEFAULT 'tecnico',

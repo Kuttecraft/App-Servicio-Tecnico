@@ -1,11 +1,13 @@
-import type { User } from '@clerk/backend';
+/// <reference types="astro/client" />
 
-declare module "astro" {
+declare namespace App {
   interface Locals {
-    user?: User;
     email?: string;
-    authStatus?: string;
-    currentUser?: () => Promise<User | null>;
-    perfil?: any; 
+    perfil?: {
+      rol?: string;
+      admin?: boolean;
+      activo?: boolean;
+      [k: string]: any;
+    };
   }
 }

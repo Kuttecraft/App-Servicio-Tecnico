@@ -5,7 +5,12 @@ import { formatearFecha, booleanATexto } from '../../lib/utils';
 
 const { id } = Astro.params as { id: string };
 
-// Obtener el ticket con joins a cliente, técnico y delivery
+// Perfil inyectado por el middleware
+type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
+const perfil = (Astro.locals as any).perfil as Perfil | undefined;
+const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
+
+// Ticket + joins
 const { data, error } = await supabase
   .from('tickets_mian')
   .select(`
@@ -29,14 +34,13 @@ const { data, error } = await supabase
 
 const equipo = data;
 
-// Lógica de prioridad para imagen principal
+// Imagen principal y miniaturas
 const imagenPrincipal =
   equipo?.imagen_ticket ||
   equipo?.imagen ||
   equipo?.imagen_extra ||
   '/logo.webp';
 
-// Construyo la lista de imágenes disponibles (sin nulls/undefined/duplicados)
 const imagenes: string[] = Array.from(
   new Set(
     [equipo?.imagen_ticket, equipo?.imagen, equipo?.imagen_extra].filter(Boolean) as string[]
@@ -62,12 +66,15 @@ const imagenes: string[] = Array.from(
       <!-- Cabecera -->
       <div class="card-header bg-white d-flex align-items-center justify-content-between">
         <h3 class="h5 mb-0 fw-bold text-primary">Detalle del equipo</h3>
-        <button
-          class="btn btn-sm btn-outline-danger d-flex align-items-center"
-          onclick={`eliminarTicket('${equipo.id}')`}
-          title="Eliminar ticket">
-          <i class="bi bi-trash"></i>
-        </button>
+
+        {isAdmin && (
+          <button
+            class="btn btn-sm btn-outline-danger d-flex align-items-center"
+            onclick={`eliminarTicket('${equipo.id}')`}
+            title="Eliminar ticket">
+            <i class="bi bi-trash"></i>
+          </button>
+        )}
       </div>
 
       <div class="card-body">
@@ -115,19 +122,21 @@ const imagenes: string[] = Array.from(
           </div>
         </div>
 
-        <!-- Botones -->
-        <div class="row mt-4">
-          <div class="col-6 d-flex justify-content-start">
-            <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm w-100">
-              <i class="bi bi-receipt"></i> Añadir presupuesto
-            </a>
+        <!-- Botones SOLO admin -->
+        {isAdmin && (
+          <div class="row mt-4">
+            <div class="col-6 d-flex justify-content-start">
+              <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm w-100">
+                <i class="bi bi-receipt"></i> Añadir presupuesto
+              </a>
+            </div>
+            <div class="col-6 d-flex justify-content-end">
+              <a href={`/delivery/${equipo.id}`} class="btn btn-outline-success btn-sm w-100">
+                <i class="bi bi-truck"></i> Añadir delivery
+              </a>
+            </div>
           </div>
-          <div class="col-6 d-flex justify-content-end">
-            <a href={`/delivery/${equipo.id}`} class="btn btn-outline-success btn-sm w-100">
-              <i class="bi bi-truck"></i> Añadir delivery
-            </a>
-          </div>
-        </div>
+        )}
 
         {!equipo && (
           <div class="alert alert-danger mt-4">No se encontró el equipo con ID: {id}</div>
@@ -136,22 +145,23 @@ const imagenes: string[] = Array.from(
     </div>
   </div>
 
-  <script>
-    (window as any).eliminarTicket = async function(id) {
-      if (!confirm("¿Estás seguro de que querés eliminar este ticket? Esta acción no se puede deshacer.")) return;
-      const res = await fetch(`/api/eliminarTicket?id=${id}`, { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        alert("Ticket eliminado correctamente.");
-        window.location.href = '/dashboard';
-      } else {
-        alert("Error al eliminar: " + data.error);
+  <!-- Solo inyectamos la función si es admin -->
+  {isAdmin && (
+    <script>
+      (window as any).eliminarTicket = async function(id) {
+        if (!confirm("¿Estás seguro de que querés eliminar este ticket? Esta acción no se puede deshacer.")) return;
+        const res = await fetch(`/api/eliminarTicket?id=${id}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          alert("Ticket eliminado correctamente.");
+          window.location.href = '/dashboard';
+        } else {
+          alert("Error al eliminar: " + data.error);
+        }
       }
-    }
-  </script>
+    </script>
+  )}
 
-  <!-- Zoom/overlay que ya usabas -->
   <script src="/scripts/form-ampliar-imagen.js" defer></script>
-  <!-- ✅ Swap de miniaturas a principal -->
-<script src="/scripts/form-galeria.js?v=1" defer></script>
+  <script src="/scripts/form-galeria.js?v=1" defer></script>
 </BasePrivateLayout>
