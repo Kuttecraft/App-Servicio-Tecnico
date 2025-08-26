@@ -20,7 +20,7 @@ interface EquipoCompleto {
     dni_cuit: string | null;
     correo_electronico: string | null;
     whatsapp: string | null;
-    comentarios: string | null; // columna real en schema
+    comentarios: string | null;
   };
 
   tecnicos?: { nombre: string; apellido: string };
@@ -30,6 +30,10 @@ interface EquipoCompleto {
 }
 
 const { id } = Astro.params;
+
+// ✅ admin desde el middleware
+const perfil = (Astro.locals as any).perfil;
+const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 
 const { data } = await supabase
   .from('tickets_mian')
@@ -83,7 +87,6 @@ const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
         style="max-width: 900px; margin: auto;"
         id="form-editar-equipo"
       >
-        <!-- fuerza el id también por query además de los hidden -->
         <input type="hidden" name="ticketId" value={String(equipo.id)} />
         <input type="hidden" name="id"        value={String(equipo.id)} />
 
@@ -148,15 +151,20 @@ const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
             <input name="linkPresupuesto" type="url" class="form-control" value={equipo.presupuestos?.link_presupuesto || ''} />
           </div>
 
-          <div class="col-md-6">
-            <label class="form-label">Modo delivery</label>
-            <input name="costoDelivery" type="text" class="form-control" value={equipo.delivery?.cotizar_delivery || ''} />
-          </div>
+          {/* ✅ Estos DOS campos solo los ve el ADMIN */}
+          {isAdmin && (
+            <>
+              <div class="col-md-6">
+                <label class="form-label">Modo delivery</label>
+                <input name="costoDelivery" type="text" class="form-control" value={equipo.delivery?.cotizar_delivery || ''} />
+              </div>
 
-          <div class="col-md-6">
-            <label class="form-label">Info delivery</label>
-            <input name="infoDelivery" type="text" class="form-control" value={equipo.delivery?.informacion_adicional_delivery || ''} />
-          </div>
+              <div class="col-md-6">
+                <label class="form-label">Info delivery</label>
+                <input name="infoDelivery" type="text" class="form-control" value={equipo.delivery?.informacion_adicional_delivery || ''} />
+              </div>
+            </>
+          )}
 
           <div class="col-md-6">
             <label class="form-label">DNI/CUIT</label>

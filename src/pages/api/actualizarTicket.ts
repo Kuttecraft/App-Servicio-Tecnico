@@ -1,11 +1,14 @@
+import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
 
-export async function POST(context: RequestContext) {
+export const POST: APIRoute = async ({ request, params, locals }) => {
   try {
-    const req = context.request;
+    // ✅ admin desde el middleware
+    const perfil = (locals as any)?.perfil as { rol?: string; admin?: boolean } | undefined;
+    const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 
     // ================== ID ROBUSTO ==================
-    const formData = await req.formData();
+    const formData = await request.formData();
     let id: string | undefined;
 
     // 1) Body
@@ -19,20 +22,20 @@ export async function POST(context: RequestContext) {
     }
 
     // 2) Params (/api/actualizarTicket/[id])
-    if (!id && context?.params?.id && String(context.params.id).trim()) {
-      id = String(context.params.id).trim();
+    if (!id && params?.id && String(params.id).trim()) {
+      id = String(params.id).trim();
     }
 
     // 3) Query (?id=123)
     if (!id) {
-      const u = new URL(req.url);
+      const u = new URL(request.url);
       const qid = u.searchParams.get('id');
       if (qid && qid.trim()) id = qid.trim();
     }
 
     // 4) Referer (/editar/123)
     if (!id) {
-      const ref = req.headers.get('referer') || req.headers.get('Referrer') || '';
+      const ref = request.headers.get('referer') || request.headers.get('Referrer') || '';
       const m = ref.match(/\/editar\/(\d+)/);
       if (m && m[1]) id = m[1];
     }
@@ -72,12 +75,14 @@ export async function POST(context: RequestContext) {
       dni_cuit: fields.dniCuit || null,
       whatsapp: fields.whatsapp || null,
       correo_electronico: fields.correo || null,
-      comentarios: fields.comentarios ?? null, // columna correcta en tu schema
+      comentarios: fields.comentarios ?? null,
     };
 
+    // ✅ Delivery: construir lo editable por rol
     const datosDeliveryBase = {
       ticket_id: idNum,
       pagado: fields.cobrado === 'true' ? 'true' : 'false',
+      // Estos dos solo serán usados si isAdmin
       cotizar_delivery: fields.costoDelivery || null,
       informacion_adicional_delivery: fields.infoDelivery || null,
     };
@@ -104,12 +109,12 @@ export async function POST(context: RequestContext) {
       if (uploadError) throw new Error(`Error al subir ${campo}: ${uploadError.message}`);
 
       const { data } = supabase.storage.from('imagenes').getPublicUrl(nombreArchivo);
-      datosTicketsMian[campo] = data.publicUrl;
+      (datosTicketsMian as any)[campo] = data.publicUrl;
     };
 
     const borrarImagenCampo = async (nombreArchivo: string, campo: 'imagen'|'imagen_ticket'|'imagen_extra') => {
-      await supabase.storage.from('imagenes').remove([nombreArchivo]); // ignora si no existe
-      datosTicketsMian[campo] = null;
+      await supabase.storage.from('imagenes').remove([nombreArchivo]);
+      (datosTicketsMian as any)[campo] = null;
     };
 
     const mustDelete = (v: string | null | undefined) => v === 'delete' || v === 'true';
@@ -160,23 +165,29 @@ export async function POST(context: RequestContext) {
 
     // ===== delivery: UPDATE -> si no afectó filas -> INSERT
     {
+      // Solo admin puede tocar cotizar_delivery e informacion_adicional_delivery
+      const updPayload: any = { pagado: datosDeliveryBase.pagado };
+      if (isAdmin) {
+        updPayload.cotizar_delivery = datosDeliveryBase.cotizar_delivery;
+        updPayload.informacion_adicional_delivery = datosDeliveryBase.informacion_adicional_delivery;
+      }
+
       const { data: updRows, error: updErr } = await supabase
         .from('delivery')
-        .update({
-          pagado: datosDeliveryBase.pagado,
-          cotizar_delivery: datosDeliveryBase.cotizar_delivery,
-          informacion_adicional_delivery: datosDeliveryBase.informacion_adicional_delivery,
-        })
+        .update(updPayload)
         .eq('ticket_id', idNum)
-        .select('id'); // necesario para saber si afectó filas
+        .select('id');
 
       if (updErr) return jsonError('Error al actualizar delivery: ' + updErr.message, 500);
 
       const affected = Array.isArray(updRows) ? updRows.length : (updRows ? 1 : 0);
       if (affected === 0) {
-        const { error: insErr } = await supabase
-          .from('delivery')
-          .insert(datosDeliveryBase);
+        const insPayload: any = { ticket_id: idNum, pagado: datosDeliveryBase.pagado };
+        if (isAdmin) {
+          insPayload.cotizar_delivery = datosDeliveryBase.cotizar_delivery;
+          insPayload.informacion_adicional_delivery = datosDeliveryBase.informacion_adicional_delivery;
+        }
+        const { error: insErr } = await supabase.from('delivery').insert(insPayload);
         if (insErr) return jsonError('Error al crear delivery: ' + insErr.message, 500);
       }
     }
@@ -198,9 +209,7 @@ export async function POST(context: RequestContext) {
 
       const affected = Array.isArray(updRows) ? updRows.length : (updRows ? 1 : 0);
       if (affected === 0) {
-        const { error: insErr } = await supabase
-          .from('presupuestos')
-          .insert(datosPresupuestoBase);
+        const { error: insErr } = await supabase.from('presupuestos').insert(datosPresupuestoBase);
         if (insErr) return jsonError('Error al crear presupuesto: ' + insErr.message, 500);
       }
     }
@@ -209,18 +218,11 @@ export async function POST(context: RequestContext) {
   } catch (err: any) {
     return jsonError('Error inesperado: ' + (err?.message || String(err)), 500);
   }
-}
+};
 
 function jsonError(message: string, status = 500) {
   return new Response(JSON.stringify({ error: message }), {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
-}
-
-interface RequestContext {
-  request: Request;
-  params: Record<string, string>;
-  url: URL;
-  site: URL | undefined;
 }
