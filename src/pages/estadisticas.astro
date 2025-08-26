@@ -1,0 +1,165 @@
+---
+import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
+
+// ✅ Solo admin
+const perfil = (Astro.locals as any).perfil;
+const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
+if (!isAdmin) {
+  return Astro.redirect('/no-autorizado');
+}
+
+// Mes por defecto: YYYY-MM
+const now = new Date();
+const yyyy = now.getFullYear();
+const mm = String(now.getMonth() + 1).padStart(2, '0');
+const defaultMonth = `${yyyy}-${mm}`;
+---
+
+<BasePrivateLayout>
+  <div class="container mt-4" style="max-width: 980px;">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+      <h1 class="h4 m-0">Estadísticas</h1>
+
+      <div class="d-flex align-items-center gap-2">
+        <label for="mes" class="form-label m-0">Mes</label>
+        <input id="mes" type="month" class="form-control" style="min-width: 200px;" value={defaultMonth} />
+        <button id="btn-actualizar" class="btn btn-primary">Actualizar</button>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h6 text-muted mb-3">Distribución por modelo (%)</h2>
+        <div class="ratio ratio-1x1" style="max-width: 560px; margin: 0 auto;">
+          <canvas id="chartModelos"></canvas>
+        </div>
+
+        <div id="panel-info" class="mt-4">
+          <div id="resumen" class="small text-muted"></div>
+          <div id="tabla" class="table-responsive mt-2" style="display:none;">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Modelo</th>
+                  <th class="text-end">Cantidad</th>
+                  <th class="text-end">Porcentaje</th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="sin-datos" class="alert alert-warning mt-3 d-none">
+          No hay datos para el mes seleccionado.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+
+  <script is:inline>
+    let chart;
+    const $mes = document.getElementById('mes');
+    const $btn = document.getElementById('btn-actualizar');
+    const $resumen = document.getElementById('resumen');
+    const $tbody = document.getElementById('tbody');
+    const $tabla = document.getElementById('tabla');
+    const $sinDatos = document.getElementById('sin-datos');
+
+    async function fetchDatos(year, month) {
+      // 👇 Como tu endpoint está en /src/pages/api/estadisticas.ts
+      const url = `/api/estadisticas?year=${year}&month=${month}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Error consultando estadísticas');
+      return res.json();
+    }
+
+    function renderTabla(items, total) {
+      $tbody.innerHTML = '';
+      items.forEach(({ modelo, count, porcentaje }) => {
+        const tr = document.createElement('tr');
+        const tdM = document.createElement('td');
+        const tdC = document.createElement('td');
+        const tdP = document.createElement('td');
+        tdM.textContent = modelo;
+        tdC.textContent = count.toString();
+        tdC.className = 'text-end';
+        tdP.textContent = porcentaje.toFixed(1) + '%';
+        tdP.className = 'text-end';
+        tr.append(tdM, tdC, tdP);
+        $tbody.append(tr);
+      });
+      $resumen.textContent = `Total de ingresos del mes: ${total}`;
+      $tabla.style.display = items.length ? '' : 'none';
+    }
+
+    function renderChart(labels, data) {
+      const ctx = document.getElementById('chartModelos');
+      if (chart) chart.destroy();
+      chart = new window.Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels,
+          datasets: [{
+            data,
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom' },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const label = context.label || '';
+                  const value = context.parsed || 0;
+                  const sum = context.dataset.data.reduce((a, b) => a + b, 0);
+                  const pct = sum ? (value / sum) * 100 : 0;
+                  return `${label}: ${value} (${pct.toFixed(1)}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    async function cargar() {
+      try {
+        const val = $mes.value; // yyyy-mm
+        const [yearStr, monthStr] = val.split('-');
+        const year = parseInt(yearStr, 10);
+        const month = parseInt(monthStr, 10);
+
+        const { total, items } = await fetchDatos(year, month);
+
+        if (!total) {
+          $sinDatos.classList.remove('d-none');
+          renderTabla([], 0);
+          if (chart) chart.destroy();
+          return;
+        } else {
+          $sinDatos.classList.add('d-none');
+        }
+
+        items.sort((a, b) => b.count - a.count);
+        const labels = items.map(i => i.modelo);
+        const data = items.map(i => i.count);
+
+        renderTabla(items, total);
+        renderChart(labels, data);
+      } catch (e) {
+        console.error(e);
+        $sinDatos.classList.remove('d-none');
+      }
+    }
+
+    $btn.addEventListener('click', cargar);
+    $mes.addEventListener('change', cargar);
+    window.addEventListener('DOMContentLoaded', cargar);
+  </script>
+</BasePrivateLayout>
