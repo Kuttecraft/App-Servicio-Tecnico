@@ -20,16 +20,26 @@ const defaultMonth = `${yyyy}-${mm}`;
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
       <h1 class="h4 m-0">Estadísticas</h1>
 
-      <div class="d-flex align-items-center gap-2">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
         <label for="mes" class="form-label m-0">Mes</label>
-        <input id="mes" type="month" class="form-control" style="min-width: 200px;" value={defaultMonth} />
+        <input id="mes" type="month" class="form-control" style="min-width: 180px;" value={defaultMonth} />
+
+        <label for="group" class="form-label m-0">Agrupar por</label>
+        <select id="group" class="form-select" style="min-width: 160px;">
+          <option value="modelo" selected>Modelo</option>
+          <option value="estado">Estado</option>
+        </select>
+
         <button id="btn-actualizar" class="btn btn-primary">Actualizar</button>
       </div>
     </div>
 
     <div class="card shadow-sm">
       <div class="card-body">
-        <h2 class="h6 text-muted mb-3">Distribución por modelo (%)</h2>
+        <h2 class="h6 text-muted mb-3">
+          Distribución por <span id="chartTitle">modelo</span> (%)
+        </h2>
+
         <div class="ratio ratio-1x1" style="max-width: 560px; margin: 0 auto;">
           <canvas id="chartModelos"></canvas>
         </div>
@@ -40,7 +50,7 @@ const defaultMonth = `${yyyy}-${mm}`;
             <table class="table table-sm">
               <thead>
                 <tr>
-                  <th>Modelo</th>
+                  <th id="thLabel">Modelo</th>
                   <th class="text-end">Cantidad</th>
                   <th class="text-end">Porcentaje</th>
                 </tr>
@@ -63,33 +73,32 @@ const defaultMonth = `${yyyy}-${mm}`;
   <script is:inline>
     let chart;
     const $mes = document.getElementById('mes');
+    const $group = document.getElementById('group');
     const $btn = document.getElementById('btn-actualizar');
     const $resumen = document.getElementById('resumen');
     const $tbody = document.getElementById('tbody');
     const $tabla = document.getElementById('tabla');
     const $sinDatos = document.getElementById('sin-datos');
+    const $chartTitle = document.getElementById('chartTitle');
+    const $thLabel = document.getElementById('thLabel');
 
-    async function fetchDatos(year, month) {
-      // 👇 Como tu endpoint está en /src/pages/api/estadisticas.ts
-      const url = `/api/estadisticas?year=${year}&month=${month}`;
+    async function fetchDatos(year, month, group) {
+      const url = `/api/estadisticas?year=${year}&month=${month}&group=${encodeURIComponent(group)}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error('Error consultando estadísticas');
       return res.json();
     }
 
-    function renderTabla(items, total) {
+    function renderTabla(items, total, campoLabel) {
       $tbody.innerHTML = '';
-      items.forEach(({ modelo, count, porcentaje }) => {
+      $thLabel.textContent = campoLabel;
+      items.forEach(({ label, count, porcentaje }) => {
         const tr = document.createElement('tr');
-        const tdM = document.createElement('td');
-        const tdC = document.createElement('td');
-        const tdP = document.createElement('td');
-        tdM.textContent = modelo;
-        tdC.textContent = count.toString();
-        tdC.className = 'text-end';
-        tdP.textContent = porcentaje.toFixed(1) + '%';
-        tdP.className = 'text-end';
-        tr.append(tdM, tdC, tdP);
+        tr.innerHTML = `
+          <td>${label}</td>
+          <td class="text-end">${count}</td>
+          <td class="text-end">${porcentaje.toFixed(1)}%</td>
+        `;
         $tbody.append(tr);
       });
       $resumen.textContent = `Total de ingresos del mes: ${total}`;
@@ -134,12 +143,18 @@ const defaultMonth = `${yyyy}-${mm}`;
         const [yearStr, monthStr] = val.split('-');
         const year = parseInt(yearStr, 10);
         const month = parseInt(monthStr, 10);
+        const group = $group.value; // 'modelo' | 'estado'
 
-        const { total, items } = await fetchDatos(year, month);
+        // título/encabezado
+        const campoLabel = group === 'estado' ? 'Estado' : 'Modelo';
+        $chartTitle.textContent = group;
+        $thLabel.textContent = campoLabel;
+
+        const { total, items } = await fetchDatos(year, month, group);
 
         if (!total) {
           $sinDatos.classList.remove('d-none');
-          renderTabla([], 0);
+          renderTabla([], 0, campoLabel);
           if (chart) chart.destroy();
           return;
         } else {
@@ -147,10 +162,10 @@ const defaultMonth = `${yyyy}-${mm}`;
         }
 
         items.sort((a, b) => b.count - a.count);
-        const labels = items.map(i => i.modelo);
+        const labels = items.map(i => i.label);
         const data = items.map(i => i.count);
 
-        renderTabla(items, total);
+        renderTabla(items, total, campoLabel);
         renderChart(labels, data);
       } catch (e) {
         console.error(e);
@@ -160,6 +175,7 @@ const defaultMonth = `${yyyy}-${mm}`;
 
     $btn.addEventListener('click', cargar);
     $mes.addEventListener('change', cargar);
+    $group.addEventListener('change', cargar);
     window.addEventListener('DOMContentLoaded', cargar);
   </script>
 </BasePrivateLayout>
