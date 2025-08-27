@@ -13,7 +13,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
     });
   }
 
-  // Parámetros: ?year=YYYY&month=M y ?group=modelo|estado
+  // Parámetros
   let year = Number(url.searchParams.get('year'));
   let month = Number(url.searchParams.get('month'));
   const period = url.searchParams.get('period'); // opcional: 2025-08
@@ -25,7 +25,6 @@ export const GET: APIRoute = async ({ url, locals }) => {
     year = y;
     month = m;
   }
-
   if (!year || !month || month < 1 || month > 12) {
     return new Response(JSON.stringify({ error: 'Parámetros inválidos. Use year+month o period=YYYY-MM.' }), {
       status: 400,
@@ -33,14 +32,11 @@ export const GET: APIRoute = async ({ url, locals }) => {
     });
   }
 
-  // Filtrado por MES en formato M/D/YYYY (puede haber registros con día/hora extra -> usamos %)
-  // Para meses 1..9 contemplamos ambas variantes: "8/..." y "08/..." por si hubiera cero a la izquierda.
-  const mNoPad = String(month);             // 8
+  // Filtrado por MES en formato M/D/YYYY (y MM/D/YYYY por si acaso)
+  const mNoPad = String(month);                 // 8
   const mPad   = String(month).padStart(2,'0'); // 08
   let orExpr = `marca_temporal.ilike.${mNoPad}/%/${year}%`;
-  if (mNoPad !== mPad) {
-    orExpr += `,marca_temporal.ilike.${mPad}/%/${year}%`;
-  }
+  if (mNoPad !== mPad) orExpr += `,marca_temporal.ilike.${mPad}/%/${year}%`;
 
   const { data, error } = await supabase
     .from('tickets_mian')
@@ -59,7 +55,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
     });
   }
 
-  // Agrupar por el campo solicitado
+  // Agrupar para gráfico (TOP 10)
   const counts = new Map<string, number>();
   for (const row of (data ?? [])) {
     let key: string;
@@ -72,7 +68,6 @@ export const GET: APIRoute = async ({ url, locals }) => {
   }
 
   const total = (data ?? []).length;
-
   const itemsAll = Array.from(counts.entries())
     .map(([label, count]) => ({
       label,
@@ -81,11 +76,25 @@ export const GET: APIRoute = async ({ url, locals }) => {
     }))
     .sort((a, b) => b.count - a.count);
 
-  // ✅ Mantener solo los 10 primeros valores
   const TOP_N = 10;
   const items = itemsAll.slice(0, TOP_N);
 
-  return new Response(JSON.stringify({ total, items, group }), {
+  // 👉 IDs por estado (todos, sin top) — solo cuando group === 'estado'
+  let idsByEstado: Record<string, number[]> | undefined;
+  if (group === 'estado') {
+    idsByEstado = {};
+    for (const row of (data ?? [])) {
+      const estado = (row as any)?.estado?.toString().trim() || 'Sin estado';
+      if (!idsByEstado[estado]) idsByEstado[estado] = [];
+      idsByEstado[estado].push((row as any).id as number);
+    }
+    // ordenar IDs asc
+    for (const k of Object.keys(idsByEstado)) {
+      idsByEstado[k] = Array.from(new Set(idsByEstado[k])).sort((a, b) => a - b);
+    }
+  }
+
+  return new Response(JSON.stringify({ total, items, group, idsByEstado }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });

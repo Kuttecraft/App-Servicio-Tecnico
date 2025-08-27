@@ -63,6 +63,12 @@ const defaultMonth = `${yyyy}-${mm}`;
         <div id="sin-datos" class="alert alert-warning mt-3 d-none">
           No hay datos para el mes seleccionado.
         </div>
+
+        <!-- 👉 NUEVO: IDs por estado -->
+        <div id="ids-estado-wrap" class="mt-4 d-none">
+          <h3 class="h6 mb-2">ID de las máquinas según estado</h3>
+          <div id="ids-estado-list" class="small"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -81,6 +87,10 @@ const defaultMonth = `${yyyy}-${mm}`;
     const $sinDatos = document.getElementById('sin-datos');
     const $chartTitle = document.getElementById('chartTitle');
     const $thLabel = document.getElementById('thLabel');
+
+    // NUEVO
+    const $idsWrap = document.getElementById('ids-estado-wrap');
+    const $idsList = document.getElementById('ids-estado-list');
 
     async function fetchDatos(year, month, group) {
       const url = `/api/estadisticas?year=${year}&month=${month}&group=${encodeURIComponent(group)}`;
@@ -112,10 +122,7 @@ const defaultMonth = `${yyyy}-${mm}`;
         type: 'pie',
         data: {
           labels,
-          datasets: [{
-            data,
-            borderWidth: 1
-          }]
+          datasets: [{ data, borderWidth: 1 }]
         },
         options: {
           responsive: true,
@@ -137,6 +144,22 @@ const defaultMonth = `${yyyy}-${mm}`;
       });
     }
 
+    // 👉 NUEVO: pintar IDs por estado
+    function renderIdsByEstado(idsByEstado) {
+      if (!idsByEstado || Object.keys(idsByEstado).length === 0) {
+        $idsWrap.classList.add('d-none');
+        $idsList.innerHTML = '';
+        return;
+      }
+      const estados = Object.keys(idsByEstado).sort((a,b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+      const html = estados.map(est => {
+        const ids = idsByEstado[est] || [];
+        return `<div class="mb-1"><strong>${est}:</strong> ${ids.join(', ') || '—'}</div>`;
+      }).join('');
+      $idsList.innerHTML = html;
+      $idsWrap.classList.remove('d-none');
+    }
+
     async function cargar() {
       try {
         const val = $mes.value; // yyyy-mm
@@ -150,12 +173,14 @@ const defaultMonth = `${yyyy}-${mm}`;
         $chartTitle.textContent = group;
         $thLabel.textContent = campoLabel;
 
-        const { total, items } = await fetchDatos(year, month, group);
+        const { total, items, idsByEstado } = await fetchDatos(year, month, group);
 
         if (!total) {
           $sinDatos.classList.remove('d-none');
           renderTabla([], 0, campoLabel);
           if (chart) chart.destroy();
+          // ocultar bloque IDs
+          renderIdsByEstado(null);
           return;
         } else {
           $sinDatos.classList.add('d-none');
@@ -167,9 +192,17 @@ const defaultMonth = `${yyyy}-${mm}`;
 
         renderTabla(items, total, campoLabel);
         renderChart(labels, data);
+
+        // 👉 mostrar IDs por estado solo si corresponde
+        if (group === 'estado') {
+          renderIdsByEstado(idsByEstado);
+        } else {
+          renderIdsByEstado(null);
+        }
       } catch (e) {
         console.error(e);
         $sinDatos.classList.remove('d-none');
+        renderIdsByEstado(null);
       }
     }
 
