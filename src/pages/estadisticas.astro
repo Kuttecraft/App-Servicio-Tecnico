@@ -64,7 +64,7 @@ const defaultMonth = `${yyyy}-${mm}`;
           No hay datos para el mes seleccionado.
         </div>
 
-        <!-- 👉 NUEVO: IDs por estado -->
+        <!-- 👉 IDs por estado (solo visible cuando group === 'estado') -->
         <div id="ids-estado-wrap" class="mt-4 d-none">
           <h3 class="h6 mb-2">ID de las máquinas según estado</h3>
           <div id="ids-estado-list" class="small"></div>
@@ -73,142 +73,203 @@ const defaultMonth = `${yyyy}-${mm}`;
     </div>
   </div>
 
+  <!-- Estilos para los links de IDs -->
+  <style is:inline>
+    #ids-estado-list .id-link {
+      text-decoration: none;
+      border: 1px solid rgba(0,0,0,.08);
+      padding: 0 .35rem;
+      border-radius: .35rem;
+      margin-right: .25rem;
+      display: inline-block;
+    }
+    #ids-estado-list .id-link:hover {
+      background: rgba(13,110,253,.08);
+    }
+  </style>
+
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
 
   <script is:inline>
-    let chart;
-    const $mes = document.getElementById('mes');
-    const $group = document.getElementById('group');
-    const $btn = document.getElementById('btn-actualizar');
-    const $resumen = document.getElementById('resumen');
-    const $tbody = document.getElementById('tbody');
-    const $tabla = document.getElementById('tabla');
-    const $sinDatos = document.getElementById('sin-datos');
-    const $chartTitle = document.getElementById('chartTitle');
-    const $thLabel = document.getElementById('thLabel');
+    (function () {
+      var chart;
+      var $mes = document.getElementById('mes');
+      var $group = document.getElementById('group');
+      var $btn = document.getElementById('btn-actualizar');
+      var $resumen = document.getElementById('resumen');
+      var $tbody = document.getElementById('tbody');
+      var $tabla = document.getElementById('tabla');
+      var $sinDatos = document.getElementById('sin-datos');
+      var $chartTitle = document.getElementById('chartTitle');
+      var $thLabel = document.getElementById('thLabel');
 
-    // NUEVO
-    const $idsWrap = document.getElementById('ids-estado-wrap');
-    const $idsList = document.getElementById('ids-estado-list');
+      // NUEVO: contenedor de IDs por estado
+      var $idsWrap = document.getElementById('ids-estado-wrap');
+      var $idsList = document.getElementById('ids-estado-list');
 
-    async function fetchDatos(year, month, group) {
-      const url = `/api/estadisticas?year=${year}&month=${month}&group=${encodeURIComponent(group)}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Error consultando estadísticas');
-      return res.json();
-    }
+      function fetchDatos(year, month, group) {
+        var url = '/api/estadisticas?year=' + year + '&month=' + month + '&group=' + encodeURIComponent(group);
+        return fetch(url).then(function (res) {
+          if (!res.ok) throw new Error('Error consultando estadísticas');
+          return res.json();
+        });
+      }
 
-    function renderTabla(items, total, campoLabel) {
-      $tbody.innerHTML = '';
-      $thLabel.textContent = campoLabel;
-      items.forEach(({ label, count, porcentaje }) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${label}</td>
-          <td class="text-end">${count}</td>
-          <td class="text-end">${porcentaje.toFixed(1)}%</td>
-        `;
-        $tbody.append(tr);
-      });
-      $resumen.textContent = `Total de ingresos del mes: ${total}`;
-      $tabla.style.display = items.length ? '' : 'none';
-    }
+      function renderTabla(items, total, campoLabel) {
+        $tbody.innerHTML = '';
+        $thLabel.textContent = campoLabel;
 
-    function renderChart(labels, data) {
-      const ctx = document.getElementById('chartModelos');
-      if (chart) chart.destroy();
-      chart = new window.Chart(ctx, {
-        type: 'pie',
-        data: {
-          labels,
-          datasets: [{ data, borderWidth: 1 }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { position: 'bottom' },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  const label = context.label || '';
-                  const value = context.parsed || 0;
-                  const sum = context.dataset.data.reduce((a, b) => a + b, 0);
-                  const pct = sum ? (value / sum) * 100 : 0;
-                  return `${label}: ${value} (${pct.toFixed(1)}%)`;
+        items.forEach(function (row) {
+          var tr = document.createElement('tr');
+
+          var tdLabel = document.createElement('td');
+          tdLabel.textContent = row.label;
+
+          var tdCount = document.createElement('td');
+          tdCount.className = 'text-end';
+          tdCount.textContent = String(row.count);
+
+          var tdPct = document.createElement('td');
+          tdPct.className = 'text-end';
+          var pct = (row.porcentaje || 0).toFixed(1) + '%';
+          tdPct.textContent = pct;
+
+          tr.appendChild(tdLabel);
+          tr.appendChild(tdCount);
+          tr.appendChild(tdPct);
+          $tbody.appendChild(tr);
+        });
+
+        $resumen.textContent = 'Total de ingresos del mes: ' + total;
+        $tabla.style.display = items.length ? '' : 'none';
+      }
+
+      function renderChart(labels, data) {
+        var ctx = document.getElementById('chartModelos');
+        if (chart) chart.destroy();
+        chart = new window.Chart(ctx, {
+          type: 'pie',
+          data: {
+            labels: labels,
+            datasets: [{ data: data, borderWidth: 1 }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { position: 'bottom' },
+              tooltip: {
+                callbacks: {
+                  label: function (context) {
+                    var label = context.label || '';
+                    var value = context.parsed || 0;
+                    var sum = context.dataset.data.reduce(function (a, b) { return a + b; }, 0);
+                    var pct = sum ? (value / sum) * 100 : 0;
+                    return label + ': ' + value + ' (' + pct.toFixed(1) + '%)';
+                  }
                 }
               }
             }
           }
-        }
-      });
-    }
-
-    // 👉 NUEVO: pintar IDs por estado
-    function renderIdsByEstado(idsByEstado) {
-      if (!idsByEstado || Object.keys(idsByEstado).length === 0) {
-        $idsWrap.classList.add('d-none');
-        $idsList.innerHTML = '';
-        return;
+        });
       }
-      const estados = Object.keys(idsByEstado).sort((a,b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
-      const html = estados.map(est => {
-        const ids = idsByEstado[est] || [];
-        return `<div class="mb-1"><strong>${est}:</strong> ${ids.join(', ') || '—'}</div>`;
-      }).join('');
-      $idsList.innerHTML = html;
-      $idsWrap.classList.remove('d-none');
-    }
 
-    async function cargar() {
-      try {
-        const val = $mes.value; // yyyy-mm
-        const [yearStr, monthStr] = val.split('-');
-        const year = parseInt(yearStr, 10);
-        const month = parseInt(monthStr, 10);
-        const group = $group.value; // 'modelo' | 'estado'
-
-        // título/encabezado
-        const campoLabel = group === 'estado' ? 'Estado' : 'Modelo';
-        $chartTitle.textContent = group;
-        $thLabel.textContent = campoLabel;
-
-        const { total, items, idsByEstado } = await fetchDatos(year, month, group);
-
-        if (!total) {
-          $sinDatos.classList.remove('d-none');
-          renderTabla([], 0, campoLabel);
-          if (chart) chart.destroy();
-          // ocultar bloque IDs
-          renderIdsByEstado(null);
+      // 👉 NUEVO: pintar IDs por estado como links a /detalle/{id}
+      function renderIdsByEstado(idsByEstado) {
+        if (!idsByEstado || Object.keys(idsByEstado).length === 0) {
+          $idsWrap.classList.add('d-none');
+          $idsList.innerHTML = '';
           return;
-        } else {
-          $sinDatos.classList.add('d-none');
         }
 
-        items.sort((a, b) => b.count - a.count);
-        const labels = items.map(i => i.label);
-        const data = items.map(i => i.count);
+        var estados = Object.keys(idsByEstado).sort(function (a, b) {
+          return a.localeCompare(b, 'es', { sensitivity: 'base' });
+        });
 
-        renderTabla(items, total, campoLabel);
-        renderChart(labels, data);
+        $idsList.innerHTML = '';
+        estados.forEach(function (est) {
+          var ids = idsByEstado[est] || [];
 
-        // 👉 mostrar IDs por estado solo si corresponde
-        if (group === 'estado') {
-          renderIdsByEstado(idsByEstado);
-        } else {
+          var line = document.createElement('div');
+          line.className = 'mb-1';
+
+          var strong = document.createElement('strong');
+          strong.textContent = est + ': ';
+          line.appendChild(strong);
+
+          if (ids.length === 0) {
+            line.appendChild(document.createTextNode('—'));
+          } else {
+            ids.forEach(function (id, idx) {
+              var a = document.createElement('a');
+              a.href = '/detalle/' + id;
+              a.className = 'id-link';
+              a.title = 'Ver ticket ' + id;
+              a.textContent = String(id);
+              line.appendChild(a);
+
+              if (idx < ids.length - 1) {
+                line.appendChild(document.createTextNode(', '));
+              }
+            });
+          }
+
+          $idsList.appendChild(line);
+        });
+
+        $idsWrap.classList.remove('d-none');
+      }
+
+      async function cargar() {
+        try {
+          var val = $mes.value; // yyyy-mm
+          var parts = val.split('-');
+          var year = parseInt(parts[0], 10);
+          var month = parseInt(parts[1], 10);
+          var group = $group.value; // 'modelo' | 'estado'
+
+          var campoLabel = group === 'estado' ? 'Estado' : 'Modelo';
+          $chartTitle.textContent = group;
+          $thLabel.textContent = campoLabel;
+
+          var resp = await fetchDatos(year, month, group);
+          var total = resp.total || 0;
+          var items = resp.items || [];
+          var idsByEstado = resp.idsByEstado || null;
+
+          if (!total) {
+            $sinDatos.classList.remove('d-none');
+            renderTabla([], 0, campoLabel);
+            if (chart) chart.destroy();
+            renderIdsByEstado(null);
+            return;
+          } else {
+            $sinDatos.classList.add('d-none');
+          }
+
+          items.sort(function (a, b) { return b.count - a.count; });
+          var labels = items.map(function (i) { return i.label; });
+          var data = items.map(function (i) { return i.count; });
+
+          renderTabla(items, total, campoLabel);
+          renderChart(labels, data);
+
+          if (group === 'estado') {
+            renderIdsByEstado(idsByEstado);
+          } else {
+            renderIdsByEstado(null);
+          }
+        } catch (e) {
+          console.error(e);
+          $sinDatos.classList.remove('d-none');
           renderIdsByEstado(null);
         }
-      } catch (e) {
-        console.error(e);
-        $sinDatos.classList.remove('d-none');
-        renderIdsByEstado(null);
       }
-    }
 
-    $btn.addEventListener('click', cargar);
-    $mes.addEventListener('change', cargar);
-    $group.addEventListener('change', cargar);
-    window.addEventListener('DOMContentLoaded', cargar);
+      $btn.addEventListener('click', cargar);
+      $mes.addEventListener('change', cargar);
+      $group.addEventListener('change', cargar);
+      window.addEventListener('DOMContentLoaded', cargar);
+    })();
   </script>
 </BasePrivateLayout>
