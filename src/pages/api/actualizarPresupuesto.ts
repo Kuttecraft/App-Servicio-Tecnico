@@ -17,12 +17,10 @@ export async function POST(context: { request: Request }) {
   // Parseo y limpieza
   const fields: Record<string, string> = {};
   formData.forEach((value, key) => {
-    if (typeof value === 'string') {
-      fields[key] = value.trim();
-    }
+    if (typeof value === 'string') fields[key] = value.trim();
   });
 
-  const datos = {
+  const datos: Record<string, any> = {
     monto: fields.monto || null,
     link_presupuesto: fields.link_presupuesto || null,
     presupuesto_aprobado: fields.presupuesto_aprobado || null,
@@ -31,23 +29,35 @@ export async function POST(context: { request: Request }) {
     ticket_id: parseInt(ticketId, 10),
   };
 
-  // Verificar si ya existe presupuesto para el ticket
-  const { data: existing } = await supabase
+  // ¿Existe presupuesto para este ticket?
+  const { data: existing, error: existErr } = await supabase
     .from('presupuestos')
-    .select('id')
+    .select('id, fecha_presupuesto')
     .eq('ticket_id', ticketId)
     .maybeSingle();
 
+  if (existErr) {
+    return new Response(JSON.stringify({ error: existErr.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const nowIso = new Date().toISOString();
   let error = null;
 
   if (existing) {
-    // Actualizar
+    // Si ya tenía fecha_presupuesto, la conservamos. Si no, la seteamos ahora.
+    datos.fecha_presupuesto = existing.fecha_presupuesto ?? nowIso;
+
     ({ error } = await supabase
       .from('presupuestos')
       .update(datos)
       .eq('ticket_id', ticketId));
   } else {
-    // Insertar
+    // Alta con fecha automática
+    datos.fecha_presupuesto = nowIso;
+
     ({ error } = await supabase
       .from('presupuestos')
       .insert([datos]));

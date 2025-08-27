@@ -2,6 +2,7 @@
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import PresupuestoForm from '../../components/PresupuestoForm.astro';
 import { supabase } from '../../lib/supabase';
+import { formatearFecha } from '../../lib/utils'; // 👈 para mostrar la fecha
 
 const url = new URL(Astro.request.url);
 
@@ -39,15 +40,38 @@ const equipo = {
     Object.entries(precarga).filter(([_, value]) => value !== undefined)
   )
 };
+
+// 👉 Fecha visible (solo lectura)
+const fechaPresupuesto = presupuesto?.fecha_presupuesto || null;
+const fechaPresupuestoVista = fechaPresupuesto
+  ? formatearFecha(fechaPresupuesto)
+  : formatearFecha(new Date().toISOString());
 ---
 
 <BasePrivateLayout>
   <div class="container mt-5">
     <h2 class="mb-4"><i class="bi bi-receipt me-2"></i> Editar presupuesto</h2>
 
-    {equipo?.ticketId
-      ? <PresupuestoForm equipo={equipo} />
-      : <div class="alert alert-danger">No se encontró el ticket con ID: {id}</div>
-    }
+    {equipo?.ticketId ? (
+      <>
+        <!-- Campo visible solo-lectura (NO se envía al backend) -->
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Fecha presupuesto</label>
+            <input
+              type="text"
+              class="form-control"
+              value={fechaPresupuesto ? `${fechaPresupuestoVista}` : `${fechaPresupuestoVista} (se guardará al confirmar)`}
+              readonly
+            />
+          </div>
+        </div>
+
+        <!-- Tu formulario existente -->
+        <PresupuestoForm equipo={equipo} />
+      </>
+    ) : (
+      <div class="alert alert-danger">No se encontró el ticket con ID: {id}</div>
+    )}
   </div>
 </BasePrivateLayout>
