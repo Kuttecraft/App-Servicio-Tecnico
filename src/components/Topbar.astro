@@ -8,7 +8,6 @@ const { showFilters = false } = Astro.props;
 const ESTADOS = [
   "Retirar",
   "Presupuestar",
-  "Enviar presupuesto",
   "P. Enviado",
   "Reparación",
   "Prueba",
@@ -78,7 +77,7 @@ const q = rawQ.trim();
             <option value="ticket" selected={by === 'ticket'}>Ticket</option>
             <option value="cliente" selected={by === 'cliente'}>Cliente</option>
             <option value="estado" selected={by === 'estado'}>Estado</option>
-            <option value="maquina" selected={by === 'maquina'}>Máquina</option>
+            <option value="maquina" selected={by === 'maquina'}>Modelo</option>
           </select>
         </div>
 
