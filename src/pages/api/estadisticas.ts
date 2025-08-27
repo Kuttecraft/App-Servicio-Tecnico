@@ -17,7 +17,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
   let year = Number(url.searchParams.get('year'));
   let month = Number(url.searchParams.get('month'));
   const period = url.searchParams.get('period'); // opcional: 2025-08
-  const groupParam = (url.searchParams.get('group') || 'modelo').toLowerCase(); // default: modelo
+  const groupParam = (url.searchParams.get('group') || 'modelo').toLowerCase();
   const group: 'modelo' | 'estado' = groupParam === 'estado' ? 'estado' : 'modelo';
 
   if ((!year || !month) && period && /^\d{4}-\d{2}$/.test(period)) {
@@ -33,9 +33,15 @@ export const GET: APIRoute = async ({ url, locals }) => {
     });
   }
 
-  const monthStr = String(month).padStart(2, '0');
+  // Filtrado por MES en formato M/D/YYYY (puede haber registros con día/hora extra -> usamos %)
+  // Para meses 1..9 contemplamos ambas variantes: "8/..." y "08/..." por si hubiera cero a la izquierda.
+  const mNoPad = String(month);             // 8
+  const mPad   = String(month).padStart(2,'0'); // 08
+  let orExpr = `marca_temporal.ilike.${mNoPad}/%/${year}%`;
+  if (mNoPad !== mPad) {
+    orExpr += `,marca_temporal.ilike.${mPad}/%/${year}%`;
+  }
 
-  // marcamos el MES en marca_temporal (TEXT ISO: "YYYY-MM-DD...")
   const { data, error } = await supabase
     .from('tickets_mian')
     .select(`
@@ -44,7 +50,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
       estado,
       impresoras:impresora_id ( modelo )
     `)
-    .ilike('marca_temporal', `${year}-${monthStr}%`);
+    .or(orExpr);
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
@@ -66,7 +72,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
   }
 
   const total = (data ?? []).length;
-  const items = Array.from(counts.entries())
+
+  const itemsAll = Array.from(counts.entries())
     .map(([label, count]) => ({
       label,
       count,
@@ -74,7 +81,10 @@ export const GET: APIRoute = async ({ url, locals }) => {
     }))
     .sort((a, b) => b.count - a.count);
 
-  // Para el front no hace falta devolver "group", pero puede servir
+  // ✅ Mantener solo los 10 primeros valores
+  const TOP_N = 10;
+  const items = itemsAll.slice(0, TOP_N);
+
   return new Response(JSON.stringify({ total, items, group }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
