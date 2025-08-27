@@ -10,7 +10,7 @@ type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
 const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 
-// Ticket + joins
+// Ticket + joins (👉 añadimos impresoras)
 const { data, error } = await supabase
   .from('tickets_mian')
   .select(`
@@ -27,6 +27,12 @@ const { data, error } = await supabase
     ),
     delivery (
       pagado
+    ),
+    impresoras:impresora_id (
+      modelo,
+      maquina,
+      numero_de_serie,
+      tamano_de_boquilla
     )
   `)
   .eq('id', id)
@@ -34,7 +40,18 @@ const { data, error } = await supabase
 
 const equipo = data;
 
-// Imagen principal y miniaturas
+// a veces supabase devuelve la relación como array, la aplanamos
+const impresora = Array.isArray((equipo as any)?.impresoras)
+  ? (equipo as any).impresoras?.[0]
+  : (equipo as any)?.impresoras;
+
+// Modelo a mostrar: 1) impresoras.modelo 2) tickets_mian.maquina_reparada 3) fallback
+const modeloMostrado =
+  (impresora?.modelo && String(impresora?.modelo).trim()) ||
+  (equipo?.maquina_reparada && String(equipo?.maquina_reparada).trim()) ||
+  'Modelo no especificado';
+
+// Imagen principal y miniaturas (prioridad: ticket > principal > extra)
 const imagenPrincipal =
   equipo?.imagen_ticket ||
   equipo?.imagen ||
@@ -107,18 +124,20 @@ const imagenes: string[] = Array.from(
 
         <!-- Datos -->
         <div class="text-center mb-4">
-          <h4 class="fw-bold text-dark mb-1">{equipo.cliente?.cliente ?? '—'}</h4>
-          <div class="text-muted small">{equipo.maquina_reparada ?? 'Modelo no especificado'}</div>
+          <h4 class="fw-bold text-dark mb-1">{equipo?.cliente?.cliente ?? '—'}</h4>
+          <!-- 👉 acá ahora mostramos el modelo correcto -->
+          <div class="text-muted small">{modeloMostrado}</div>
+
           <div class="row row-cols-1 row-cols-md-2 g-4 justify-content-center mt-3">
-            <div class="col"><strong>Ticket:</strong> {equipo.ticket ?? '—'}</div>
-            <div class="col"><strong>Estado:</strong> {equipo.estado ?? '—'}</div>
-            <div class="col"><strong>¿Cobrado?:</strong> {booleanATexto(equipo.delivery?.pagado === 'true')}</div>
-            <div class="col"><strong>Técnico:</strong> {equipo.tecnico ? `${equipo.tecnico.nombre} ${equipo.tecnico.apellido}` : '—'}</div>
-            <div class="col"><strong>DNI/CUIT:</strong> {equipo.cliente?.dni_cuit ?? '—'}</div>
-            <div class="col"><strong>Correo:</strong> {equipo.cliente?.correo_electronico ?? '—'}</div>
-            <div class="col"><strong>WhatsApp:</strong> {equipo.cliente?.whatsapp ?? '—'}</div>
-            <div class="col"><strong>Fecha formulario:</strong> {equipo.marca_temporal ? formatearFecha(equipo.marca_temporal) : '—'}</div>
-            <div class="col"><strong>Fecha listo:</strong> {equipo.fecha_de_reparacion ? formatearFecha(equipo.fecha_de_reparacion) : '—'}</div>
+            <div class="col"><strong>Ticket:</strong> {equipo?.ticket ?? '—'}</div>
+            <div class="col"><strong>Estado:</strong> {equipo?.estado ?? '—'}</div>
+            <div class="col"><strong>¿Cobrado?:</strong> {booleanATexto(equipo?.delivery?.pagado === 'true')}</div>
+            <div class="col"><strong>Técnico:</strong> {equipo?.tecnico ? `${equipo.tecnico.nombre} ${equipo.tecnico.apellido}` : '—'}</div>
+            <div class="col"><strong>DNI/CUIT:</strong> {equipo?.cliente?.dni_cuit ?? '—'}</div>
+            <div class="col"><strong>Correo:</strong> {equipo?.cliente?.correo_electronico ?? '—'}</div>
+            <div class="col"><strong>WhatsApp:</strong> {equipo?.cliente?.whatsapp ?? '—'}</div>
+            <div class="col"><strong>Fecha formulario:</strong> {equipo?.marca_temporal ? formatearFecha(equipo.marca_temporal) : '—'}</div>
+            <div class="col"><strong>Fecha listo:</strong> {equipo?.fecha_de_reparacion ? formatearFecha(equipo.fecha_de_reparacion) : '—'}</div>
           </div>
         </div>
 
