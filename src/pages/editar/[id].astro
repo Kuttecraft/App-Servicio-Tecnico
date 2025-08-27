@@ -200,8 +200,9 @@ const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
 
           {/* Fechas presupuesto/listo */}
           <div class="col-md-6">
-            <label class="form-label">Fecha presupuesto</label>
-            <input name="timestampPresupuesto" type="date" class="form-control" value={toISODate(equipo.presupuestos?.fecha_presupuesto)} />
+            <label class="form-label">Fecha presupuesto (solo visible)</label>
+            <!-- 👇 sin name y deshabilitada: no editable ni se envía -->
+            <input type="date" class="form-control" value={toISODate(equipo.presupuestos?.fecha_presupuesto)} disabled />
           </div>
           <div class="col-md-6">
             <label class="form-label">Fecha listo</label>

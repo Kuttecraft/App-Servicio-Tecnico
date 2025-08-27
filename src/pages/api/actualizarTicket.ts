@@ -82,7 +82,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       comentarios: fields.comentarios ?? null,
     };
 
-    // ====== IMPRESORA (crear/vincular si falta; actualizar si existe; reemplazar serie TEMP) ======
+    // ====== IMPRESORA ======
     const modelo = fields.modelo || '';
     const maquina = fields.maquina || '';
     const numeroSerie = fields.numeroSerie || '';
@@ -90,7 +90,6 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
     if (modelo || maquina || numeroSerie || boquilla) {
       if (tRow.impresora_id) {
-        // actualizar impresora existente
         const payloadImpresora: any = {};
         if (modelo) payloadImpresora.modelo = modelo;
         if (maquina) payloadImpresora.maquina = maquina;
@@ -103,7 +102,6 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
           .eq('id', tRow.impresora_id);
         if (error) return jsonError('Error al actualizar impresora: ' + error.message, 500);
       } else {
-        // no hay impresora vinculada -> buscar por serie, luego crear (fail-safe) y vincular
         let impresoraId: number | null = null;
 
         if (numeroSerie) {
@@ -167,8 +165,9 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       ticket_id: idNum,
       monto: isNaN(parseFloat(fields.monto)) ? '0' : String(parseFloat(fields.monto)),
       link_presupuesto: fields.linkPresupuesto || null,
-      cubre_garantia: fields.cubreGarantia === 'true' ? 'true' : 'false',
-      fecha_presupuesto: fechaPresuNorm,
+      cubre_garantia: fields.cubre_garantia === 'true' ? 'true' : 'false', // por si viene con otro name
+      cubre_garantia_alt: fields.cubreGarantia === 'true' ? 'true' : 'false', // compat
+      fecha_presupuesto: fechaPresuNorm, // puede ser null si no editan
     };
 
     const contentType = (f: File | null) => (f as any)?.type || 'image/webp';
@@ -206,37 +205,23 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       if (error) return jsonError('Error al actualizar cliente: ' + error.message, 500);
     }
 
-    // delivery: UPDATE -> INSERT
+    // ===== presupuestos: UPDATE -> INSERT (no pisar fecha si viene vacía) =====
     {
-      const updPayload: any = { pagado: datosDeliveryBase.pagado };
-      if (isAdmin) {
-        updPayload.cotizar_delivery = datosDeliveryBase.cotizar_delivery;
-        updPayload.informacion_adicional_delivery = datosDeliveryBase.informacion_adicional_delivery;
-      }
-      const { data: updRows, error: updErr } = await supabase.from('delivery').update(updPayload).eq('ticket_id', idNum).select('id');
-      if (updErr) return jsonError('Error al actualizar delivery: ' + updErr.message, 500);
-      const affected = Array.isArray(updRows) ? updRows.length : (updRows ? 1 : 0);
-      if (affected === 0) {
-        const insPayload: any = { ticket_id: idNum, pagado: datosDeliveryBase.pagado };
-        if (isAdmin) {
-          insPayload.cotizar_delivery = datosDeliveryBase.cotizar_delivery;
-          insPayload.informacion_adicional_delivery = datosDeliveryBase.informacion_adicional_delivery;
-        }
-        const { error: insErr } = await supabase.from('delivery').insert(insPayload);
-        if (insErr) return jsonError('Error al crear delivery: ' + insErr.message, 500);
-      }
-    }
+      const presUpdate: any = {
+        monto: datosPresupuestoBase.monto,
+        link_presupuesto: datosPresupuestoBase.link_presupuesto,
+        // compat: usar el name correcto si vino
+        cubre_garantia: (fields.cubre_garantia ?? fields.cubreGarantia) === 'true' ? 'true' : 'false',
+      };
 
-    // presupuestos: UPDATE -> INSERT
-    {
+      // solo enviar fecha si el form la trajo con valor
+      if (datosPresupuestoBase.fecha_presupuesto) {
+        presUpdate.fecha_presupuesto = datosPresupuestoBase.fecha_presupuesto;
+      }
+
       const { data: updRows, error: updErr } = await supabase
         .from('presupuestos')
-        .update({
-          monto: datosPresupuestoBase.monto,
-          link_presupuesto: datosPresupuestoBase.link_presupuesto,
-          cubre_garantia: datosPresupuestoBase.cubre_garantia,
-          fecha_presupuesto: datosPresupuestoBase.fecha_presupuesto,
-        })
+        .update(presUpdate)
         .eq('ticket_id', idNum)
         .select('id');
 
@@ -244,7 +229,16 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
       const affected = Array.isArray(updRows) ? updRows.length : (updRows ? 1 : 0);
       if (affected === 0) {
-        const { error: insErr } = await supabase.from('presupuestos').insert(datosPresupuestoBase);
+        const presInsert: any = {
+          ticket_id: idNum,
+          monto: datosPresupuestoBase.monto,
+          link_presupuesto: datosPresupuestoBase.link_presupuesto,
+          cubre_garantia: (fields.cubre_garantia ?? fields.cubreGarantia) === 'true' ? 'true' : 'false',
+        };
+        if (datosPresupuestoBase.fecha_presupuesto) {
+          presInsert.fecha_presupuesto = datosPresupuestoBase.fecha_presupuesto;
+        }
+        const { error: insErr } = await supabase.from('presupuestos').insert(presInsert);
         if (insErr) return jsonError('Error al crear presupuesto: ' + insErr.message, 500);
       }
     }
