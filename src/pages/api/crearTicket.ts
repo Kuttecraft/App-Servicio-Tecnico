@@ -15,6 +15,18 @@ function partirNombreApellido(completo: string): { nombre: string; apellido: str
 }
 function normalizarMime(file: File | null): string | null { return file ? 'image/webp' : null; }
 
+// ========= NUEVO: fecha local Bs.As. en formato M/D/YYYY =========
+const TZ_BA = 'America/Argentina/Buenos_Aires';
+function hoyBA_MMDDYYYY(): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ_BA,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).format(new Date()); // ej: 8/27/2025
+}
+// ================================================================
+
 export async function POST({ request }: { request: Request }) {
   try {
     const form = await request.formData();
@@ -155,12 +167,12 @@ export async function POST({ request }: { request: Request }) {
     }
 
     // ===== Insertar Ticket =====
-    const nowIso = new Date().toISOString();
+    const marcaTemporal = hoyBA_MMDDYYYY(); // 👉 ahora M/D/YYYY
     const insertRow: Record<string, any> = {
       cliente_id: clienteId,
       tecnico_id: tecnicoId ?? null,
       impresora_id: impresoraId ?? null,
-      marca_temporal: nowIso,
+      marca_temporal: marcaTemporal, // ✅ M/D/YYYY (BA)
       ticket: ticketNumero,
       notas_del_cliente: comentarios || null,
       estado: estado || null,
