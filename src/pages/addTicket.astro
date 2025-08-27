@@ -8,6 +8,9 @@ const dniCuit = url.searchParams.get('dniCuit') || '';
 const correo = url.searchParams.get('correo') || '';
 const whatsapp = url.searchParams.get('whatsapp') || '';
 const modelo = url.searchParams.get('modelo') || '';
+const maquina = url.searchParams.get('maquina') || '';
+const numeroSerie = url.searchParams.get('numeroSerie') || '';
+const boquilla = url.searchParams.get('boquilla') || '';
 const tecnico = url.searchParams.get('tecnico') || '';
 const comentarios = url.searchParams.get('comentarios') || '';
 
@@ -29,7 +32,6 @@ try {
 } catch {
   ticketSugerido = 1;
 }
-
 const ticket = url.searchParams.get('ticket') || ticketSugerido;
 const cobrado = "No";
 ---
@@ -47,17 +49,9 @@ const cobrado = "No";
     .image-tile:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
     .image-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .upload-btn { cursor: pointer; }
-    .add-tile {
-      background: #e9ecef; color: #6c757d; cursor: pointer;
-      display: none; /* se muestra con JS cuando corresponda */
-    }
-    .add-tile .plus {
-      font-size: 64px; line-height: 1; user-select: none;
-      display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;
-    }
+    .add-tile { background: #e9ecef; color: #6c757d; cursor: pointer; display: none; }
+    .add-tile .plus { font-size: 64px; line-height: 1; user-select: none; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
     .hidden-input { display: none; }
-
-    /* ✅ cuando hay imagen, ocultar botón y permitir clic en el tile para reabrir input */
     .image-tile.has-image .upload-btn { display: none; }
     .image-tile.has-image { cursor: pointer; }
   </style>
@@ -95,6 +89,20 @@ const cobrado = "No";
         <input type="text" class="form-control" name="modelo" value={modelo} />
       </div>
 
+      <!-- NUEVOS: datos impresora -->
+      <div class="col-md-6">
+        <label class="form-label">Máquina</label>
+        <input type="text" class="form-control" name="maquina" value={maquina} />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">N° de Serie</label>
+        <input type="text" class="form-control" name="numeroSerie" value={numeroSerie} />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Tamaño de boquilla</label>
+        <input type="text" class="form-control" name="boquilla" value={boquilla} />
+      </div>
+
       <div class="col-md-6">
         <label class="form-label">Técnico</label>
         <input type="text" class="form-control" name="tecnico" value={tecnico} />
@@ -116,12 +124,10 @@ const cobrado = "No";
         <textarea class="form-control" name="comentarios">{comentarios}</textarea>
       </div>
 
-      <!-- Bloque de imágenes con + secuencial -->
+      <!-- Imágenes -->
       <div class="col-12">
         <label class="form-label d-block text-center mb-2">Imágenes</label>
         <div class="image-tiles">
-
-          <!-- 1) Imagen principal -->
           <div class="image-tile" id="tile-principal">
             <img id="previewPrincipal" src="/logo.webp" alt="Vista previa principal" class="d-none" />
             <label class="btn btn-outline-primary upload-btn position-absolute" style="bottom:12px; left:50%; transform:translateX(-50%);">
@@ -130,12 +136,10 @@ const cobrado = "No";
             </label>
           </div>
 
-          <!-- 2) Placeholder con + para Imagen Ticket -->
           <div class="image-tile add-tile" id="tile-plus-ticket" title="Añadir imagen de ticket">
             <div class="plus">+</div>
           </div>
 
-          <!-- 2b) Imagen Ticket -->
           <div class="image-tile d-none" id="tile-ticket">
             <img id="previewTicket" src="/logo.webp" alt="Vista previa ticket" class="d-none" />
             <label class="btn btn-outline-primary upload-btn position-absolute" style="bottom:12px; left:50%; transform:translateX(-50%);">
@@ -144,12 +148,10 @@ const cobrado = "No";
             </label>
           </div>
 
-          <!-- 3) Placeholder con + para Imagen Extra -->
           <div class="image-tile add-tile d-none" id="tile-plus-extra" title="Añadir imagen extra">
             <div class="plus">+</div>
           </div>
 
-          <!-- 3b) Imagen Extra -->
           <div class="image-tile d-none" id="tile-extra">
             <img id="previewExtra" src="/logo.webp" alt="Vista previa extra" class="d-none" />
             <label class="btn btn-outline-primary upload-btn position-absolute" style="bottom:12px; left:50%; transform:translateX(-50%);">
@@ -157,7 +159,6 @@ const cobrado = "No";
               <input type="file" class="hidden-input" name="imagenExtraArchivo" id="imagenExtraArchivo" accept="image/*" />
             </label>
           </div>
-
         </div>
       </div>
 
@@ -167,8 +168,6 @@ const cobrado = "No";
     </form>
   </div>
 
-  <!-- Compresión a WebP -->
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
-  <!-- Lógica multi-imagen -->
   <script src="/scripts/form-crear-ticket-multi.js?v=2" defer></script>
 </BasePrivateLayout>
