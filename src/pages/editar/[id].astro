@@ -2,19 +2,52 @@
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import { supabase } from '../../lib/supabase';
 
+/** Convierte varias variantes de fecha a "YYYY-MM-DD" (para los otros inputs date). */
 function toISODate(v?: string | null): string {
   if (!v) return '';
   const s = String(v).trim();
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const dmY = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
-  if (dmY) {
-    const dd = dmY[1].padStart(2, '0');
-    const mm = dmY[2].padStart(2, '0');
-    const yyyy = dmY[3];
+  if (!s || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') return '';
+
+  // 1) "YYYY-MM-DD" o ISO con hora
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+
+  // 2) "YYYY/MM/DD"
+  m = s.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+
+  // 3) "DD/MM/YYYY" o "DD-MM-YYYY"
+  m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+  if (m) {
+    const dd = m[1].padStart(2, '0');
+    const mm = m[2].padStart(2, '0');
+    const yyyy = m[3];
     return `${yyyy}-${mm}-${dd}`;
   }
+
+  // 4) Fallback Date.parse
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
   return '';
+}
+
+/** Para “Fecha formulario”: muestra sólo la parte de fecha (primeros 10). */
+function fechaDisplay10(v?: string | null): string {
+  if (!v) return '';
+  const s = String(v).trim();
+  if (!s) return '';
+  // Si es ISO: "YYYY-MM-DDTHH..." -> "YYYY-MM-DD"
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  // Tomar lo anterior al espacio o a la T
+  const base = (s.includes(' ') ? s.split(' ')[0] : s.split('T')[0]) || s;
+  return base.slice(0, 10); // e.g. "6/30/2025" | "07/02/2025" | "2025-08-27"
 }
 
 interface EquipoCompleto {
@@ -74,7 +107,7 @@ const estados = [
   "Feedback Enviado","Archivada","No realizada"
 ];
 
-// Fallbacks de imágenes si en DB están NULL (mismo patrón que tenías)
+// Fallbacks de imágenes si en DB están NULL
 const urlMain   = equipo?.imagen        || supabase.storage.from('imagenes').getPublicUrl(`public/${id}.webp`).data.publicUrl;
 const urlTicket = equipo?.imagen_ticket || supabase.storage.from('imagenes').getPublicUrl(`public/${id}_ticket.webp`).data.publicUrl;
 const urlExtra  = equipo?.imagen_extra  || supabase.storage.from('imagenes').getPublicUrl(`public/${id}_extra.webp`).data.publicUrl;
@@ -130,7 +163,8 @@ const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
           {/* Fechas y técnico */}
           <div class="col-md-6">
             <label class="form-label">Fecha formulario</label>
-            <input name="fechaFormulario" type="date" class="form-control" value={toISODate(equipo.marca_temporal)} />
+            <!-- Texto (no date), muestra los primeros 10 de marca_temporal -->
+            <input name="fechaFormulario" type="text" class="form-control" value={fechaDisplay10(equipo.marca_temporal)} />
           </div>
           <div class="col-md-6">
             <label class="form-label">Técnico</label>
@@ -201,7 +235,6 @@ const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
           {/* Fechas presupuesto/listo */}
           <div class="col-md-6">
             <label class="form-label">Fecha presupuesto (solo visible)</label>
-            <!-- 👇 sin name y deshabilitada: no editable ni se envía -->
             <input type="date" class="form-control" value={toISODate(equipo.presupuestos?.fecha_presupuesto)} disabled />
           </div>
           <div class="col-md-6">
@@ -294,7 +327,6 @@ const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
     )}
   </div>
 
-  <!-- scripts (mismos que usabas) -->
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
   <script src="/scripts/form-mas-imagenes.js?v=1" defer></script>
 </BasePrivateLayout>
