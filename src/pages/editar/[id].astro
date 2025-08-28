@@ -2,7 +2,7 @@
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import { supabase } from '../../lib/supabase';
 
-/** Convierte varias variantes de fecha a "YYYY-MM-DD" (para los otros inputs date). */
+/** Convierte varias variantes de fecha a "YYYY-MM-DD" (para inputs type="date"). */
 function toISODate(v?: string | null): string {
   if (!v) return '';
   const s = String(v).trim();
@@ -37,17 +37,52 @@ function toISODate(v?: string | null): string {
   return '';
 }
 
-/** Para “Fecha formulario”: muestra sólo la parte de fecha (primeros 10). */
-function fechaDisplay10(v?: string | null): string {
+/** 👉 Siempre mostrar como M/D/YYYY (mes/día/año) sin ceros a la izquierda. */
+function toMDY(v?: string | null): string {
   if (!v) return '';
   const s = String(v).trim();
-  if (!s) return '';
-  // Si es ISO: "YYYY-MM-DDTHH..." -> "YYYY-MM-DD"
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  // Tomar lo anterior al espacio o a la T
-  const base = (s.includes(' ') ? s.split(' ')[0] : s.split('T')[0]) || s;
-  return base.slice(0, 10); // e.g. "6/30/2025" | "07/02/2025" | "2025-08-27"
+  if (!s || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') return '';
+
+  // ISO o YYYY-MM-DD
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    return `${mo}/${d}/${y}`;
+  }
+
+  // YYYY/MM/DD
+  m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (m) {
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    return `${mo}/${d}/${y}`;
+  }
+
+  // DD/MM/YYYY o MM/DD/YYYY (ambigua) -> asumimos MM/DD si ambos <=12
+  m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    const y = Number(m[3]);
+
+    let mm: number, dd: number;
+    if (b > 12 && a <= 12) { mm = a; dd = b; }        // 6/30/2025
+    else if (a > 12 && b <= 12) { dd = a; mm = b; }   // 25/06/2025
+    else { mm = a; dd = b; }                          // ambos <=12 ⇒ MM/DD por convención
+
+    return `${mm}/${dd}/${y}`;
+  }
+
+  // Fallback: que lo resuelva Date
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+  }
+
+  return '';
 }
 
 interface EquipoCompleto {
@@ -163,8 +198,8 @@ const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
           {/* Fechas y técnico */}
           <div class="col-md-6">
             <label class="form-label">Fecha formulario</label>
-            <!-- Texto (no date), muestra los primeros 10 de marca_temporal -->
-            <input name="fechaFormulario" type="text" class="form-control" value={fechaDisplay10(equipo.marca_temporal)} />
+            {/* 👉 SIEMPRE en M/D/YYYY (coincide con cómo lo guardás al crear) */}
+            <input name="fechaFormulario" type="text" class="form-control" value={toMDY(equipo.marca_temporal)} />
           </div>
           <div class="col-md-6">
             <label class="form-label">Técnico</label>
@@ -330,4 +365,3 @@ const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
   <script src="/scripts/form-mas-imagenes.js?v=1" defer></script>
 </BasePrivateLayout>
-
