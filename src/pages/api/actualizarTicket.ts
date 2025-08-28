@@ -31,16 +31,9 @@ function normDate(value?: string | null): string | null {
     let dd: number;
     let mm: number;
 
-    if (b > 12 && a <= 12) {
-      // a/b/yyyy con b>12 ⇒ MM/DD/YYYY (6/30/2025)
-      mm = a; dd = b;
-    } else if (a > 12 && b <= 12) {
-      // a/b/yyyy con a>12 ⇒ DD/MM/YYYY (25/06/2025)
-      dd = a; mm = b;
-    } else {
-      // Ambos <= 12 ⇒ asumir MM/DD (tu caso más común)
-      mm = a; dd = b;
-    }
+    if (b > 12 && a <= 12) { mm = a; dd = b; }
+    else if (a > 12 && b <= 12) { dd = a; mm = b; }
+    else { mm = a; dd = b; }
 
     const mmStr = String(mm).padStart(2, '0');
     const ddStr = String(dd).padStart(2, '0');
@@ -60,7 +53,6 @@ function normDate(value?: string | null): string | null {
 
 export const POST: APIRoute = async ({ request, params, locals }) => {
   try {
-    // Rol desde middleware (por si lo necesitás)
     const perfil = (locals as any)?.perfil as { rol?: string; admin?: boolean } | undefined;
     const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 
@@ -103,7 +95,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     const fields: Record<string, string> = {};
     formData.forEach((val, key) => { if (typeof val === 'string') fields[key] = val.trim(); });
 
-    // ---------- Leer fila actual (para conservar valores si el form no trae) ----------
+    // ---------- Leer fila actual ----------
     const { data: tRow, error: tErr } = await supabase
       .from('tickets_mian')
       .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion')
@@ -112,20 +104,18 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     if (tErr || !tRow) return jsonError(`No se pudo obtener el ticket (id=${String(id)})`, 500);
 
     // ========== Ticket principal ==========
-    const fechaFormularioNorm = normDate(fields.fechaFormulario); // viene como texto (p.ej. 6/30/2025 12:40:49)
+    const fechaFormularioNorm = normDate(fields.fechaFormulario);
     const fechaListoNorm      = normDate(fields.timestampListo);
 
     const datosTicketsMian: Record<string, any> = {
       estado: fields.estado || null,
-      // Si no vino una fecha válida, conservamos la actual
       marca_temporal: (fechaFormularioNorm ?? tRow.marca_temporal) || null,
       fecha_de_reparacion: (fechaListoNorm ?? tRow.fecha_de_reparacion) || null,
       notas_del_tecnico: fields.notaTecnico || null,
-      // Para tu card de detalle
       maquina_reparada: fields.modelo || null,
     };
 
-    // ========== Cliente relacionado ==========
+    // ========== Cliente ==========
     const datosCliente: Record<string, any> = {
       dni_cuit: fields.dniCuit || null,
       whatsapp: fields.whatsapp || null,
@@ -141,7 +131,6 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
     if (modelo || maquina || numeroSerie || boquilla) {
       if (tRow.impresora_id) {
-        // Actualizar impresora ya vinculada
         const payloadImpresora: any = {};
         if (modelo)      payloadImpresora.modelo = modelo;
         if (maquina)     payloadImpresora.maquina = maquina;
@@ -154,7 +143,6 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
           .eq('id', tRow.impresora_id);
         if (error) return jsonError('Error al actualizar impresora: ' + error.message, 500);
       } else {
-        // No hay impresora vinculada: buscar y/o crear y luego vincular al ticket
         let impresoraId: number | null = null;
 
         if (numeroSerie) {
@@ -206,23 +194,23 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     }
 
     // ========== Delivery ==========
+    // Desde "Editar" solo mostramos fecha_de_entrega (disabled), no la actualizamos acá.
     const datosDeliveryBase = {
       ticket_id: idNum,
       pagado: fields.cobrado === 'true' ? 'true' : 'false',
-      cotizar_delivery: fields.costoDelivery || null,              // solo editable si querés, ya controlás con isAdmin abajo
+      cotizar_delivery: fields.costoDelivery || null,              // se aplicará solo si isAdmin
       informacion_adicional_delivery: fields.infoDelivery || null, // idem
+      // fecha_de_entrega: NO se toca acá (se edita en /delivery/[id])
     };
 
     // ========== Presupuesto ==========
-    // En EDITAR ya no enviás fecha de presupuesto (es visible/disabled y sin name),
-    // por lo que acá NO la pisamos a menos que venga explícitamente en el form.
     const fechaPresuNorm = normDate(fields.timestampPresupuesto);
     const datosPresupuestoBase = {
       ticket_id: idNum,
       monto: isNaN(parseFloat(fields.monto)) ? '0' : String(parseFloat(fields.monto)),
       link_presupuesto: fields.linkPresupuesto || null,
       cubre_garantia: (fields.cubre_garantia ?? fields.cubreGarantia) === 'true' ? 'true' : 'false',
-      fecha_presupuesto: fechaPresuNorm, // suele venir null desde este form
+      fecha_presupuesto: fechaPresuNorm,
     };
 
     // ========== Imágenes ==========
@@ -286,7 +274,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       if (error) return jsonError('Error al actualizar cliente: ' + error.message, 500);
     }
 
-    // delivery: UPDATE -> INSERT
+    // delivery: UPDATE -> INSERT (sin tocar fecha_de_entrega aquí)
     {
       const updPayload: any = { pagado: datosDeliveryBase.pagado };
       if (isAdmin) {
@@ -304,7 +292,10 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
       const affected = Array.isArray(updRows) ? updRows.length : (updRows ? 1 : 0);
       if (affected === 0) {
-        const insPayload: any = { ticket_id: idNum, pagado: datosDeliveryBase.pagado };
+        const insPayload: any = {
+          ticket_id: idNum,
+          pagado: datosDeliveryBase.pagado,
+        };
         if (isAdmin) {
           insPayload.cotizar_delivery = datosDeliveryBase.cotizar_delivery;
           insPayload.informacion_adicional_delivery = datosDeliveryBase.informacion_adicional_delivery;
@@ -361,4 +352,3 @@ function jsonError(message: string, status = 500) {
     headers: { 'Content-Type': 'application/json' },
   });
 }
-
