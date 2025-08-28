@@ -3,7 +3,9 @@ const {
   id,
   ticket = "Sin ticket",
   cliente = "Desconocido",
-  maquina = "Desconocido",
+  // 👇 Preferimos 'modelo'; mantenemos 'maquina' como fallback por compatibilidad
+  modelo: modeloProp = undefined,
+  maquina: maquinaProp = undefined,
   estado = "Sin estado",
   whatsapp = "No especificado",
   onClickUrl = "#",
@@ -12,6 +14,11 @@ const {
   imagen_ticket = null,  // Nueva imagen_ticket
   imagen_extra = null    // Nueva imagen_extra
 } = Astro.props;
+
+// 👉 Modelo mostrado: 1) modelo 2) maquina 3) "Desconocido"
+const modelo = (modeloProp && String(modeloProp).trim())
+  || (maquinaProp && String(maquinaProp).trim())
+  || "Desconocido";
 
 // Lógica de prioridad de imágenes:
 // 1. imagen_ticket
@@ -25,18 +32,18 @@ const imagenFinal =
   "/logo.webp";
 
 // 🎨 Mapa de colores pastel SUAVES (punto medio-bajo de saturación)
-const estadoColores = {
-  "Retirar": "#FFE9CC",           // Naranja suave claro
-  "Presupuestar": "#FFD9D9",      // Rojo suave claro
-  "Enviar presupuesto": "#E9FCEC",// Verde menta suave claro
-  "P. Enviado": "#D9EBFF",        // Azul cielo suave claro
-  "Reparación": "#FFFDE1",        // Amarillo suave claro
-  "Prueba": "#E3DBFF",            // Lila suave claro
-  "Lista": "#FFE3DC",             // Durazno suave claro
-  "Entregada": "#E6F6FF",         // Celeste hielo suave
-  "Feedback Enviado": "#FAE4F6",  // Rosa-lila suave claro
-  "Archivada": "#EDEDED",         // Gris claro
-  "No realizada": "#FFF1D9"       // Amarillo crema suave
+const estadoColores: Record<string, string> = {
+  "Retirar": "#FFE9CC",
+  "Presupuestar": "#FFD9D9",
+  "Enviar presupuesto": "#E9FCEC",
+  "P. Enviado": "#D9EBFF",
+  "Reparación": "#FFFDE1",
+  "Prueba": "#E3DBFF",
+  "Lista": "#FFE3DC",
+  "Entregada": "#E6F6FF",
+  "Feedback Enviado": "#FAE4F6",
+  "Archivada": "#EDEDED",
+  "No realizada": "#FFF1D9"
 };
 
 // Color actual o blanco si no está en el mapa
@@ -86,6 +93,13 @@ const colorEstado = estadoColores[estado] || "#FFFFFF";
     margin-top: auto;
     padding-top: .5rem;
   }
+
+  .btn-ver-card, .btn-editar-card {
+    border: 1px solid rgba(0,0,0,.12);
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: .9rem;
+  }
 </style>
 
 <!-- Fondo de la tarjeta dinámico según el estado -->
@@ -108,7 +122,8 @@ const colorEstado = estadoColores[estado] || "#FFFFFF";
     <ul class="list-unstyled mb-2 small text-secondary">
       <li><strong>ID:</strong> {id}</li>
       <li><strong>Ticket:</strong> {ticket}</li>
-      <li><strong>Modelo:</strong> {maquina}</li>
+      <!-- 👇 ahora muestra 'modelo' -->
+      <li><strong>Modelo:</strong> {modelo}</li>
       <li><strong>Estado:</strong> {estado}</li>
       <li><strong>WhatsApp:</strong> {whatsapp}</li>
     </ul>
