@@ -9,6 +9,7 @@ const { id } = Astro.params as { id: string };
 type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
 const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
+const isTecnico = perfil?.rol === 'tecnico';
 
 // Ticket + joins (👉 añadimos impresoras)
 const { data, error } = await supabase
@@ -141,19 +142,24 @@ const imagenes: string[] = Array.from(
           </div>
         </div>
 
-        <!-- Botones SOLO admin -->
-        {isAdmin && (
-          <div class="row mt-4">
-            <div class="col-6 d-flex justify-content-start">
+        <!-- Acciones -->
+        {(isAdmin || isTecnico) && (
+          <div class="row mt-4 g-2">
+            <!-- Presupuesto: visible para admin y técnico -->
+            <div class={`d-flex ${isAdmin ? 'col-6' : 'col-12'}`}>
               <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm w-100">
                 <i class="bi bi-receipt"></i> Añadir presupuesto
               </a>
             </div>
-            <div class="col-6 d-flex justify-content-end">
-              <a href={`/delivery/${equipo.id}`} class="btn btn-outline-success btn-sm w-100">
-                <i class="bi bi-truck"></i> Añadir delivery
-              </a>
-            </div>
+
+            <!-- Delivery: solo admin -->
+            {isAdmin && (
+              <div class="col-6 d-flex">
+                <a href={`/delivery/${equipo.id}`} class="btn btn-outline-success btn-sm w-100">
+                  <i class="bi bi-truck"></i> Añadir delivery
+                </a>
+              </div>
+            )}
           </div>
         )}
 
