@@ -15,7 +15,6 @@ function partirNombreApellido(completo: string): { nombre: string; apellido: str
 }
 function normalizarMime(file: File | null): string | null { return file ? 'image/webp' : null; }
 
-// ========= NUEVO: fecha local Bs.As. en formato M/D/YYYY =========
 const TZ_BA = 'America/Argentina/Buenos_Aires';
 function hoyBA_MMDDYYYY(): string {
   return new Intl.DateTimeFormat('en-US', {
@@ -23,15 +22,13 @@ function hoyBA_MMDDYYYY(): string {
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
-  }).format(new Date()); // ej: 8/27/2025
+  }).format(new Date());
 }
-// ================================================================
 
 export async function POST({ request }: { request: Request }) {
   try {
     const form = await request.formData();
 
-    // ===== Campos =====
     const clienteNombreCompleto = String(form.get('cliente') ?? '').trim();
     const dniCuit     = String(form.get('dniCuit') ?? '').trim();
     const correo      = String(form.get('correo') ?? '').trim();
@@ -98,13 +95,12 @@ export async function POST({ request }: { request: Request }) {
       if (data?.id) tecnicoId = data.id;
     }
 
-    // ===== Impresora (fail-safe): si hay MODELO, siempre vinculamos una impresora =====
+    // ===== Impresora (fail-safe) =====
     let impresoraId: number | null = null;
     const hasModelo = !!modelo;
     const hasMaquina = !!maquina;
     const hasSerie = !!numeroSerie;
 
-    // 1) Si vino N° de serie, intento encontrar por serie
     if (hasSerie) {
       const { data: impFound } = await supabase
         .from('impresoras')
@@ -114,10 +110,8 @@ export async function POST({ request }: { request: Request }) {
       if (impFound?.id) impresoraId = impFound.id;
     }
 
-    // 2) Si no encontré por serie y hay MODELO, creo o busco por modelo+maquina
     if (!impresoraId && hasModelo) {
       if (hasSerie && hasMaquina) {
-        // Crear “completa”
         const { data: impNew, error: impErr } = await supabase
           .from('impresoras')
           .insert({
@@ -133,11 +127,9 @@ export async function POST({ request }: { request: Request }) {
         }
         impresoraId = impNew!.id;
       } else {
-        // Fallback: crear con valores “seguros”
         const tempSerie = `TEMP-${Date.now()}-${Math.floor(Math.random()*900+100)}`;
         const maquinaSafe = hasMaquina ? maquina : 'Desconocida';
 
-        // evitar duplicados obvios por modelo+maquina
         const { data: byModel } = await supabase
           .from('impresoras')
           .select('id')
@@ -167,12 +159,12 @@ export async function POST({ request }: { request: Request }) {
     }
 
     // ===== Insertar Ticket =====
-    const marcaTemporal = hoyBA_MMDDYYYY(); // 👉 ahora M/D/YYYY
+    const marcaTemporal = hoyBA_MMDDYYYY();
     const insertRow: Record<string, any> = {
       cliente_id: clienteId,
       tecnico_id: tecnicoId ?? null,
       impresora_id: impresoraId ?? null,
-      marca_temporal: marcaTemporal, // ✅ M/D/YYYY (BA)
+      marca_temporal: marcaTemporal,
       ticket: ticketNumero,
       notas_del_cliente: comentarios || null,
       estado: estado || null,
@@ -192,7 +184,7 @@ export async function POST({ request }: { request: Request }) {
 
     const nuevoId = tInsert!.id as number;
 
-    // ===== Subir imágenes a Storage =====
+    // ===== Subir imágenes (opcional) =====
     const subirYObtenerUrl = async (file: File | null, nombreArchivo: string) => {
       if (!file || (file as any).size <= 0) return null;
       const MAX_BYTES = 5 * 1024 * 1024;
@@ -225,7 +217,8 @@ export async function POST({ request }: { request: Request }) {
       await supabase.from('tickets_mian').update(updateImages).eq('id', nuevoId);
     }
 
-    return redirect303(`/addTicket?ok=1&ticket=${encodeURIComponent(String(ticketNumero))}`);
+    // ✅ Redirigir SIN 'ticket=' para que la página use el nuevo sugerido
+    return redirect303(`/addTicket?ok=1`);
   } catch (err: any) {
     return new Response(
       JSON.stringify({ error: 'Error inesperado al crear el ticket', exception: String(err?.message || err) }),

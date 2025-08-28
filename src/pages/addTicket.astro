@@ -3,23 +3,25 @@ import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 
 const url = new URL(Astro.request.url);
 
-const cliente = url.searchParams.get('cliente') || '';
-const dniCuit = url.searchParams.get('dniCuit') || '';
-const correo = url.searchParams.get('correo') || '';
-const whatsapp = url.searchParams.get('whatsapp') || '';
-const modelo = url.searchParams.get('modelo') || '';
-const maquina = url.searchParams.get('maquina') || '';
-const numeroSerie = url.searchParams.get('numeroSerie') || '';
-const boquilla = url.searchParams.get('boquilla') || '';
-const tecnico = url.searchParams.get('tecnico') || '';
-const comentarios = url.searchParams.get('comentarios') || '';
+const ok = url.searchParams.get('ok') === '1';
+
+const cliente = ok ? '' : (url.searchParams.get('cliente') || '');
+const dniCuit = ok ? '' : (url.searchParams.get('dniCuit') || '');
+const correo = ok ? '' : (url.searchParams.get('correo') || '');
+const whatsapp = ok ? '' : (url.searchParams.get('whatsapp') || '');
+const modelo = ok ? '' : (url.searchParams.get('modelo') || '');
+const maquina = ok ? '' : (url.searchParams.get('maquina') || '');
+const numeroSerie = ok ? '' : (url.searchParams.get('numeroSerie') || '');
+const boquilla = ok ? '' : (url.searchParams.get('boquilla') || '');
+const tecnico = ok ? '' : (url.searchParams.get('tecnico') || '');
+const comentarios = ok ? '' : (url.searchParams.get('comentarios') || '');
 
 const estados = [
   "Retirar", "Presupuestar", "Enviar presupuesto", "P. Enviado",
   "Reparación", "Prueba", "Lista", "Entregada",
   "Feedback Enviado", "Archivada", "No realizada"
 ];
-const estado = url.searchParams.get('estado') || estados[0];
+const estado = ok ? estados[0] : (url.searchParams.get('estado') || estados[0]);
 
 let ticketSugerido = 1;
 try {
@@ -32,7 +34,12 @@ try {
 } catch {
   ticketSugerido = 1;
 }
-const ticket = url.searchParams.get('ticket') || ticketSugerido;
+
+// ⚠️ clave: si venimos de ok=1, ignoramos cualquier ?ticket= de la URL
+const ticket = ok
+  ? ticketSugerido
+  : (url.searchParams.get('ticket') || ticketSugerido);
+
 const cobrado = "No";
 ---
 
@@ -57,7 +64,15 @@ const cobrado = "No";
   </style>
 
   <div class="container mt-5">
-    <h2 class="mb-4"><i class="bi bi-ticket-perforated me-2"></i> Crear nuevo ticket</h2>
+    <div class="d-flex align-items-center justify-content-between">
+      <h2 class="mb-4"><i class="bi bi-ticket-perforated me-2"></i> Crear nuevo ticket</h2>
+
+      {ok && (
+        <span class="badge bg-success-subtle text-success border border-success-subtle">
+          Ticket creado ✅
+        </span>
+      )}
+    </div>
 
     <form method="post" action="/api/crearTicket" enctype="multipart/form-data" class="row g-3" id="form-crear-ticket">
       <div class="col-md-6">
@@ -117,7 +132,7 @@ const cobrado = "No";
         </select>
       </div>
 
-      <input type="hidden" name="cobrado" value={cobrado} />
+      <input type="hidden" name="cobrado" value="No" />
 
       <div class="col-12">
         <label class="form-label">Comentarios</label>
@@ -167,6 +182,22 @@ const cobrado = "No";
       </div>
     </form>
   </div>
+
+  <!-- Mensajito visual al volver con ok=1 -->
+  <script is:inline>
+    (function() {
+      const usp = new URLSearchParams(location.search);
+      if (usp.get('ok') === '1') {
+        // Limpia previews por las dudas
+        document.getElementById('previewPrincipal')?.classList.add('d-none');
+        document.getElementById('previewTicket')?.classList.add('d-none');
+        document.getElementById('previewExtra')?.classList.add('d-none');
+        // Focus al primer campo
+        const first = document.querySelector('input[name="cliente"]');
+        if (first) first.focus();
+      }
+    })();
+  </script>
 
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
   <script src="/scripts/form-crear-ticket-multi.js?v=2" defer></script>
