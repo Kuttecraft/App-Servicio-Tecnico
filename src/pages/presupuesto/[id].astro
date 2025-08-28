@@ -2,7 +2,12 @@
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import PresupuestoForm from '../../components/PresupuestoForm.astro';
 import { supabase } from '../../lib/supabase';
-import { formatearFecha } from '../../lib/utils'; // 👈 para mostrar la fecha
+import { formatearFecha } from '../../lib/utils';
+
+type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
+const perfil = (Astro.locals as any).perfil as Perfil | undefined;
+const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
+const isTecnico = perfil?.rol === 'tecnico';
 
 const url = new URL(Astro.request.url);
 
@@ -46,11 +51,17 @@ const fechaPresupuesto = presupuesto?.fecha_presupuesto || null;
 const fechaPresupuestoVista = fechaPresupuesto
   ? formatearFecha(fechaPresupuesto)
   : formatearFecha(new Date().toISOString());
+
+// Helpers para mostrar valores legibles
+const v = (x: any) => (x ?? '') || '—';
 ---
 
 <BasePrivateLayout>
   <div class="container mt-5">
-    <h2 class="mb-4"><i class="bi bi-receipt me-2"></i> Editar presupuesto</h2>
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <h2 class="mb-0"><i class="bi bi-receipt me-2"></i> Presupuesto del ticket #{ticket?.ticket ?? id}</h2>
+      <a class="btn btn-light btn-sm" href={`/detalle/${id}`}><i class="bi bi-arrow-left"></i> Volver</a>
+    </div>
 
     {equipo?.ticketId ? (
       <>
@@ -67,8 +78,50 @@ const fechaPresupuestoVista = fechaPresupuesto
           </div>
         </div>
 
-        <!-- Tu formulario existente -->
-        <PresupuestoForm equipo={equipo} />
+        {isAdmin ? (
+          // 🔓 Admin: formulario editable
+          <PresupuestoForm equipo={equipo} />
+        ) : isTecnico ? (
+          // 🔒 Técnico: vista SOLO lectura
+          <>
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+              <i class="bi bi-info-circle me-2"></i>
+              Vista de solo lectura. Si necesitás cambios, contactá a un administrador.
+            </div>
+
+            <div class="card shadow-sm">
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Monto</label>
+                    <input type="text" class="form-control" value={v(equipo.monto)} readonly />
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Presupuesto aprobado</label>
+                    <input type="text" class="form-control" value={v(equipo.presupuesto_aprobado)} readonly />
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Garantía activa</label>
+                    <input type="text" class="form-control" value={v(equipo.garantia_activa)} readonly />
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Link presupuesto</label>
+                    <input type="text" class="form-control" value={v(equipo.link_presupuesto)} readonly />
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-semibold">Notas de administración</label>
+                    <textarea class="form-control" rows={4} readonly>{v(equipo.notas_administracion)}</textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          // Otros roles: bloqueado
+          <div class="alert alert-warning">
+            No tenés permisos para ver esta sección.
+          </div>
+        )}
       </>
     ) : (
       <div class="alert alert-danger">No se encontró el ticket con ID: {id}</div>
