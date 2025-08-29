@@ -117,7 +117,7 @@ const { id } = Astro.params;
 const perfil = (Astro.locals as any)?.perfil;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 
-// Traer ticket + joins (sin comentarios dentro del select)
+// Traer ticket + joins
 const { data, error } = await supabase
   .from('tickets_mian')
   .select(`
@@ -161,6 +161,9 @@ const urlExtra  = equipo?.imagen_extra  || supabase.storage.from('imagenes').get
 // selects booleanos
 const valorCubreGarantia = (equipo?.presupuestos?.cubre_garantia === 'true') ? 'true' : 'false';
 const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
+
+// para seleccionar correctamente el estado actual
+const estadoActual = (equipo?.estado || '').trim();
 ---
 
 <BasePrivateLayout>
@@ -183,8 +186,15 @@ const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
           {/* Estado */}
           <div class="col-md-6">
             <label class="form-label">Estado</label>
-            <select name="estado" class="form-select" required value={equipo.estado || ''}>
-              {estados.map((op) => (<option value={op}>{op}</option>))}
+            <select name="estado" class="form-select" required>
+              {estados.map((op) => (
+                <option
+                  value={op}
+                  selected={estadoActual.toLowerCase() === op.toLowerCase()}
+                >
+                  {op}
+                </option>
+              ))}
             </select>
           </div>
 

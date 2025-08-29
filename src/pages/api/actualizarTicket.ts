@@ -98,7 +98,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     // ---------- Leer fila actual ----------
     const { data: tRow, error: tErr } = await supabase
       .from('tickets_mian')
-      .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion')
+      .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion, estado')
       .eq('id', idNum)
       .single();
     if (tErr || !tRow) return jsonError(`No se pudo obtener el ticket (id=${String(id)})`, 500);
@@ -107,8 +107,10 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     const fechaFormularioNorm = normDate(fields.fechaFormulario);
     const fechaListoNorm      = normDate(fields.timestampListo);
 
+    const estadoForm = (fields.estado ?? '').trim();
+
     const datosTicketsMian: Record<string, any> = {
-      estado: fields.estado || null,
+      estado: estadoForm || tRow.estado || null,
       marca_temporal: (fechaFormularioNorm ?? tRow.marca_temporal) || null,
       fecha_de_reparacion: (fechaListoNorm ?? tRow.fecha_de_reparacion) || null,
       notas_del_tecnico: fields.notaTecnico || null,
@@ -194,13 +196,11 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     }
 
     // ========== Delivery ==========
-    // Desde "Editar" solo mostramos fecha_de_entrega (disabled), no la actualizamos acá.
     const datosDeliveryBase = {
       ticket_id: idNum,
       pagado: fields.cobrado === 'true' ? 'true' : 'false',
-      cotizar_delivery: fields.costoDelivery || null,              // se aplicará solo si isAdmin
-      informacion_adicional_delivery: fields.infoDelivery || null, // idem
-      // fecha_de_entrega: NO se toca acá (se edita en /delivery/[id])
+      cotizar_delivery: fields.costoDelivery || null,
+      informacion_adicional_delivery: fields.infoDelivery || null,
     };
 
     // ========== Presupuesto ==========
