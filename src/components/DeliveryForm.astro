@@ -1,43 +1,74 @@
 ---
 // Props: equipo (viene del detalle del ticket)
-const { equipo } = Astro.props;
+const { equipo } = Astro.props as { equipo: any };
+
+// Utilidades para mostrar solo día en dd/mm/yyyy
+function ddmmyyyy(ymd: string) {
+  if (!ymd) return '';
+  const y = ymd.slice(0, 4), m = ymd.slice(5, 7), d = ymd.slice(8, 10);
+  return (y && m && d) ? `${d}/${m}/${y}` : '';
+}
+const hoyYMD = new Date().toISOString().slice(0, 10);
+const fechaMostrar = ddmmyyyy((equipo?.fecha_de_entrega as string) || hoyYMD);
 ---
 
 <form method="POST" action={`/api/actualizarDelivery?id=${equipo.ticketId}`} class="row g-3">
   <div class="col-md-6">
     <label class="form-label">Costo delivery</label>
-    <input type="text" class="form-control" name="cotizar_delivery" value={equipo.cotizar_delivery ?? ''} placeholder="Ej: 500.00" />
+    <input
+      type="text"
+      class="form-control"
+      name="cotizar_delivery"
+      value={equipo?.cotizar_delivery ?? ''}
+      placeholder="Ej: 500.00"
+    />
   </div>
 
   <div class="col-md-6">
     <label class="form-label">Medio de entrega</label>
-    <input type="text" class="form-control" name="medio_de_entrega" value={equipo.medio_de_entrega ?? ''} placeholder="Moto, correo, etc." />
+    <input
+      type="text"
+      class="form-control"
+      name="medio_de_entrega"
+      value={equipo?.medio_de_entrega ?? ''}
+      placeholder="Moto, correo, etc."
+    />
   </div>
 
+  <!-- Fecha de entrega: solo día (auto), solo lectura y NO se envía al backend -->
   <div class="col-md-6">
     <label class="form-label">Fecha de entrega</label>
-    <input type="datetime-local" class="form-control" name="fecha_de_entrega"
-      value={equipo.fecha_de_entrega ? equipo.fecha_de_entrega.slice(0, 16) : ''} />
+    <input type="text" class="form-control" value={fechaMostrar} readonly />
+    <div class="form-text">Se completa automáticamente al guardar.</div>
   </div>
 
   <div class="col-md-6">
     <label class="form-label">Forma de pago</label>
-    <input type="text" class="form-control" name="forma_de_pago" value={equipo.forma_de_pago ?? ''} placeholder="Transferencia, efectivo..." />
+    <input
+      type="text"
+      class="form-control"
+      name="forma_de_pago"
+      value={equipo?.forma_de_pago ?? ''}
+      placeholder="Transferencia, efectivo..."
+    />
   </div>
 
   <div class="col-12">
     <label class="form-label">Información adicional</label>
-    <textarea class="form-control" name="informacion_adicional_delivery" rows="3" placeholder="Notas, referencias, aclaraciones...">
-      {equipo.informacion_adicional_delivery ?? ''}
-    </textarea>
+    <textarea
+      class="form-control"
+      name="informacion_adicional_delivery"
+      rows="3"
+      placeholder="Notas, referencias, aclaraciones..."
+    >{equipo?.informacion_adicional_delivery ?? ''}</textarea>
   </div>
 
   <div class="col-12">
     <label class="form-label">¿Pagado?</label>
     <select name="pagado" class="form-select">
-      <option value="">Seleccionar</option>
-      <option value="true" selected={equipo.pagado === 'true'}>Sí</option>
-      <option value="false" selected={equipo.pagado === 'false'}>No</option>
+      <option value="" selected={!equipo?.pagado}>Seleccionar</option>
+      <option value="true" selected={equipo?.pagado === 'true'}>Sí</option>
+      <option value="false" selected={equipo?.pagado === 'false'}>No</option>
     </select>
   </div>
 

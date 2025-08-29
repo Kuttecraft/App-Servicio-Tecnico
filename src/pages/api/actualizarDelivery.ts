@@ -14,45 +14,56 @@ export async function POST(context: { request: Request }) {
 
   const formData = await req.formData();
 
-  // Extraer y limpiar campos
+  // Extraer y limpiar (NO usamos fecha_de_entrega del form)
   const fields: Record<string, string> = {};
   formData.forEach((value, key) => {
-    if (typeof value === 'string') {
-      fields[key] = value.trim();
-    }
+    if (typeof value === 'string') fields[key] = value.trim();
   });
 
-  // Estructura final con valores limpios
-  const datosDelivery = {
+  const base: Record<string, any> = {
     cotizar_delivery: fields.cotizar_delivery || null,
     informacion_adicional_delivery: fields.informacion_adicional_delivery || null,
     medio_de_entrega: fields.medio_de_entrega || null,
-    fecha_de_entrega: fields.fecha_de_entrega || null,
     forma_de_pago: fields.forma_de_pago || null,
-    pagado: fields.pagado || null,
+    pagado: fields.pagado || null,  // "true" | "false" | null
     ticket_id: parseInt(ticketId, 10),
   };
 
-  // Verificar si ya existe un registro de delivery
-  const { data: existingDelivery } = await supabase
+  // ¿Existe delivery?
+  const { data: existing, error: selErr } = await supabase
     .from('delivery')
-    .select('id')
+    .select('id, fecha_de_entrega')
     .eq('ticket_id', ticketId)
     .maybeSingle();
 
+  if (selErr) {
+    return new Response(JSON.stringify({ error: selErr.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Guardar SOLO fecha (YYYY-MM-DD)
+  const hoyYMD = new Date().toISOString().slice(0, 10);
   let error = null;
 
-  if (existingDelivery) {
-    // Si existe, actualizar
+  if (existing) {
+    const datos = {
+      ...base,
+      fecha_de_entrega: existing.fecha_de_entrega ?? hoyYMD,
+    };
     ({ error } = await supabase
       .from('delivery')
-      .update(datosDelivery)
+      .update(datos)
       .eq('ticket_id', ticketId));
   } else {
-    // Si no existe, insertar nuevo
+    const datos = {
+      ...base,
+      fecha_de_entrega: hoyYMD,
+    };
     ({ error } = await supabase
       .from('delivery')
-      .insert([datosDelivery]));
+      .insert([datos]));
   }
 
   if (error) {

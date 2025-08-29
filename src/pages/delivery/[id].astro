@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 
 const url = new URL(Astro.request.url);
 
-// ⚡️ Precarga por URL:
+// Precarga por URL (el backend ignora fecha_de_entrega)
 const precarga = {
   cotizar_delivery: url.searchParams.get('cotizar_delivery') ?? undefined,
   informacion_adicional_delivery: url.searchParams.get('informacion_adicional_delivery') ?? undefined,
@@ -17,28 +17,26 @@ const precarga = {
 
 const { id } = Astro.params;
 
-// Traer ticket
+// Ticket
 const { data: ticket } = await supabase
   .from('tickets_mian')
   .select('id, ticket')
   .eq('id', id)
   .single();
 
-// Traer delivery si existe
+// Delivery (si existe)
 const { data: delivery } = await supabase
   .from('delivery')
   .select('*')
   .eq('ticket_id', id)
   .maybeSingle();
 
-// Combinar ticket + delivery + precarga
+// Mezcla
 const equipo = {
   ticketId: ticket?.id,
   ticketNumero: ticket?.ticket,
   ...delivery,
-  ...Object.fromEntries(
-    Object.entries(precarga).filter(([_, value]) => value !== undefined)
-  )
+  ...Object.fromEntries(Object.entries(precarga).filter(([_, v]) => v !== undefined)),
 };
 ---
 
