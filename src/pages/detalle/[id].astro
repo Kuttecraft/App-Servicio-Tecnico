@@ -49,6 +49,15 @@ const { data: presupuestoExistente } = await supabase
   .maybeSingle();
 
 const hasPresupuesto = Boolean(presupuestoExistente?.id);
+
+// ¿Existe delivery?
+const { data: deliveryExistente } = await supabase
+  .from('delivery')
+  .select('id')
+  .eq('ticket_id', id)
+  .maybeSingle();
+
+const hasDelivery = Boolean(deliveryExistente?.id);
 ---
 
 <BasePrivateLayout>
@@ -125,7 +134,7 @@ const hasPresupuesto = Boolean(presupuestoExistente?.id);
               {isAdmin && (
                 <div class="col-6 d-flex">
                   <a href={`/delivery/${equipo.id}`} class="btn btn-outline-success btn-sm w-100">
-                    <i class="bi bi-truck"></i> Añadir delivery
+                    <i class="bi bi-truck"></i> {hasDelivery ? 'Verificar delivery' : 'Añadir delivery'}
                   </a>
                 </div>
               )}
@@ -133,7 +142,7 @@ const hasPresupuesto = Boolean(presupuestoExistente?.id);
 
             <!-- Botón: Máquina Lista -->
             <div class="mt-3">
-              {equipo?.estado !== 'l¿Lista' ? (
+              {equipo?.estado !== 'Lista' ? (
                 <button class="btn btn-warning w-100" onclick={`window.maquinaLista('${equipo.id}')`}>
                   <i class="bi bi-check2-square me-1"></i> Máquina Lista
                 </button>
