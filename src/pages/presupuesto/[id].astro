@@ -9,80 +9,63 @@ const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
 
-const url = new URL(Astro.request.url);
-
-// ⚡️ Precarga por URL (todos los campos opcionales)
-const precarga = {
-  monto: url.searchParams.get('monto') ?? undefined,
-  link_presupuesto: url.searchParams.get('link_presupuesto') ?? undefined,
-  presupuesto_aprobado: url.searchParams.get('presupuesto_aprobado') ?? undefined,
-  garantia_activa: url.searchParams.get('garantia_activa') ?? undefined,
-  notas_administracion: url.searchParams.get('notas_administracion') ?? undefined,
-};
-
 const { id } = Astro.params;
 
-// Traer ticket
+// Ticket
 const { data: ticket } = await supabase
   .from('tickets_mian')
   .select('id, ticket')
   .eq('id', id)
   .single();
 
-// Traer presupuesto relacionado
+// Presupuesto (si existe)
 const { data: presupuesto } = await supabase
   .from('presupuestos')
   .select('*')
   .eq('ticket_id', id)
   .maybeSingle();
 
-// Combinar todo (ticket + presupuesto + precarga)
+const isVerificar = Boolean(presupuesto?.id);
+
+// Mezcla datos (ticket + presupuesto)
 const equipo = {
   ticketId: ticket?.id,
   ticketNumero: ticket?.ticket,
-  ...presupuesto,
-  ...Object.fromEntries(
-    Object.entries(precarga).filter(([_, value]) => value !== undefined)
-  )
+  ...presupuesto
 };
 
-// 👉 Fecha visible (solo lectura)
+// Fecha visible
 const fechaPresupuesto = presupuesto?.fecha_presupuesto || null;
 const fechaPresupuestoVista = fechaPresupuesto
   ? formatearFecha(fechaPresupuesto)
   : formatearFecha(new Date().toISOString());
 
-// Helpers para mostrar valores legibles
+// Helper
 const v = (x: any) => (x ?? '') || '—';
 ---
 
 <BasePrivateLayout>
   <div class="container mt-5">
     <div class="d-flex align-items-center justify-content-between mb-3">
-      <h2 class="mb-0"><i class="bi bi-receipt me-2"></i> Presupuesto del ticket #{ticket?.ticket ?? id}</h2>
+      <h2 class="mb-0">
+        <i class="bi bi-receipt me-2"></i>
+        {isVerificar ? 'Verificar presupuesto' : 'Añadir presupuesto'} del ticket #{ticket?.ticket ?? id}
+      </h2>
       <a class="btn btn-light btn-sm" href={`/detalle/${id}`}><i class="bi bi-arrow-left"></i> Volver</a>
     </div>
 
     {equipo?.ticketId ? (
       <>
-        <!-- Campo visible solo-lectura (NO se envía al backend) -->
         <div class="row g-3 mb-3">
           <div class="col-md-6">
             <label class="form-label">Fecha presupuesto</label>
-            <input
-              type="text"
-              class="form-control"
-              value={fechaPresupuesto ? `${fechaPresupuestoVista}` : `${fechaPresupuestoVista} (se guardará al confirmar)`}
-              readonly
-            />
+            <input type="text" class="form-control" value={fechaPresupuestoVista} readonly />
           </div>
         </div>
 
         {isAdmin ? (
-          // 🔓 Admin: formulario editable
           <PresupuestoForm equipo={equipo} />
         ) : isTecnico ? (
-          // 🔒 Técnico: vista SOLO lectura
           <>
             <div class="alert alert-info d-flex align-items-center" role="alert">
               <i class="bi bi-info-circle me-2"></i>
@@ -97,17 +80,19 @@ const v = (x: any) => (x ?? '') || '—';
                     <input type="text" class="form-control" value={v(equipo.monto)} readonly />
                   </div>
                   <div class="col-md-6">
-                    <label class="form-label fw-semibold">Presupuesto aprobado</label>
-                    <input type="text" class="form-control" value={v(equipo.presupuesto_aprobado)} readonly />
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label fw-semibold">Garantía activa</label>
+                    <label class="form-label fw-semibold">¿Garantía activa?</label>
                     <input type="text" class="form-control" value={v(equipo.garantia_activa)} readonly />
                   </div>
                   <div class="col-md-6">
                     <label class="form-label fw-semibold">Link presupuesto</label>
                     <input type="text" class="form-control" value={v(equipo.link_presupuesto)} readonly />
                   </div>
+                  {isVerificar && (
+                    <div class="col-md-6">
+                      <label class="form-label fw-semibold">Aprobación del presupuesto</label>
+                      <input type="text" class="form-control" value={v(equipo.presupuesto_aprobado)} readonly />
+                    </div>
+                  )}
                   <div class="col-12">
                     <label class="form-label fw-semibold">Notas de administración</label>
                     <textarea class="form-control" rows={4} readonly>{v(equipo.notas_administracion)}</textarea>
@@ -117,10 +102,7 @@ const v = (x: any) => (x ?? '') || '—';
             </div>
           </>
         ) : (
-          // Otros roles: bloqueado
-          <div class="alert alert-warning">
-            No tenés permisos para ver esta sección.
-          </div>
+          <div class="alert alert-warning">No tenés permisos para ver esta sección.</div>
         )}
       </>
     ) : (

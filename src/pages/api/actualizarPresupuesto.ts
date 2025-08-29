@@ -20,16 +20,15 @@ export async function POST(context: { request: Request }) {
     if (typeof value === 'string') fields[key] = value.trim();
   });
 
-  const datos: Record<string, any> = {
-    monto: fields.monto || null,
-    link_presupuesto: fields.link_presupuesto || null,
-    presupuesto_aprobado: fields.presupuesto_aprobado || null,
-    garantia_activa: fields.garantia_activa || null,
-    notas_administracion: fields.notas_administracion || null,
-    ticket_id: parseInt(ticketId, 10),
-  };
+  // Solo incluimos lo que realmente vino en el form
+  const datos: Record<string, any> = { ticket_id: parseInt(ticketId, 10) };
+  if ('monto' in fields) datos.monto = fields.monto || null;
+  if ('link_presupuesto' in fields) datos.link_presupuesto = fields.link_presupuesto || null;
+  if ('presupuesto_aprobado' in fields) datos.presupuesto_aprobado = fields.presupuesto_aprobado || null; // "Si" | "No" | null
+  if ('garantia_activa' in fields) datos.garantia_activa = fields.garantia_activa || null;
+  if ('notas_administracion' in fields) datos.notas_administracion = fields.notas_administracion || null;
 
-  // ¿Existe presupuesto para este ticket?
+  // ¿Existe presupuesto?
   const { data: existing, error: existErr } = await supabase
     .from('presupuestos')
     .select('id, fecha_presupuesto')
@@ -47,16 +46,14 @@ export async function POST(context: { request: Request }) {
   let error = null;
 
   if (existing) {
-    // Si ya tenía fecha_presupuesto, la conservamos. Si no, la seteamos ahora.
-    datos.fecha_presupuesto = existing.fecha_presupuesto ?? nowIso;
+    if (!existing.fecha_presupuesto) (datos as any).fecha_presupuesto = nowIso;
 
     ({ error } = await supabase
       .from('presupuestos')
       .update(datos)
       .eq('ticket_id', ticketId));
   } else {
-    // Alta con fecha automática
-    datos.fecha_presupuesto = nowIso;
+    (datos as any).fecha_presupuesto = nowIso;
 
     ({ error } = await supabase
       .from('presupuestos')
@@ -64,7 +61,7 @@ export async function POST(context: { request: Request }) {
   }
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error as any).message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

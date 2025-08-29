@@ -5,75 +5,57 @@ import { formatearFecha, booleanATexto } from '../../lib/utils';
 
 const { id } = Astro.params as { id: string };
 
-// Perfil inyectado por el middleware
 type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
 const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
 
-// Ticket + joins (👉 añadimos impresoras)
+// Ticket + joins
 const { data, error } = await supabase
   .from('tickets_mian')
   .select(`
     *,
-    cliente:cliente_id (
-      dni_cuit,
-      correo_electronico,
-      whatsapp,
-      cliente
-    ),
-    tecnico:tecnico_id (
-      nombre,
-      apellido
-    ),
-    delivery (
-      pagado
-    ),
-    impresoras:impresora_id (
-      modelo,
-      maquina,
-      numero_de_serie,
-      tamano_de_boquilla
-    )
+    cliente:cliente_id ( dni_cuit, correo_electronico, whatsapp, cliente ),
+    tecnico:tecnico_id ( nombre, apellido ),
+    delivery ( pagado ),
+    impresoras:impresora_id ( modelo, maquina, numero_de_serie, tamano_de_boquilla )
   `)
   .eq('id', id)
   .single();
 
 const equipo = data;
 
-// a veces supabase devuelve la relación como array, la aplanamos
 const impresora = Array.isArray((equipo as any)?.impresoras)
   ? (equipo as any).impresoras?.[0]
   : (equipo as any)?.impresoras;
 
-// Modelo a mostrar: 1) impresoras.modelo 2) tickets_mian.maquina_reparada 3) fallback
 const modeloMostrado =
   (impresora?.modelo && String(impresora?.modelo).trim()) ||
   (equipo?.maquina_reparada && String(equipo?.maquina_reparada).trim()) ||
   'Modelo no especificado';
 
-// Imagen principal y miniaturas (prioridad: ticket > principal > extra)
 const imagenPrincipal =
-  equipo?.imagen_ticket ||
-  equipo?.imagen ||
-  equipo?.imagen_extra ||
-  '/logo.webp';
+  equipo?.imagen_ticket || equipo?.imagen || equipo?.imagen_extra || '/logo.webp';
 
-const imagenes: string[] = Array.from(
-  new Set(
-    [equipo?.imagen_ticket, equipo?.imagen, equipo?.imagen_extra].filter(Boolean) as string[]
-  )
-);
+const imagenes: string[] = Array.from(new Set(
+  [equipo?.imagen_ticket, equipo?.imagen, equipo?.imagen_extra].filter(Boolean) as string[]
+));
+
+// ¿Existe presupuesto?
+const { data: presupuestoExistente } = await supabase
+  .from('presupuestos')
+  .select('id')
+  .eq('ticket_id', id)
+  .maybeSingle();
+
+const hasPresupuesto = Boolean(presupuestoExistente?.id);
 ---
 
 <BasePrivateLayout>
   <style>
     .thumbs { display: flex; gap: .5rem; justify-content: center; }
-    .thumb {
-      height: 60px; width: 60px; border-radius: 8px; object-fit: cover; cursor: pointer;
-      border: 2px solid transparent; transition: transform .15s ease, border-color .15s ease;
-      outline: none;
-    }
+    .thumb { height: 60px; width: 60px; border-radius: 8px; object-fit: cover; cursor: pointer;
+      border: 2px solid transparent; transition: transform .15s ease, border-color .15s ease; outline: none; }
     .thumb:hover { transform: scale(1.04); }
     .thumb:focus-visible { outline: 2px solid #0d6efd; outline-offset: 2px; }
     .thumb.active { border-color: #0d6efd; }
@@ -81,52 +63,35 @@ const imagenes: string[] = Array.from(
 
   <div class="container mt-4 position-relative">
     <div class="card mx-auto shadow" style="max-width: 650px;">
-      <!-- Cabecera -->
       <div class="card-header bg-white d-flex align-items-center justify-content-between">
         <h3 class="h5 mb-0 fw-bold text-primary">Detalle del equipo</h3>
 
         {isAdmin && (
-          <button
-            class="btn btn-sm btn-outline-danger d-flex align-items-center"
-            onclick={`eliminarTicket('${equipo.id}')`}
-            title="Eliminar ticket">
+          <button class="btn btn-sm btn-outline-danger d-flex align-items-center"
+            onclick={`eliminarTicket('${equipo.id}')`} title="Eliminar ticket">
             <i class="bi bi-trash"></i>
           </button>
         )}
       </div>
 
       <div class="card-body">
-        <!-- Imagen principal -->
         <div class="text-center mb-3">
-          <img
-            id="imagen-equipo"
-            src={`${imagenPrincipal}?t=${Date.now()}`}
-            alt="Imagen impresora"
+          <img id="imagen-equipo" src={`${imagenPrincipal}?t=${Date.now()}`} alt="Imagen impresora"
             class="rounded img-fluid shadow-sm"
-            style="max-height: 300px; max-width: 300px; object-fit: cover; border-radius: 15px; cursor: zoom-in;"
-          />
+            style="max-height: 300px; max-width: 300px; object-fit: cover; border-radius: 15px; cursor: zoom-in;" />
         </div>
 
-        <!-- Miniaturas -->
         {imagenes.length > 0 && (
           <div class="thumbs mb-4" id="thumbs">
             {imagenes.map((src) => (
-              <img
-                src={`${src}?t=${Date.now()}`}
-                data-src={src}
-                alt="Miniatura"
-                class={`thumb ${src === imagenPrincipal ? 'active' : ''}`}
-                role="button"
-                tabindex="0"
-              />
+              <img src={`${src}?t=${Date.now()}`} data-src={src} alt="Miniatura"
+                class={`thumb ${src === imagenPrincipal ? 'active' : ''}`} role="button" tabindex="0" />
             ))}
           </div>
         )}
 
-        <!-- Datos -->
         <div class="text-center mb-4">
           <h4 class="fw-bold text-dark mb-1">{equipo?.cliente?.cliente ?? '—'}</h4>
-          <!-- 👉 acá ahora mostramos el modelo correcto -->
           <div class="text-muted small">{modeloMostrado}</div>
 
           <div class="row row-cols-1 row-cols-md-2 g-4 justify-content-center mt-3">
@@ -142,17 +107,20 @@ const imagenes: string[] = Array.from(
           </div>
         </div>
 
-        <!-- Acciones -->
         {(isAdmin || isTecnico) && (
           <div class="row mt-4 g-2">
-            <!-- Presupuesto: visible para admin y técnico -->
             <div class={`d-flex ${isAdmin ? 'col-6' : 'col-12'}`}>
-              <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm w-100">
-                <i class="bi bi-receipt"></i> Añadir presupuesto
-              </a>
+              {hasPresupuesto ? (
+                <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm w-100">
+                  <i class="bi bi-shield-check"></i> Verificar presupuesto
+                </a>
+              ) : (
+                <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm w-100">
+                  <i class="bi bi-receipt"></i> Añadir presupuesto
+                </a>
+              )}
             </div>
 
-            <!-- Delivery: solo admin -->
             {isAdmin && (
               <div class="col-6 d-flex">
                 <a href={`/delivery/${equipo.id}`} class="btn btn-outline-success btn-sm w-100">
@@ -163,26 +131,19 @@ const imagenes: string[] = Array.from(
           </div>
         )}
 
-        {!equipo && (
-          <div class="alert alert-danger mt-4">No se encontró el equipo con ID: {id}</div>
-        )}
+        {!equipo && <div class="alert alert-danger mt-4">No se encontró el equipo con ID: {id}</div>}
       </div>
     </div>
   </div>
 
-  <!-- Solo inyectamos la función si es admin -->
   {isAdmin && (
     <script>
       (window as any).eliminarTicket = async function(id) {
         if (!confirm("¿Estás seguro de que querés eliminar este ticket? Esta acción no se puede deshacer.")) return;
         const res = await fetch(`/api/eliminarTicket?id=${id}`, { method: 'POST' });
         const data = await res.json();
-        if (res.ok) {
-          alert("Ticket eliminado correctamente.");
-          window.location.href = '/dashboard';
-        } else {
-          alert("Error al eliminar: " + data.error);
-        }
+        if (res.ok) { alert("Ticket eliminado correctamente."); window.location.href = '/dashboard'; }
+        else { alert("Error al eliminar: " + data.error); }
       }
     </script>
   )}

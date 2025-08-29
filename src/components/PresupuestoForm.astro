@@ -1,58 +1,63 @@
 ---
 // Props: equipo (puede contener datos precargados o de edición)
-const { equipo } = Astro.props;
+const { equipo } = Astro.props as { equipo: any };
+const isVerificar = Boolean(equipo?.id); // existe registro en presupuestos
 ---
 
-<form method="POST" action={`/api/actualizarPresupuesto?id=${equipo.ticketId}`} class="row g-3">
+<form method="POST" action={`/api/actualizarPresupuesto?id=${equipo.ticketId}`} class="card shadow-sm">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Monto</label>
+        <input
+          type="text"
+          class="form-control"
+          name="monto"
+          value={equipo?.monto ?? ''}
+          placeholder="Ej: 19.100, incluye repuesto"
+        />
+      </div>
 
-  <div class="col-md-6">
-    <label class="form-label">Monto</label>
-    <input
-      type="text"
-      class="form-control"
-      name="monto"
-      value={equipo?.monto ?? ''}
-      placeholder="Ej: 9500, 10.000 aprox, incluye repuesto"
-    />
-  </div>
+      <div class="col-md-6">
+        <label class="form-label">Link presupuesto</label>
+        <input
+          type="url"
+          class="form-control"
+          name="link_presupuesto"
+          value={equipo?.link_presupuesto ?? ''}
+          autocomplete="off"
+        />
+      </div>
 
-  <div class="col-md-6">
-    <label class="form-label">Link presupuesto</label>
-    <input
-      type="url"
-      class="form-control"
-      name="link_presupuesto"
-      value={equipo?.link_presupuesto ?? ''}
-      autocomplete="off"
-    />
-  </div>
+      <div class="col-md-6">
+        <label class="form-label">¿Garantía activa?</label>
+        <select name="garantia_activa" class="form-select">
+          <option value="">Seleccionar</option>
+          <option value="Sí" selected={equipo?.garantia_activa === 'Sí'}>Sí</option>
+          <option value="No" selected={equipo?.garantia_activa === 'No'}>No</option>
+        </select>
+      </div>
 
-  <div class="col-md-6">
-    <label class="form-label">¿Presupuesto aprobado?</label>
-    <select name="presupuesto_aprobado" class="form-select">
-      <option value="">Seleccionar</option>
-      <option value="Sí" selected={equipo?.presupuesto_aprobado === 'Sí'}>Sí</option>
-      <option value="No" selected={equipo?.presupuesto_aprobado === 'No'}>No</option>
-    </select>
-  </div>
+      <div class="col-12">
+        <label class="form-label">Notas (administración)</label>
+        <textarea name="notas_administracion" class="form-control" rows="3">{equipo?.notas_administracion ?? ''}</textarea>
+      </div>
 
-  <div class="col-md-6">
-    <label class="form-label">¿Garantía activa?</label>
-    <select name="garantia_activa" class="form-select">
-      <option value="">Seleccionar</option>
-      <option value="Sí" selected={equipo?.garantia_activa === 'Sí'}>Sí</option>
-      <option value="No" selected={equipo?.garantia_activa === 'No'}>No</option>
-    </select>
-  </div>
+      {isVerificar && (
+        <div class="col-12 mt-2">
+          <h5 class="mb-2"><i class="bi bi-check2-circle me-2"></i> Aprobación del presupuesto</h5>
+          <select name="presupuesto_aprobado" class="form-select">
+            <option value="Si" selected={equipo?.presupuesto_aprobado === 'Si'}>Si</option>
+            <option value="No" selected={equipo?.presupuesto_aprobado === 'No'}>No</option>
+          </select>
+        </div>
+      )}
+    </div>
 
-  <div class="col-12">
-    <label class="form-label">Notas (administración)</label>
-    <textarea name="notas_administracion" class="form-control" rows="3">{equipo?.notas_administracion ?? ''}</textarea>
-  </div>
-
-  <div class="col-12 d-flex justify-content-end">
-    <button type="submit" class="btn btn-primary">
-      <i class="bi bi-save me-1"></i> Guardar presupuesto
-    </button>
+    <div class="mt-4 text-end">
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-save me-1"></i> Guardar cambios
+      </button>
+    </div>
   </div>
 </form>
