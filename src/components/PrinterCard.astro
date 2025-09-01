@@ -32,19 +32,20 @@ const imagenFinal =
   "/logo.webp";
 
 // 🎨 Mapa de colores pastel SUAVES (punto medio-bajo de saturación)
-const estadoColores: Record<string, string> = {
-  "Retirar": "#FFE9CC",
-  "Presupuestar": "#FFD9D9",
-  "Enviar presupuesto": "#E9FCEC",
-  "P. Enviado": "#D9EBFF",
-  "Reparación": "#FFFDE1",
-  "Prueba": "#E3DBFF",
-  "Lista": "#FFE3DC",
-  "Entregada": "#E6F6FF",
-  "Feedback Enviado": "#FAE4F6",
-  "Archivada": "#EDEDED",
-  "No realizada": "#FFF1D9"
-};
+   const estadoColores: Record<string, string> = {
+   "Nuevo": "#E2FFF6",        // mint muy suave para items recién creados
+   "Retirar": "#FFE9CC",
+   "Presupuestar": "#FFD9D9",
+   "Enviar presupuesto": "#E9FCEC",
+   "P. Enviado": "#D9EBFF",
+   "Reparación": "#FFFDE1",
+   "Prueba": "#E3DBFF",
+   "Lista": "#FFE3DC",
+   "Entregada": "#E6F6FF",
+   "Feedback Enviado": "#FAE4F6",
+   "Archivada": "#EDEDED",
+   "No realizada": "#FFF1D9"
+ };
 
 // Color actual o blanco si no está en el mapa
 const colorEstado = estadoColores[estado] || "#FFFFFF";
