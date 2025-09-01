@@ -340,6 +340,15 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       }
     }
 
+    // ✅ Al guardar (update o insert) el presupuesto, pasamos el ticket a "P. Enviado"
+    {
+      const { error: estadoErr } = await supabase
+        .from('tickets_mian')
+        .update({ estado: 'P. Enviado' }) // usa 'Presupuesto enviado' si preferís el texto completo
+        .eq('id', idNum);
+      if (estadoErr) return jsonError('No se pudo marcar el estado como P. Enviado: ' + estadoErr.message, 500);
+    }
+
     return new Response(null, { status: 303, headers: { Location: `/detalle/${idNum}` } });
   } catch (err: any) {
     return jsonError('Error inesperado: ' + (err?.message || String(err)), 500);
