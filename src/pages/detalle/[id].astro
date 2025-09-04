@@ -10,6 +10,14 @@ const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
 
+// Helper opcional para dinero (si cotizar_delivery viene numérico en string)
+const formatMoney = (v?: string | null) => {
+  if (!v) return '—';
+  const n = Number(v);
+  if (Number.isFinite(n)) return `$ ${n.toLocaleString('es-AR')}`;
+  return v; // si no es número, lo mostramos tal cual
+};
+
 // Ticket + joins
 const { data, error } = await supabase
   .from('tickets_mian')
@@ -17,7 +25,7 @@ const { data, error } = await supabase
     *,
     cliente:cliente_id ( dni_cuit, correo_electronico, whatsapp, cliente ),
     tecnico:tecnico_id ( nombre, apellido ),
-    delivery ( pagado ),
+    delivery ( id, pagado, cotizar_delivery, medio_de_entrega, fecha_de_entrega, forma_de_pago, informacion_adicional_delivery ),
     impresoras:impresora_id ( modelo, maquina, numero_de_serie, tamano_de_boquilla )
   `)
   .eq('id', id)
@@ -25,9 +33,16 @@ const { data, error } = await supabase
 
 const equipo = data;
 
+// Normalizar impresora (tu patrón original)
 const impresora = Array.isArray((equipo as any)?.impresoras)
   ? (equipo as any).impresoras?.[0]
   : (equipo as any)?.impresoras;
+
+// 🔧 Normalizar delivery: si viene array, tomar la primera (o la más “reciente” si querés)
+const deliveryRaw = (equipo as any)?.delivery;
+const delivery = Array.isArray(deliveryRaw)
+  ? (deliveryRaw[0] ?? null)
+  : (deliveryRaw ?? null);
 
 const modeloMostrado =
   (impresora?.modelo && String(impresora?.modelo).trim()) ||
@@ -77,7 +92,7 @@ const hasDelivery = Boolean(deliveryExistente?.id);
 
         {isAdmin && (
           <button class="btn btn-sm btn-outline-danger d-flex align-items-center"
-            onclick={`eliminarTicket('${equipo.id}')`} title="Eliminar ticket">
+            onclick={`eliminarTicket('${equipo?.id}')`} title="Eliminar ticket">
             <i class="bi bi-trash"></i>
           </button>
         )}
@@ -106,7 +121,23 @@ const hasDelivery = Boolean(deliveryExistente?.id);
           <div class="row row-cols-1 row-cols-md-2 g-4 justify-content-center mt-3">
             <div class="col"><strong>Ticket:</strong> {equipo?.ticket ?? '—'}</div>
             <div class="col"><strong>Estado:</strong> {equipo?.estado ?? '—'}</div>
-            <div class="col"><strong>¿Cobrado?:</strong> {booleanATexto(equipo?.delivery?.pagado === 'true')}</div>
+
+            <div class="col"><strong>¿Cobrado?:</strong> {booleanATexto(delivery?.pagado === 'true')}</div>
+            <div class="col"><strong>Delivery cotizado:</strong> {formatMoney(delivery?.cotizar_delivery)}</div>
+
+            {delivery?.medio_de_entrega && (
+              <div class="col"><strong>Medio de entrega:</strong> {delivery.medio_de_entrega}</div>
+            )}
+            {delivery?.fecha_de_entrega && (
+              <div class="col"><strong>Fecha de entrega:</strong> {formatearFecha(delivery.fecha_de_entrega)}</div>
+            )}
+            {delivery?.forma_de_pago && (
+              <div class="col"><strong>Forma de pago:</strong> {delivery.forma_de_pago}</div>
+            )}
+            {delivery?.informacion_adicional_delivery && (
+              <div class="col"><strong>Info adicional:</strong> {delivery.informacion_adicional_delivery}</div>
+            )}
+
             <div class="col"><strong>Técnico:</strong> {equipo?.tecnico ? `${equipo.tecnico.nombre} ${equipo.tecnico.apellido}` : '—'}</div>
             <div class="col"><strong>DNI/CUIT:</strong> {equipo?.cliente?.dni_cuit ?? '—'}</div>
             <div class="col"><strong>Correo:</strong> {equipo?.cliente?.correo_electronico ?? '—'}</div>
@@ -121,11 +152,11 @@ const hasDelivery = Boolean(deliveryExistente?.id);
             <div class="row mt-4 g-2">
               <div class={`d-flex ${isAdmin ? 'col-6' : 'col-12'}`}>
                 {hasPresupuesto ? (
-                  <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm w-100">
+                  <a href={`/presupuesto/${equipo?.id}`} class="btn btn-outline-primary btn-sm w-100">
                     <i class="bi bi-shield-check"></i> Verificar presupuesto
                   </a>
                 ) : (
-                  <a href={`/presupuesto/${equipo.id}`} class="btn btn-outline-primary btn-sm w-100">
+                  <a href={`/presupuesto/${equipo?.id}`} class="btn btn-outline-primary btn-sm w-100">
                     <i class="bi bi-receipt"></i> Añadir presupuesto
                   </a>
                 )}
@@ -133,7 +164,7 @@ const hasDelivery = Boolean(deliveryExistente?.id);
 
               {isAdmin && (
                 <div class="col-6 d-flex">
-                  <a href={`/delivery/${equipo.id}`} class="btn btn-outline-success btn-sm w-100">
+                  <a href={`/delivery/${equipo?.id}`} class="btn btn-outline-success btn-sm w-100">
                     <i class="bi bi-truck"></i> {hasDelivery ? 'Verificar delivery' : 'Añadir delivery'}
                   </a>
                 </div>
@@ -143,7 +174,7 @@ const hasDelivery = Boolean(deliveryExistente?.id);
             <!-- Botón: Máquina Lista -->
             <div class="mt-3">
               {equipo?.estado !== 'Lista' ? (
-                <button class="btn btn-warning w-100" onclick={`window.maquinaLista('${equipo.id}')`}>
+                <button class="btn btn-warning w-100" onclick={`window.maquinaLista('${equipo?.id}')`}>
                   <i class="bi bi-check2-square me-1"></i> Máquina Lista
                 </button>
               ) : (
