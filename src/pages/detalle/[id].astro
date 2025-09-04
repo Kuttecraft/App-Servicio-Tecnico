@@ -123,7 +123,7 @@ const hasDelivery = Boolean(deliveryExistente?.id);
             <div class="col"><strong>Estado:</strong> {equipo?.estado ?? '—'}</div>
 
             <div class="col"><strong>¿Cobrado?:</strong> {booleanATexto(delivery?.pagado === 'true')}</div>
-            <div class="col"><strong>Delivery cotizado:</strong> {formatMoney(delivery?.cotizar_delivery)}</div>
+            <div class="col"><strong>Delivery por hogar:</strong> {formatMoney(delivery?.cotizar_delivery)}</div>
 
             {delivery?.medio_de_entrega && (
               <div class="col"><strong>Medio de entrega:</strong> {delivery.medio_de_entrega}</div>
