@@ -25,7 +25,10 @@ export async function POST(context: { request: Request }) {
     informacion_adicional_delivery: fields.informacion_adicional_delivery || null,
     medio_de_entrega: fields.medio_de_entrega || null,
     forma_de_pago: fields.forma_de_pago || null,
-    pagado: fields.pagado || null,  // "true" | "false" | null
+    pagado: fields.pagado || null, // "true" | "false" | null
+    // ✅ nuevos campos
+    direccion: fields.direccion || null,
+    localidad: fields.localidad || null,
     ticket_id: parseInt(ticketId, 10),
   };
 

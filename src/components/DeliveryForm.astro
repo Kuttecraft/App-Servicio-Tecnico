@@ -1,5 +1,5 @@
 ---
-// Props: equipo (viene del detalle del ticket)
+/* Props: equipo (viene del detalle del ticket) */
 const { equipo } = Astro.props as { equipo: any };
 
 // Utilidades para mostrar solo día en dd/mm/yyyy
@@ -34,6 +34,30 @@ const fechaMostrar = ddmmyyyy((equipo?.fecha_de_entrega as string) || hoyYMD);
       placeholder="Moto, correo, etc."
     />
   </div>
+
+  <!-- NUEVOS CAMPOS -->
+  <div class="col-md-6">
+    <label class="form-label">Dirección</label>
+    <input
+      type="text"
+      class="form-control"
+      name="direccion"
+      value={equipo?.direccion ?? ''}
+      placeholder="Calle, número, piso/depto"
+    />
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label">Localidad</label>
+    <input
+      type="text"
+      class="form-control"
+      name="localidad"
+      value={equipo?.localidad ?? ''}
+      placeholder="Ciudad / localidad"
+    />
+  </div>
+  <!-- FIN NUEVOS CAMPOS -->
 
   <!-- Fecha de entrega: solo día (auto), solo lectura y NO se envía al backend -->
   <div class="col-md-6">

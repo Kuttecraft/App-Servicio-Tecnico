@@ -13,29 +13,57 @@ const precarga = {
   fecha_de_entrega: url.searchParams.get('fecha_de_entrega') ?? undefined,
   forma_de_pago: url.searchParams.get('forma_de_pago') ?? undefined,
   pagado: url.searchParams.get('pagado') ?? undefined,
+  direccion: url.searchParams.get('direccion') ?? undefined,
+  localidad: url.searchParams.get('localidad') ?? undefined,
 };
 
 const { id } = Astro.params;
 
-// Ticket
+// 1) Traemos el ticket y, JOIN, los datos del cliente
 const { data: ticket } = await supabase
   .from('tickets_mian')
-  .select('id, ticket')
+  .select(`
+    id,
+    ticket,
+    cliente_id,
+    cliente:cliente_id ( cliente, direccion, localidad, informacion_adicional_usuario )
+  `)
   .eq('id', id)
   .single();
 
-// Delivery (si existe)
+// 2) Traemos (si existe) el delivery del ticket
 const { data: delivery } = await supabase
   .from('delivery')
   .select('*')
   .eq('ticket_id', id)
   .maybeSingle();
 
-// Mezcla
+// 3) Mezclamos: primero delivery; si falta algo, usamos cliente; luego lo que venga por querystring
 const equipo = {
   ticketId: ticket?.id,
   ticketNumero: ticket?.ticket,
+
+  // Campos propios de delivery (si ya existieran)
   ...delivery,
+
+  // Fallbacks desde cliente cuando en delivery están vacíos
+  direccion:
+    (delivery as any)?.direccion ??
+    (ticket as any)?.cliente?.direccion ??
+    undefined,
+
+  localidad:
+    (delivery as any)?.localidad ??
+    (ticket as any)?.cliente?.localidad ??
+    undefined,
+
+  // Si querés precargar info adicional con la que trae cliente:
+  informacion_adicional_delivery:
+    (delivery as any)?.informacion_adicional_delivery ??
+    (ticket as any)?.cliente?.informacion_adicional_usuario ??
+    undefined,
+
+  // Por último, sobrescribe cualquier precarga por URL
   ...Object.fromEntries(Object.entries(precarga).filter(([_, v]) => v !== undefined)),
 };
 ---
