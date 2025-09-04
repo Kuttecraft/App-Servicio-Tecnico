@@ -10,16 +10,58 @@ const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
 
-// Helper opcional para dinero (si cotizar_delivery viene numérico en string)
+// Helper dinero
 const formatMoney = (v?: string | null) => {
   if (!v) return '—';
   const n = Number(v);
   if (Number.isFinite(n)) return `$ ${n.toLocaleString('es-AR')}`;
-  return v; // si no es número, lo mostramos tal cual
+  return v;
 };
 
+// ✅ Normalizador de fechas (acepta "YYYY-MM-DD", "YYYY/MM/DD", "DD/MM/YYYY", "MM/DD/YYYY", con o sin hora)
+function normDateLite(value?: string | null): string | null {
+  if (!value) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+
+  // descartar hora (espacio o 'T')
+  const onlyDate = s.split('T')[0].split(' ')[0];
+
+  // YYYY-MM-DD
+  let m = onlyDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+
+  // YYYY/MM/DD
+  m = onlyDate.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (m) {
+    const yyyy = m[1], mm = m[2].padStart(2,'0'), dd = m[3].padStart(2,'0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // DD/MM/YYYY o MM/DD/YYYY (ambigua) -> decidir por rangos
+  m = onlyDate.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (m) {
+    const a = parseInt(m[1],10), b = parseInt(m[2],10), yyyy = m[3];
+    let dd:number, mm:number;
+    if (b > 12 && a <= 12) { mm = a; dd = b; }
+    else if (a > 12 && b <= 12) { dd = a; mm = b; }
+    else { mm = a; dd = b; }
+    return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+  }
+
+  // Fallback
+  const d = new Date(onlyDate);
+  if (!isNaN(d.getTime())) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return null;
+}
+
 // Ticket + joins
-const { data, error } = await supabase
+const { data } = await supabase
   .from('tickets_mian')
   .select(`
     *,
@@ -33,16 +75,14 @@ const { data, error } = await supabase
 
 const equipo = data;
 
-// Normalizar impresora (tu patrón original)
+// Normalizar impresora
 const impresora = Array.isArray((equipo as any)?.impresoras)
   ? (equipo as any).impresoras?.[0]
   : (equipo as any)?.impresoras;
 
-// 🔧 Normalizar delivery: si viene array, tomar la primera (o la más “reciente” si querés)
+// Normalizar delivery (a objeto)
 const deliveryRaw = (equipo as any)?.delivery;
-const delivery = Array.isArray(deliveryRaw)
-  ? (deliveryRaw[0] ?? null)
-  : (deliveryRaw ?? null);
+const delivery = Array.isArray(deliveryRaw) ? (deliveryRaw[0] ?? null) : (deliveryRaw ?? null);
 
 const modeloMostrado =
   (impresora?.modelo && String(impresora?.modelo).trim()) ||
@@ -62,7 +102,6 @@ const { data: presupuestoExistente } = await supabase
   .select('id')
   .eq('ticket_id', id)
   .maybeSingle();
-
 const hasPresupuesto = Boolean(presupuestoExistente?.id);
 
 // ¿Existe delivery?
@@ -71,8 +110,11 @@ const { data: deliveryExistente } = await supabase
   .select('id')
   .eq('ticket_id', id)
   .maybeSingle();
-
 const hasDelivery = Boolean(deliveryExistente?.id);
+
+// ✅ Fechas normalizadas para mostrar
+const fechaFormularioNorm = normDateLite(equipo?.marca_temporal);
+const fechaListoNorm      = normDateLite(equipo?.fecha_de_reparacion);
 ---
 
 <BasePrivateLayout>
@@ -123,7 +165,7 @@ const hasDelivery = Boolean(deliveryExistente?.id);
             <div class="col"><strong>Estado:</strong> {equipo?.estado ?? '—'}</div>
 
             <div class="col"><strong>¿Cobrado?:</strong> {booleanATexto(delivery?.pagado === 'true')}</div>
-            <div class="col"><strong>Delivery por hogar:</strong> {formatMoney(delivery?.cotizar_delivery)}</div>
+            <div class="col"><strong>Retiro por hogar:</strong> {formatMoney(delivery?.cotizar_delivery)}</div>
 
             {delivery?.medio_de_entrega && (
               <div class="col"><strong>Medio de entrega:</strong> {delivery.medio_de_entrega}</div>
@@ -142,8 +184,13 @@ const hasDelivery = Boolean(deliveryExistente?.id);
             <div class="col"><strong>DNI/CUIT:</strong> {equipo?.cliente?.dni_cuit ?? '—'}</div>
             <div class="col"><strong>Correo:</strong> {equipo?.cliente?.correo_electronico ?? '—'}</div>
             <div class="col"><strong>WhatsApp:</strong> {equipo?.cliente?.whatsapp ?? '—'}</div>
-            <div class="col"><strong>Fecha formulario:</strong> {equipo?.marca_temporal ? formatearFecha(equipo.marca_temporal) : '—'}</div>
-            <div class="col"><strong>Fecha listo:</strong> {equipo?.fecha_de_reparacion ? formatearFecha(equipo.fecha_de_reparacion) : '—'}</div>
+
+            <div class="col">
+              <strong>Fecha formulario:</strong> {fechaFormularioNorm ? formatearFecha(fechaFormularioNorm) : '—'}
+            </div>
+            <div class="col">
+              <strong>Fecha listo:</strong> {fechaListoNorm ? formatearFecha(fechaListoNorm) : '—'}
+            </div>
           </div>
         </div>
 
@@ -204,49 +251,30 @@ const hasDelivery = Boolean(deliveryExistente?.id);
   )}
 
   <script>
-    // Declaración segura para TypeScript
     (window as any).maquinaLista = async function(id) {
       if (!confirm("¿Marcar este equipo como LISTA? Esto actualizará el estado y la fecha de listo.")) return;
 
       const elements = document.querySelectorAll('button, a.btn');
-
-      // Deshabilitar botones y anchors
       elements.forEach((el) => {
-        if (el instanceof HTMLButtonElement) {
-          el.disabled = true;
-        } else if (el instanceof HTMLAnchorElement) {
-          el.classList.add('disabled');
-          el.setAttribute('aria-disabled', 'true');
-          el.style.pointerEvents = 'none';
+        if (el instanceof HTMLButtonElement) el.disabled = true;
+        else if (el instanceof HTMLAnchorElement) {
+          el.classList.add('disabled'); el.setAttribute('aria-disabled', 'true'); el.style.pointerEvents = 'none';
         }
       });
 
       try {
         const res = await fetch(`/api/maquinaLista?id=${encodeURIComponent(id)}`, { method: 'POST' });
-
-        if (res.redirected) {
-          window.location.href = res.url;
-          return;
-        }
-        if (res.ok) {
-          window.location.reload();
-          return;
-        }
+        if (res.redirected) { window.location.href = res.url; return; }
+        if (res.ok) { window.location.reload(); return; }
 
         const data = await res.json().catch(() => ({}));
         alert("No se pudo marcar como Lista: " + (data.error || res.statusText));
       } catch (e) {
         alert("Error de red: " + (e && (e as any).message ? (e as any).message : String(e)));
       } finally {
-        // Rehabilitar
         elements.forEach((el) => {
-          if (el instanceof HTMLButtonElement) {
-            el.disabled = false;
-          } else if (el instanceof HTMLAnchorElement) {
-            el.classList.remove('disabled');
-            el.removeAttribute('aria-disabled');
-            el.style.pointerEvents = '';
-          }
+          if (el instanceof HTMLButtonElement) el.disabled = false;
+          else if (el instanceof HTMLAnchorElement) { el.classList.remove('disabled'); el.removeAttribute('aria-disabled'); el.style.pointerEvents = ''; }
         });
       }
     }

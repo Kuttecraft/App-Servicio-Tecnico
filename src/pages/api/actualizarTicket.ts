@@ -1,19 +1,21 @@
-// src/pages/api/actualizarTicket.ts
 import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
 
-/** Normaliza a YYYY-MM-DD desde ISO, YYYY/MM/DD, MM/DD/YYYY o DD/MM/YYYY. */
+/** Normaliza a YYYY-MM-DD desde ISO, YYYY/MM/DD, MM/DD/YYYY o DD/MM/YYYY. Acepta valores con hora. */
 function normDate(value?: string | null): string | null {
   if (!value) return null;
-  const s = value.trim();
-  if (!s || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') return null;
+  const sRaw = value.trim();
+  if (!sRaw || sRaw.toLowerCase() === 'null' || sRaw.toLowerCase() === 'undefined') return null;
+
+  // quitar hora y/o 'T'
+  const s = sRaw.split('T')[0].split(' ')[0];
 
   // ISO o YYYY-MM-DD
-  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
 
   // YYYY/MM/DD
-  m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
   if (m) {
     const yyyy = m[1];
     const mm = m[2].padStart(2, '0');
@@ -22,7 +24,7 @@ function normDate(value?: string | null): string | null {
   }
 
   // DD/MM/YYYY o MM/DD/YYYY (ambigua): decidir por rangos
-  m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+  m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
   if (m) {
     const a = parseInt(m[1], 10);
     const b = parseInt(m[2], 10);
@@ -41,7 +43,7 @@ function normDate(value?: string | null): string | null {
   }
 
   // Fallback
-  const d = new Date(s);
+  const d = new Date(sRaw);
   if (!isNaN(d.getTime())) {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -340,11 +342,11 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       }
     }
 
-    // ✅ Al guardar (update o insert) el presupuesto, pasamos el ticket a "P. Enviado"
+    // ✅ Al guardar presupuesto, pasamos el ticket a "P. Enviado"
     {
       const { error: estadoErr } = await supabase
         .from('tickets_mian')
-        .update({ estado: 'P. Enviado' }) // usa 'Presupuesto enviado' si preferís el texto completo
+        .update({ estado: 'P. Enviado' })
         .eq('id', idNum);
       if (estadoErr) return jsonError('No se pudo marcar el estado como P. Enviado: ' + estadoErr.message, 500);
     }
