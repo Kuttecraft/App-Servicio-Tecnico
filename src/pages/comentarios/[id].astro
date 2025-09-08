@@ -9,7 +9,7 @@ const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
 
-// Traer ticket (para título y validación mínima)
+// Ticket para cabecera
 const { data: ticket } = await supabase
   .from('tickets_mian')
   .select(`
@@ -19,7 +19,7 @@ const { data: ticket } = await supabase
   .eq('id', id)
   .maybeSingle();
 
-// Comentarios del ticket (últimos primero)
+// Comentarios (últimos primero)
 const { data: comentarios, count: totalComentarios } = await supabase
   .from('ticket_comentarios')
   .select(`
@@ -37,7 +37,6 @@ const fechaHoraAR = (iso?: string | null) => {
   catch { return iso; }
 };
 
-// Normalizadores por si Supabase devuelve arrays en joins 1-1
 const getAutorNombre = (autor: any): string => {
   const a = Array.isArray(autor) ? autor[0] : autor;
   if (!a) return '—';
@@ -45,7 +44,6 @@ const getAutorNombre = (autor: any): string => {
   const ape = (a?.apellido ?? '').toString();
   return `${nom} ${ape}`.trim() || '—';
 };
-
 const getClienteNombre = (cli: any): string | null => {
   const c = Array.isArray(cli) ? cli[0] : cli;
   if (!c) return null;
@@ -71,7 +69,10 @@ const getClienteNombre = (cli: any): string | null => {
 
     <div class="card shadow-sm">
       <div class="card-header bg-white d-flex align-items-center justify-content-between">
-        <div><strong>Historial</strong> <span class="text-muted">({totalComentarios ?? 0})</span></div>
+        <div>
+          <strong>Historial</strong>
+          <span class="text-muted">(<span id="comentarios-count">{totalComentarios ?? 0}</span>)</span>
+        </div>
         {(isAdmin || isTecnico) && <span class="text-muted small">Append-only</span>}
       </div>
 
@@ -95,48 +96,56 @@ const getClienteNombre = (cli: any): string | null => {
           </form>
         )}
 
-        {Array.isArray(comentarios) && comentarios.length > 0 ? (
-          <ul class="list-group" id="comentarios-lista">
-            {comentarios.map((c) => (
-              <li class="list-group-item">
-                <div class="small text-muted">
-                  <strong>{getAutorNombre(c.autor)}</strong>
-                  · {fechaHoraAR(c.creado_en)}
-                </div>
-                <div>{c.mensaje}</div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div class="text-muted">No hay comentarios todavía.</div>
-        )}
+        <!-- SIEMPRE renderizamos la UL aunque esté vacía -->
+        <ul class="list-group" id="comentarios-lista">
+          {Array.isArray(comentarios) && comentarios.length > 0 && comentarios.map((c) => (
+            <li class="list-group-item">
+              <div class="small text-muted">
+                <strong>{getAutorNombre(c.autor)}</strong>
+                · {fechaHoraAR(c.creado_en)}
+              </div>
+              <div>{c.mensaje}</div>
+            </li>
+          ))}
+        </ul>
+
+        {/* Mensaje de vacío controlado por JS */}
+        <div id="no-comentarios" class="text-muted" style={{ display: (Array.isArray(comentarios) && comentarios.length > 0) ? 'none' : '' }}>
+          No hay comentarios todavía.
+        </div>
       </div>
     </div>
   </div>
 
   <script>
-    // Alta de comentario
+    // Alta de comentario con Optimistic UI (sin recargar)
     (function(){
       const form = document.getElementById('form-comentario') as HTMLFormElement | null;
       if (!form) return;
 
       const textarea = document.getElementById('comentario-texto') as HTMLTextAreaElement | null;
-      const lista = document.getElementById('comentarios-lista');
-      const rootId = form.dataset.ticketid ? Number(form.dataset.ticketid) : null;
+      const lista = document.getElementById('comentarios-lista') as HTMLUListElement | null;
+      const noMsg = document.getElementById('no-comentarios') as HTMLDivElement | null;
+      const countEl = document.getElementById('comentarios-count') as HTMLSpanElement | null;
+
+      const ticketId = form.dataset.ticketid ? Number(form.dataset.ticketid) : null;
 
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const btn = form.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+
         const mensaje = (textarea?.value || '').trim();
-        if (!mensaje || !Number.isFinite(rootId)) return;
+        if (!mensaje || !Number.isFinite(ticketId)) return;
+
         if (btn) btn.disabled = true;
 
         try {
           const res = await fetch('/api/agregarComentario', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticketId: rootId, mensaje })
+            body: JSON.stringify({ ticketId, mensaje })
           });
+
           const data = await res.json();
 
           if (!res.ok) {
@@ -144,26 +153,43 @@ const getClienteNombre = (cli: any): string | null => {
             return;
           }
 
-          if (textarea) textarea.value = '';
+          // ocultar mensaje "no hay comentarios"
+          if (noMsg && noMsg.style.display !== 'none') noMsg.style.display = 'none';
 
-          // Optimistic UI
-          const li = document.createElement('li');
-          li.className = 'list-group-item';
-          li.innerHTML = `
-            <div class="small text-muted">
-              <strong>${data.autor || 'Vos'}</strong> · ${data.creado_en_humano || ''}
-            </div>
-            <div></div>`;
-          li.querySelector('div:last-child')!.textContent = mensaje;
-
+          // crear <li> y prepender al <ul>
           if (lista) {
+            const li = document.createElement('li');
+            li.className = 'list-group-item';
+            const fechaHumana = data?.creado_en_humano || new Date().toLocaleString('es-AR', { hour12: false });
+            const autor = data?.autor || 'Vos';
+
+            li.innerHTML = `
+              <div class="small text-muted">
+                <strong></strong> · <span class="fecha"></span>
+              </div>
+              <div class="mensaje"></div>
+            `;
+            (li.querySelector('strong') as HTMLElement).textContent = autor;
+            (li.querySelector('.fecha') as HTMLElement).textContent = fechaHumana;
+            (li.querySelector('.mensaje') as HTMLElement).textContent = mensaje;
+
             if (lista.firstChild) lista.insertBefore(li, lista.firstChild);
             else lista.appendChild(li);
           }
+
+          // limpiar textarea y contar
+          if (textarea) {
+            textarea.value = '';
+            textarea.focus();
+          }
+          if (countEl) {
+            const n = parseInt(countEl.textContent || '0', 10) || 0;
+            countEl.textContent = String(n + 1);
+          }
+
         } catch (err) {
-          alert('Error de red: ' + (err?.message || String(err)));
+          alert('Error de red: ' + (err && (err as any).message ? (err as any).message : String(err)));
         } finally {
-          const btn = form.querySelector('button[type="submit"]') as HTMLButtonElement | null;
           if (btn) btn.disabled = false;
         }
       });
