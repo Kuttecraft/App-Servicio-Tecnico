@@ -1,0 +1,172 @@
+---
+import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
+import { supabase } from '../../lib/supabase';
+
+const { id } = Astro.params as { id: string };
+
+type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
+const perfil = (Astro.locals as any).perfil as Perfil | undefined;
+const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
+const isTecnico = perfil?.rol === 'tecnico';
+
+// Traer ticket (para título y validación mínima)
+const { data: ticket } = await supabase
+  .from('tickets_mian')
+  .select(`
+    id, ticket, estado,
+    cliente:cliente_id ( cliente )
+  `)
+  .eq('id', id)
+  .maybeSingle();
+
+// Comentarios del ticket (últimos primero)
+const { data: comentarios, count: totalComentarios } = await supabase
+  .from('ticket_comentarios')
+  .select(`
+    id,
+    mensaje,
+    creado_en,
+    autor:autor_id ( nombre, apellido )
+  `, { count: 'exact' })
+  .eq('ticket_id', id)
+  .order('creado_en', { ascending: false });
+
+const fechaHoraAR = (iso?: string | null) => {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleString('es-AR', { hour12: false }); }
+  catch { return iso; }
+};
+
+// Normalizadores por si Supabase devuelve arrays en joins 1-1
+const getAutorNombre = (autor: any): string => {
+  const a = Array.isArray(autor) ? autor[0] : autor;
+  if (!a) return '—';
+  const nom = (a?.nombre ?? '').toString();
+  const ape = (a?.apellido ?? '').toString();
+  return `${nom} ${ape}`.trim() || '—';
+};
+
+const getClienteNombre = (cli: any): string | null => {
+  const c = Array.isArray(cli) ? cli[0] : cli;
+  if (!c) return null;
+  const nombre = (c?.cliente ?? '').toString().trim();
+  return nombre || null;
+};
+---
+
+<BasePrivateLayout>
+  <div class="container mt-4">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <h1 class="h5 mb-0">
+        Comentarios del Ticket #{ticket?.ticket ?? ticket?.id ?? id}
+        {getClienteNombre(ticket?.cliente) && (
+          <small class="text-muted"> — {getClienteNombre(ticket?.cliente)}</small>
+        )}
+      </h1>
+
+      <a href={`/detalle/${id}`} class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Volver al detalle
+      </a>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header bg-white d-flex align-items-center justify-content-between">
+        <div><strong>Historial</strong> <span class="text-muted">({totalComentarios ?? 0})</span></div>
+        {(isAdmin || isTecnico) && <span class="text-muted small">Append-only</span>}
+      </div>
+
+      <div class="card-body">
+        {(isAdmin || isTecnico) && (
+          <form id="form-comentario" class="mb-3" data-ticketid={id}>
+            <div class="input-group">
+              <textarea
+                class="form-control"
+                id="comentario-texto"
+                placeholder="Agregar comentario (p. ej. 'Revisar extrusor')"
+                rows="2"
+                maxlength="2000"
+                required
+              ></textarea>
+              <button class="btn btn-primary" type="submit">
+                <i class="bi bi-send"></i> Agregar
+              </button>
+            </div>
+            <div class="form-text">No se puede editar ni borrar.</div>
+          </form>
+        )}
+
+        {Array.isArray(comentarios) && comentarios.length > 0 ? (
+          <ul class="list-group" id="comentarios-lista">
+            {comentarios.map((c) => (
+              <li class="list-group-item">
+                <div class="small text-muted">
+                  <strong>{getAutorNombre(c.autor)}</strong>
+                  · {fechaHoraAR(c.creado_en)}
+                </div>
+                <div>{c.mensaje}</div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div class="text-muted">No hay comentarios todavía.</div>
+        )}
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Alta de comentario
+    (function(){
+      const form = document.getElementById('form-comentario') as HTMLFormElement | null;
+      if (!form) return;
+
+      const textarea = document.getElementById('comentario-texto') as HTMLTextAreaElement | null;
+      const lista = document.getElementById('comentarios-lista');
+      const rootId = form.dataset.ticketid ? Number(form.dataset.ticketid) : null;
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = form.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+        const mensaje = (textarea?.value || '').trim();
+        if (!mensaje || !Number.isFinite(rootId)) return;
+        if (btn) btn.disabled = true;
+
+        try {
+          const res = await fetch('/api/agregarComentario', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticketId: rootId, mensaje })
+          });
+          const data = await res.json();
+
+          if (!res.ok) {
+            alert(data?.error || 'No se pudo agregar el comentario.');
+            return;
+          }
+
+          if (textarea) textarea.value = '';
+
+          // Optimistic UI
+          const li = document.createElement('li');
+          li.className = 'list-group-item';
+          li.innerHTML = `
+            <div class="small text-muted">
+              <strong>${data.autor || 'Vos'}</strong> · ${data.creado_en_humano || ''}
+            </div>
+            <div></div>`;
+          li.querySelector('div:last-child')!.textContent = mensaje;
+
+          if (lista) {
+            if (lista.firstChild) lista.insertBefore(li, lista.firstChild);
+            else lista.appendChild(li);
+          }
+        } catch (err) {
+          alert('Error de red: ' + (err?.message || String(err)));
+        } finally {
+          const btn = form.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+          if (btn) btn.disabled = false;
+        }
+      });
+    })();
+  </script>
+</BasePrivateLayout>
