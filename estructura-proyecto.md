@@ -68,7 +68,7 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 │       ├── actualizarPresupuesto.ts     # Endpoint POST para actualizar datos de presupuesto (por id, en 'TestImpresoras')
 │       ├── agregarComentario.ts         # Endpoint POST para crear un comentario 
 │       ├── estadisticas.ts              # Endpoint POST para ver estadisticas  
-│        └── maquinaLista.ts              # Endpoint POST para que marque como estado lista
+│        └── maquinaLista.ts             # Endpoint POST para que marque como estado lista
 │
 ├── /data
 │   └── impresoras.json           # Datos de ejemplo para pruebas (mock)
