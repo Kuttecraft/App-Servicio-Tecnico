@@ -35,7 +35,8 @@ export async function POST({ request }: { request: Request }) {
     const correo      = String(form.get('correo') ?? '').trim();
     const whatsapp    = String(form.get('whatsapp') ?? '').trim();
 
-    const modelo      = String(form.get('modelo') ?? '').trim();
+    // ✅ Solo "maquina" (modelo ya no se pide en el form)
+    const maquina     = String(form.get('maquina') ?? '').trim();
     const numeroSerie = String(form.get('numeroSerie') ?? '').trim();
     const boquilla    = String(form.get('boquilla') ?? '').trim();
 
@@ -83,25 +84,74 @@ export async function POST({ request }: { request: Request }) {
           })
           .select('id')
           .single();
-        if (error) return new Response(JSON.stringify({ error: 'No se pudo crear el cliente', supabase: error }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        if (error) {
+          return new Response(JSON.stringify({ error: 'No se pudo crear el cliente', supabase: error }), {
+            status: 500, headers: { 'Content-Type': 'application/json' }
+          });
+        }
         clienteId = data!.id;
       }
     }
 
     // ===== Técnico (opcional) =====
+    // Busca por nombre+apellido; si no existe, lo crea y usa su id.
     let tecnicoId: number | null = null;
     if (tecnicoNombre) {
-      const { data } = await supabase.from('tecnicos').select('id').ilike('nombre', tecnicoNombre).limit(1).maybeSingle();
-      if (data?.id) tecnicoId = data.id;
+      const { nombre: nTec, apellido: aTec } = partirNombreApellido(tecnicoNombre);
+
+      // Intento de match flexible
+      let tecMatch: { id: number } | null = null;
+      if (aTec && aTec !== '(sin apellido)') {
+        const { data } = await supabase
+          .from('tecnicos')
+          .select('id')
+          .ilike('nombre', `%${nTec}%`)
+          .ilike('apellido', `%${aTec}%`)
+          .limit(1)
+          .maybeSingle();
+        if (data) tecMatch = data;
+      } else {
+        const { data } = await supabase
+          .from('tecnicos')
+          .select('id')
+          .ilike('nombre', `%${nTec}%`)
+          .limit(1)
+          .maybeSingle();
+        if (data) tecMatch = data;
+      }
+
+      if (tecMatch?.id) {
+        tecnicoId = tecMatch.id;
+      } else {
+        // No existe → crear técnico rápido. email es NOT NULL → usamos placeholder.
+        const emailPlaceholder = `no-email+${Date.now()}@local`;
+        const { data: tecNuevo, error: tecErr } = await supabase
+          .from('tecnicos')
+          .insert({
+            nombre: nTec,
+            apellido: aTec === '(sin apellido)' ? '' : aTec,
+            email: emailPlaceholder,
+            activo: true,
+          })
+          .select('id')
+          .single();
+        if (!tecErr && tecNuevo?.id) {
+          tecnicoId = tecNuevo.id;
+        }
+      }
     }
 
-    // ===== Impresora (sin pedir "Máquina" en el form) =====
-    // El schema exige 'maquina NOT NULL', así que usamos un valor por defecto.
-    const MAQUINA_DEFAULT = 'Desconocida';
-    let impresoraId: number | null = null;
-    const hasModelo = !!modelo;
-    const hasSerie = !!numeroSerie;
+    // ===== Impresora =====
+    // Tu schema mantiene 'modelo NOT NULL' y 'maquina NOT NULL'.
+    // Como ya no pedís "modelo" en el form, usamos un valor por defecto.
+    const MODELO_DEFAULT = 'Generico';
+    const MAQUINA_DEFAULT = maquina || 'Desconocida';
 
+    let impresoraId: number | null = null;
+    const hasSerie = !!numeroSerie;
+    const hasMaquina = !!maquina;
+
+    // 1) Intentar por número de serie
     if (hasSerie) {
       const { data: impFound } = await supabase
         .from('impresoras')
@@ -111,35 +161,37 @@ export async function POST({ request }: { request: Request }) {
       if (impFound?.id) impresoraId = impFound.id;
     }
 
-    if (!impresoraId && hasModelo) {
-      const tempSerie = numeroSerie || `TEMP-${Date.now()}-${Math.floor(Math.random()*900+100)}`;
-
-      // Intento por modelo + máquina default (para respetar tu schema actual)
-      const { data: byModel } = await supabase
+    // 2) Si no, intentar por combinación máquina + MODELO_DEFAULT
+    if (!impresoraId && hasMaquina) {
+      const { data: byCombo } = await supabase
         .from('impresoras')
         .select('id')
-        .match({ modelo, maquina: MAQUINA_DEFAULT })
+        .match({ maquina: MAQUINA_DEFAULT, modelo: MODELO_DEFAULT })
         .limit(1)
         .maybeSingle();
+      if (byCombo?.id) impresoraId = byCombo.id;
+    }
 
-      if (byModel?.id) {
-        impresoraId = byModel.id;
-      } else {
-        const { data: impNew, error: impErr } = await supabase
-          .from('impresoras')
-          .insert({
-            modelo,
-            maquina: MAQUINA_DEFAULT,        // <- cumpliendo NOT NULL
-            numero_de_serie: tempSerie,
-            tamano_de_boquilla: boquilla || null,
-          })
-          .select('id')
-          .single();
-        if (impErr) {
-          return new Response(JSON.stringify({ error: 'No se pudo crear la impresora', supabase: impErr }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-        }
-        impresoraId = impNew!.id;
+    // 3) Si tampoco, crear impresora
+    if (!impresoraId) {
+      const tempSerie = numeroSerie || `TEMP-${Date.now()}-${Math.floor(Math.random()*900+100)}`;
+      const { data: impNew, error: impErr } = await supabase
+        .from('impresoras')
+        .insert({
+          modelo: MODELO_DEFAULT,
+          maquina: MAQUINA_DEFAULT,
+          numero_de_serie: tempSerie,
+          tamano_de_boquilla: boquilla || null,
+        })
+        .select('id')
+        .single();
+
+      if (impErr) {
+        return new Response(JSON.stringify({ error: 'No se pudo crear la impresora', supabase: impErr }), {
+          status: 500, headers: { 'Content-Type': 'application/json' }
+        });
       }
+      impresoraId = impNew!.id;
     }
 
     // ===== Insertar Ticket =====
