@@ -1,56 +1,45 @@
 import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
 
-/** Normaliza a YYYY-MM-DD desde ISO, YYYY/MM/DD, MM/DD/YYYY o DD/MM/YYYY. Acepta valores con hora. */
+/** Normaliza a YYYY-MM-DD desde ISO, YYYY/MM/DD, MM/DD/YYYY o DD/MM/YYYY. */
 function normDate(value?: string | null): string | null {
   if (!value) return null;
   const sRaw = value.trim();
   if (!sRaw || sRaw.toLowerCase() === 'null' || sRaw.toLowerCase() === 'undefined') return null;
 
-  // quitar hora y/o 'T'
   const s = sRaw.split('T')[0].split(' ')[0];
 
-  // ISO o YYYY-MM-DD
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
 
-  // YYYY/MM/DD
   m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
-  if (m) {
-    const yyyy = m[1];
-    const mm = m[2].padStart(2, '0');
-    const dd = m[3].padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  }
+  if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
 
-  // DD/MM/YYYY o MM/DD/YYYY (ambigua): decidir por rangos
   m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
   if (m) {
-    const a = parseInt(m[1], 10);
-    const b = parseInt(m[2], 10);
-    const yyyy = m[3];
-
-    let dd: number;
-    let mm: number;
-
+    const a = parseInt(m[1],10), b = parseInt(m[2],10), yyyy = m[3];
+    let dd:number, mm:number;
     if (b > 12 && a <= 12) { mm = a; dd = b; }
     else if (a > 12 && b <= 12) { dd = a; mm = b; }
     else { mm = a; dd = b; }
-
-    const mmStr = String(mm).padStart(2, '0');
-    const ddStr = String(dd).padStart(2, '0');
-    return `${yyyy}-${mmStr}-${ddStr}`;
+    return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
   }
 
-  // Fallback
   const d = new Date(sRaw);
   if (!isNaN(d.getTime())) {
     const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
     return `${yyyy}-${mm}-${dd}`;
   }
   return null;
+}
+
+function jsonError(message: string, status = 500) {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 export const POST: APIRoute = async ({ request, params, locals }) => {
@@ -61,7 +50,6 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     // ---------- Obtener ID robustamente ----------
     const formData = await request.formData();
     let id: string | undefined;
-
     for (const k of ['ticketId', 'id', 'ticket', 'ticket_id']) {
       const v = formData.get(k);
       if (typeof v === 'string' && v.trim() && v.trim().toLowerCase() !== 'undefined') {
@@ -100,7 +88,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     // ---------- Leer fila actual ----------
     const { data: tRow, error: tErr } = await supabase
       .from('tickets_mian')
-      .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion, estado')
+      .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion, estado, maquina_reparada')
       .eq('id', idNum)
       .single();
     if (tErr || !tRow) return jsonError(`No se pudo obtener el ticket (id=${String(id)})`, 500);
@@ -116,28 +104,38 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       marca_temporal: (fechaFormularioNorm ?? tRow.marca_temporal) || null,
       fecha_de_reparacion: (fechaListoNorm ?? tRow.fecha_de_reparacion) || null,
       notas_del_tecnico: fields.notaTecnico || null,
-      maquina_reparada: fields.modelo || null,
+      // 👇 clave: en Editar el input se llama "maquina" (label Máquina),
+      // y ese valor es el que representa al "modelo".
+      maquina_reparada: fields.maquina || fields.modelo || tRow.maquina_reparada || null,
     };
 
-    // ========== Cliente ==========
-    const datosCliente: Record<string, any> = {
-      dni_cuit: fields.dniCuit || null,
-      whatsapp: fields.whatsapp || null,
-      correo_electronico: fields.correo || null,
-      comentarios: fields.comentarios ?? null,
-    };
+    // ========== Cliente (merge: solo lo que venga no vacío) ==========
+    if (tRow.cliente_id) {
+      const updateCliente: Record<string, any> = {};
+      if (typeof fields.dniCuit === 'string' && fields.dniCuit !== '') updateCliente.dni_cuit = fields.dniCuit;
+      if (typeof fields.whatsapp === 'string' && fields.whatsapp !== '') updateCliente.whatsapp = fields.whatsapp;
+      if (typeof fields.correo === 'string' && fields.correo !== '') updateCliente.correo_electronico = fields.correo;
+      if (typeof fields.comentarios === 'string') updateCliente.comentarios = fields.comentarios; // puede ser vacío a propósito
+
+      if (Object.keys(updateCliente).length > 0) {
+        const { error } = await supabase.from('cliente').update(updateCliente).eq('id', tRow.cliente_id);
+        if (error) return jsonError('Error al actualizar cliente: ' + error.message, 500);
+      }
+    }
 
     // ========== Impresora ==========
-    const modelo      = fields.modelo || '';
-    const maquina     = fields.maquina || '';
-    const numeroSerie = fields.numeroSerie || '';
-    const boquilla    = fields.boquilla || '';
+    const maquina      = fields.maquina || '';       // ← este es el “modelo” real desde UI
+    const numeroSerie  = fields.numeroSerie || '';
+    const boquilla     = fields.boquilla || '';
 
-    if (modelo || maquina || numeroSerie || boquilla) {
+    if (maquina || numeroSerie || boquilla) {
       if (tRow.impresora_id) {
         const payloadImpresora: any = {};
-        if (modelo)      payloadImpresora.modelo = modelo;
-        if (maquina)     payloadImpresora.maquina = maquina;
+        // Importante: el input "maquina" alimenta modelo y maquina
+        if (maquina) {
+          payloadImpresora.modelo  = maquina;
+          payloadImpresora.maquina = maquina;
+        }
         if (numeroSerie) payloadImpresora.numero_de_serie = numeroSerie;
         payloadImpresora.tamano_de_boquilla = boquilla || null;
 
@@ -147,6 +145,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
           .eq('id', tRow.impresora_id);
         if (error) return jsonError('Error al actualizar impresora: ' + error.message, 500);
       } else {
+        // crear y vincular
         let impresoraId: number | null = null;
 
         if (numeroSerie) {
@@ -158,24 +157,23 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
           if (impFound?.id) impresoraId = impFound.id;
         }
 
-        if (!impresoraId && (modelo || maquina)) {
+        if (!impresoraId && (maquina || numeroSerie || boquilla)) {
           const maquinaSafe = maquina || 'Desconocida';
           const serieSafe   = numeroSerie || `TEMP-${Date.now()}-${Math.floor(Math.random()*900+100)}`;
-
-          const { data: byModel } = await supabase
+          const { data: byCombo } = await supabase
             .from('impresoras')
             .select('id')
-            .match({ modelo: modelo || '(sin modelo)', maquina: maquinaSafe })
+            .match({ modelo: maquinaSafe, maquina: maquinaSafe })
             .limit(1)
             .maybeSingle();
 
-          if (byModel?.id) {
-            impresoraId = byModel.id;
+          if (byCombo?.id) {
+            impresoraId = byCombo.id;
           } else {
             const { data: impNew, error: impErr } = await supabase
               .from('impresoras')
               .insert({
-                modelo: modelo || '(sin modelo)',
+                modelo: maquinaSafe,
                 maquina: maquinaSafe,
                 numero_de_serie: serieSafe,
                 tamano_de_boquilla: boquilla || null,
@@ -198,95 +196,18 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     }
 
     // ========== Delivery ==========
-    const datosDeliveryBase = {
-      ticket_id: idNum,
+    const deliveryUpd: any = {
       pagado: fields.cobrado === 'true' ? 'true' : 'false',
-      cotizar_delivery: fields.costoDelivery || null,
-      informacion_adicional_delivery: fields.infoDelivery || null,
     };
-
-    // ========== Presupuesto ==========
-    const fechaPresuNorm = normDate(fields.timestampPresupuesto);
-    const datosPresupuestoBase = {
-      ticket_id: idNum,
-      monto: isNaN(parseFloat(fields.monto)) ? '0' : String(parseFloat(fields.monto)),
-      link_presupuesto: fields.linkPresupuesto || null,
-      cubre_garantia: (fields.cubre_garantia ?? fields.cubreGarantia) === 'true' ? 'true' : 'false',
-      fecha_presupuesto: fechaPresuNorm,
-    };
-
-    // ========== Imágenes ==========
-    const contentType = (f: File | null) => (f as any)?.type || 'image/webp';
-
-    const subirImagen = async (archivo: File, nombreArchivo: string, campo: 'imagen'|'imagen_ticket'|'imagen_extra') => {
-      const { error: uploadError } = await supabase.storage
-        .from('imagenes')
-        .upload(nombreArchivo, archivo, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: contentType(archivo),
-        });
-      if (uploadError) throw new Error(`Error al subir ${campo}: ${uploadError.message}`);
-
-      const { data } = supabase.storage.from('imagenes').getPublicUrl(nombreArchivo);
-      (datosTicketsMian as any)[campo] = data.publicUrl;
-    };
-
-    const borrarImagenCampo = async (nombreArchivo: string, campo: 'imagen'|'imagen_ticket'|'imagen_extra') => {
-      await supabase.storage.from('imagenes').remove([nombreArchivo]);
-      (datosTicketsMian as any)[campo] = null;
-    };
-
-    const mustDelete = (v: string | null | undefined) => v === 'delete' || v === 'true';
-
-    // main
-    const nombreArchivo = `public/${idNum}.webp`;
-    if (imagenArchivo && imagenArchivo.size > 0) {
-      await subirImagen(imagenArchivo, nombreArchivo, 'imagen');
-    } else if (mustDelete(borrarImagen)) {
-      await borrarImagenCampo(nombreArchivo, 'imagen');
+    if (isAdmin) {
+      if (typeof fields.costoDelivery === 'string') deliveryUpd.cotizar_delivery = fields.costoDelivery || null;
+      if (typeof fields.infoDelivery === 'string')  deliveryUpd.informacion_adicional_delivery = fields.infoDelivery || null;
     }
 
-    // ticket
-    const nombreArchivoTicket = `public/${idNum}_ticket.webp`;
-    if (imagenTicketArchivo && imagenTicketArchivo.size > 0) {
-      await subirImagen(imagenTicketArchivo, nombreArchivoTicket, 'imagen_ticket');
-    } else if (mustDelete(borrarImagenTicket)) {
-      await borrarImagenCampo(nombreArchivoTicket, 'imagen_ticket');
-    }
-
-    // extra
-    const nombreArchivoExtra = `public/${idNum}_extra.webp`;
-    if (imagenExtraArchivo && imagenExtraArchivo.size > 0) {
-      await subirImagen(imagenExtraArchivo, nombreArchivoExtra, 'imagen_extra');
-    } else if (mustDelete(borrarImagenExtra)) {
-      await borrarImagenCampo(nombreArchivoExtra, 'imagen_extra');
-    }
-
-    // ========== Updates ==========
-    // tickets_mian
     {
-      const { error } = await supabase.from('tickets_mian').update(datosTicketsMian).eq('id', idNum);
-      if (error) return jsonError('Error al actualizar ticket: ' + error.message, 500);
-    }
-
-    // cliente
-    if (tRow.cliente_id) {
-      const { error } = await supabase.from('cliente').update(datosCliente).eq('id', tRow.cliente_id);
-      if (error) return jsonError('Error al actualizar cliente: ' + error.message, 500);
-    }
-
-    // delivery: UPDATE -> INSERT (sin tocar fecha_de_entrega aquí)
-    {
-      const updPayload: any = { pagado: datosDeliveryBase.pagado };
-      if (isAdmin) {
-        updPayload.cotizar_delivery = datosDeliveryBase.cotizar_delivery;
-        updPayload.informacion_adicional_delivery = datosDeliveryBase.informacion_adicional_delivery;
-      }
-
       const { data: updRows, error: updErr } = await supabase
         .from('delivery')
-        .update(updPayload)
+        .update(deliveryUpd)
         .eq('ticket_id', idNum)
         .select('id');
 
@@ -294,30 +215,22 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
       const affected = Array.isArray(updRows) ? updRows.length : (updRows ? 1 : 0);
       if (affected === 0) {
-        const insPayload: any = {
-          ticket_id: idNum,
-          pagado: datosDeliveryBase.pagado,
-        };
-        if (isAdmin) {
-          insPayload.cotizar_delivery = datosDeliveryBase.cotizar_delivery;
-          insPayload.informacion_adicional_delivery = datosDeliveryBase.informacion_adicional_delivery;
-        }
+        const insPayload: any = { ticket_id: idNum, ...deliveryUpd };
         const { error: insErr } = await supabase.from('delivery').insert(insPayload);
         if (insErr) return jsonError('Error al crear delivery: ' + insErr.message, 500);
       }
     }
 
-    // presupuestos: UPDATE -> INSERT (NO pisar fecha si no viene)
-    {
-      const presUpdate: any = {
-        monto: datosPresupuestoBase.monto,
-        link_presupuesto: datosPresupuestoBase.link_presupuesto,
-        cubre_garantia: datosPresupuestoBase.cubre_garantia,
-      };
-      if (datosPresupuestoBase.fecha_presupuesto) {
-        presUpdate.fecha_presupuesto = datosPresupuestoBase.fecha_presupuesto;
-      }
+    // ========== Presupuesto ==========
+    const fechaPresuNorm = normDate(fields.timestampPresupuesto); // si no viene, no se pisa
+    const presUpdate: any = {
+      monto: isNaN(parseFloat(fields.monto)) ? '0' : String(parseFloat(fields.monto)),
+      link_presupuesto: fields.linkPresupuesto || null,
+      cubre_garantia: (fields.cubre_garantia ?? fields.cubreGarantia) === 'true' ? 'true' : 'false',
+    };
+    if (fechaPresuNorm) presUpdate.fecha_presupuesto = fechaPresuNorm;
 
+    {
       const { data: updRows, error: updErr } = await supabase
         .from('presupuestos')
         .update(presUpdate)
@@ -328,21 +241,13 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
       const affected = Array.isArray(updRows) ? updRows.length : (updRows ? 1 : 0);
       if (affected === 0) {
-        const presInsert: any = {
-          ticket_id: idNum,
-          monto: datosPresupuestoBase.monto,
-          link_presupuesto: datosPresupuestoBase.link_presupuesto,
-          cubre_garantia: datosPresupuestoBase.cubre_garantia,
-        };
-        if (datosPresupuestoBase.fecha_presupuesto) {
-          presInsert.fecha_presupuesto = datosPresupuestoBase.fecha_presupuesto;
-        }
+        const presInsert: any = { ticket_id: idNum, ...presUpdate };
         const { error: insErr } = await supabase.from('presupuestos').insert(presInsert);
         if (insErr) return jsonError('Error al crear presupuesto: ' + insErr.message, 500);
       }
     }
 
-    // ✅ Al guardar presupuesto, pasamos el ticket a "P. Enviado"
+    // ✅ Marcamos el estado como "P. Enviado" sólo si efectivamente se envió/actualizó presupuesto
     {
       const { error: estadoErr } = await supabase
         .from('tickets_mian')
@@ -351,15 +256,42 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       if (estadoErr) return jsonError('No se pudo marcar el estado como P. Enviado: ' + estadoErr.message, 500);
     }
 
+    // ========== Imágenes ==========
+    const contentType = (f: File | null) => (f as any)?.type || 'image/webp';
+    const subirImagen = async (archivo: File, nombreArchivo: string, campo: 'imagen'|'imagen_ticket'|'imagen_extra') => {
+      const { error: uploadError } = await supabase.storage
+        .from('imagenes')
+        .upload(nombreArchivo, archivo, { cacheControl: '3600', upsert: true, contentType: contentType(archivo) });
+      if (uploadError) throw new Error(`Error al subir ${campo}: ${uploadError.message}`);
+      const { data } = supabase.storage.from('imagenes').getPublicUrl(nombreArchivo);
+      (datosTicketsMian as any)[campo] = data.publicUrl;
+    };
+    const borrarImagenCampo = async (nombreArchivo: string, campo: 'imagen'|'imagen_ticket'|'imagen_extra') => {
+      await supabase.storage.from('imagenes').remove([nombreArchivo]);
+      (datosTicketsMian as any)[campo] = null;
+    };
+    const mustDelete = (v: string | null | undefined) => v === 'delete' || v === 'true';
+
+    const nombreArchivo = `public/${idNum}.webp`;
+    if (imagenArchivo && imagenArchivo.size > 0)      await subirImagen(imagenArchivo, nombreArchivo, 'imagen');
+    else if (mustDelete(borrarImagen))                await borrarImagenCampo(nombreArchivo, 'imagen');
+
+    const nombreArchivoTicket = `public/${idNum}_ticket.webp`;
+    if (imagenTicketArchivo && imagenTicketArchivo.size > 0) await subirImagen(imagenTicketArchivo, nombreArchivoTicket, 'imagen_ticket');
+    else if (mustDelete(borrarImagenTicket))                  await borrarImagenCampo(nombreArchivoTicket, 'imagen_ticket');
+
+    const nombreArchivoExtra = `public/${idNum}_extra.webp`;
+    if (imagenExtraArchivo && imagenExtraArchivo.size > 0) await subirImagen(imagenExtraArchivo, nombreArchivoExtra, 'imagen_extra');
+    else if (mustDelete(borrarImagenExtra))                 await borrarImagenCampo(nombreArchivoExtra, 'imagen_extra');
+
+    // Guardar los cambios acumulados del ticket (estado/fechas/notas/imagenes/maquina_reparada)
+    {
+      const { error } = await supabase.from('tickets_mian').update(datosTicketsMian).eq('id', idNum);
+      if (error) return jsonError('Error al actualizar ticket: ' + error.message, 500);
+    }
+
     return new Response(null, { status: 303, headers: { Location: `/detalle/${idNum}` } });
   } catch (err: any) {
     return jsonError('Error inesperado: ' + (err?.message || String(err)), 500);
   }
 };
-
-function jsonError(message: string, status = 500) {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
