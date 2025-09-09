@@ -15,9 +15,14 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 /src
 │
 ├── /components
+│   ├── DeliveryForm.astro        # Sección delivery del ticket
+│   ├── PresupuestoForm.astro     # Sección presupuesto del ticket
 │   ├── PrinterCard.astro         # Componente visual para mostrar un equipo
 │   ├── Sidebar.astro             # Barra lateral de navegación
 │   └── Topbar.astro              # Barra superior con sesión, etc.
+│
+├──/data
+│   └── impresoras.json
 │
 ├── /layouts
 │   └── BasePrivateLayout.astro   # Layout base para vistas privadas (con Clerk + estilos)
@@ -37,18 +42,22 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 │   ├── estadisticas.astro        # Panel con métricas
 │   ├── no-autorizado.astro       # Página de acceso denegado (usuarios sin permisos)
 │   │
+│   ├── /comentarios/
+│   │   └── [id].astro            # Sección para comentar tickets
+│   │
+│   ├── /delivery/
+│   │   └── [id].astro            # Vista dinámica con información del delivery asociado a un ticket
+│   │
 │   ├── /detalle/
 │   │   └── [id].astro            # Vista dinámica de detalle del ticket (con opción de eliminar)
 │   │
 │   ├── /editar/
 │   │   └── [id].astro            # Vista dinámica para editar un ticket
 │   │
-│   ├── /delivery/
-│   │   └── [id].astro            # Vista dinámica con información del delivery asociado a un ticket
-│   │
 │   ├── /presupuesto/
 │   │   └── [id].astro            # Vista dinámica para ver/gestionar presupuestos de un ticket
 │   │
+│   │  
 │   └── /api/
 │       ├── crearTicket.ts               # Endpoint POST para crear un ticket
 │       ├── actualizarTicket.ts          # Endpoint POST para editar un ticket
@@ -56,7 +65,10 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 │       ├── proximoTicket.ts             # Endpoint GET para sugerir el próximo número de ticket
 │       ├── actualizarDelivery.ts        # Endpoint POST para actualizar los datos de un delivery (por id)
 │       ├── actualizarPermisosUsuarios.ts# Endpoint POST para actualizar los permisos de un usuario (en 'usuarios_perfil')
-│       └── actualizarPresupuesto.ts     # Endpoint POST para actualizar datos de presupuesto (por id, en 'TestImpresoras')
+│       ├── actualizarPresupuesto.ts     # Endpoint POST para actualizar datos de presupuesto (por id, en 'TestImpresoras')
+│       ├── agregarComentario.ts         # Endpoint POST para crear un comentario 
+│       ├── estadisticas.ts              # Endpoint POST para ver estadisticas  
+│        └── maquinaLista.ts              # Endpoint POST para que marque como estado lista
 │
 ├── /data
 │   └── impresoras.json           # Datos de ejemplo para pruebas (mock)
