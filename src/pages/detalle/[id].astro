@@ -202,13 +202,16 @@ const { count: comentariosCount } = await supabase
                 )}
               </div>
 
-              {isAdmin && (
-                <div class="col-6 d-flex">
-                  <a href={`/delivery/${equipo?.id}`} class="btn btn-outline-success btn-sm w-100">
-                    <i class="bi bi-truck"></i> {hasDelivery ? 'Verificar delivery' : 'Añadir delivery'}
-                  </a>
-                </div>
-              )}
+                {isAdmin && (
+                  <div class="col-6 d-flex">
+                    <a href={`/delivery/${equipo?.id}`} class="btn btn-outline-success btn-sm w-100">
+                      <i class={`bi ${hasDelivery ? 'bi-shield-check' : 'bi-receipt'}`}></i>
+                      {' '}
+                      {hasDelivery ? 'Verificar delivery' : 'Añadir delivery'}
+                    </a>
+                  </div>
+                )}
+
             </div>
 
             <!-- Botón: Máquina Lista -->
