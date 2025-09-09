@@ -35,8 +35,8 @@ export async function POST({ request }: { request: Request }) {
     const correo      = String(form.get('correo') ?? '').trim();
     const whatsapp    = String(form.get('whatsapp') ?? '').trim();
 
-    // ✅ Solo "maquina" (modelo ya no se pide en el form)
-    const maquina     = String(form.get('maquina') ?? '').trim();
+    // Campo visual “Maquina” → name="modelo"
+    const modeloForm  = String(form.get('modelo') ?? '').trim();
     const numeroSerie = String(form.get('numeroSerie') ?? '').trim();
     const boquilla    = String(form.get('boquilla') ?? '').trim();
 
@@ -55,22 +55,62 @@ export async function POST({ request }: { request: Request }) {
       return new Response('Número de ticket inválido', { status: 400 });
     }
 
-    // ===== Cliente =====
+    /* ========== CLIENTE: crear o ACTUALIZAR si existe ========== */
     let clienteId: number;
     {
       let found: { id: number } | null = null;
+      let foundRow: any = null;
 
+      // 1) Buscar por DNI/CUIT primero
       if (dniCuit) {
-        const { data } = await supabase.from('cliente').select('id').eq('dni_cuit', dniCuit).limit(1).maybeSingle();
-        if (data) found = data;
+        const { data } = await supabase
+          .from('cliente')
+          .select('id, cliente, nombre, apellido, dni_cuit, whatsapp, correo_electronico')
+          .eq('dni_cuit', dniCuit)
+          .limit(1)
+          .maybeSingle();
+        if (data) { found = { id: data.id }; foundRow = data; }
       }
+
+      // 2) Si no encontró, buscar por nombre del cliente
       if (!found) {
-        const { data } = await supabase.from('cliente').select('id').ilike('cliente', clienteNombreCompleto).limit(1).maybeSingle();
-        if (data) found = data;
+        const { data } = await supabase
+          .from('cliente')
+          .select('id, cliente, nombre, apellido, dni_cuit, whatsapp, correo_electronico')
+          .ilike('cliente', clienteNombreCompleto)
+          .limit(1)
+          .maybeSingle();
+        if (data) { found = { id: data.id }; foundRow = data; }
       }
+
       if (found?.id) {
+        // MERGE: actualizar solo lo provisto (y diferente) para no perder info
+        const updatePayload: Record<string, any> = {};
+
+        if (clienteNombreCompleto && clienteNombreCompleto !== foundRow.cliente) {
+          updatePayload.cliente = clienteNombreCompleto;
+          const { nombre, apellido } = partirNombreApellido(clienteNombreCompleto);
+          if (nombre && nombre !== foundRow.nombre)   updatePayload.nombre = nombre;
+          if (apellido && apellido !== foundRow.apellido) updatePayload.apellido = apellido;
+        }
+
+        if (dniCuit && dniCuit !== (foundRow.dni_cuit || '')) {
+          updatePayload.dni_cuit = dniCuit;
+        }
+        if (whatsapp && whatsapp !== (foundRow.whatsapp || '')) {
+          updatePayload.whatsapp = whatsapp;       // 👈 ahora se actualiza siempre
+        }
+        if (correo && correo !== (foundRow.correo_electronico || '')) {
+          updatePayload.correo_electronico = correo;
+        }
+
+        if (Object.keys(updatePayload).length > 0) {
+          await supabase.from('cliente').update(updatePayload).eq('id', found.id);
+        }
+
         clienteId = found.id;
       } else {
+        // Crear nuevo cliente
         const { nombre, apellido } = partirNombreApellido(clienteNombreCompleto);
         const { data, error } = await supabase
           .from('cliente')
@@ -79,8 +119,8 @@ export async function POST({ request }: { request: Request }) {
             nombre,
             apellido,
             dni_cuit: dniCuit || null,
-            whatsapp: whatsapp || null,
-            correo_electronico: correo || null,
+            whatsapp: whatsapp || null,            // 👈 guardado en alta
+            correo_electronico: correo || null,   // 👈 guardado en alta
           })
           .select('id')
           .single();
@@ -93,13 +133,11 @@ export async function POST({ request }: { request: Request }) {
       }
     }
 
-    // ===== Técnico (opcional) =====
-    // Busca por nombre+apellido; si no existe, lo crea y usa su id.
+    /* ========== TÉCNICO: buscar, o crear si no existe ========== */
     let tecnicoId: number | null = null;
     if (tecnicoNombre) {
       const { nombre: nTec, apellido: aTec } = partirNombreApellido(tecnicoNombre);
 
-      // Intento de match flexible
       let tecMatch: { id: number } | null = null;
       if (aTec && aTec !== '(sin apellido)') {
         const { data } = await supabase
@@ -123,9 +161,8 @@ export async function POST({ request }: { request: Request }) {
       if (tecMatch?.id) {
         tecnicoId = tecMatch.id;
       } else {
-        // No existe → crear técnico rápido. email es NOT NULL → usamos placeholder.
         const emailPlaceholder = `no-email+${Date.now()}@local`;
-        const { data: tecNuevo, error: tecErr } = await supabase
+        const { data: tecNuevo } = await supabase
           .from('tecnicos')
           .insert({
             nombre: nTec,
@@ -135,23 +172,19 @@ export async function POST({ request }: { request: Request }) {
           })
           .select('id')
           .single();
-        if (!tecErr && tecNuevo?.id) {
-          tecnicoId = tecNuevo.id;
-        }
+        if (tecNuevo?.id) tecnicoId = tecNuevo.id;
       }
     }
 
-    // ===== Impresora =====
-    // Tu schema mantiene 'modelo NOT NULL' y 'maquina NOT NULL'.
-    // Como ya no pedís "modelo" en el form, usamos un valor por defecto.
-    const MODELO_DEFAULT = 'Generico';
-    const MAQUINA_DEFAULT = maquina || 'Desconocida';
+    /* ========== IMPRESORA: usa 'modelo' y setea 'maquina = modelo' ========== */
+    const MODELO = modeloForm || 'Generico';
+    const MAQUINA = modeloForm || 'Desconocida';
 
     let impresoraId: number | null = null;
     const hasSerie = !!numeroSerie;
-    const hasMaquina = !!maquina;
+    const hasModelo = !!modeloForm;
 
-    // 1) Intentar por número de serie
+    // 1) Por número de serie
     if (hasSerie) {
       const { data: impFound } = await supabase
         .from('impresoras')
@@ -161,25 +194,25 @@ export async function POST({ request }: { request: Request }) {
       if (impFound?.id) impresoraId = impFound.id;
     }
 
-    // 2) Si no, intentar por combinación máquina + MODELO_DEFAULT
-    if (!impresoraId && hasMaquina) {
+    // 2) Por combinación modelo+maquina
+    if (!impresoraId && hasModelo) {
       const { data: byCombo } = await supabase
         .from('impresoras')
         .select('id')
-        .match({ maquina: MAQUINA_DEFAULT, modelo: MODELO_DEFAULT })
+        .match({ modelo: MODELO, maquina: MAQUINA })
         .limit(1)
         .maybeSingle();
       if (byCombo?.id) impresoraId = byCombo.id;
     }
 
-    // 3) Si tampoco, crear impresora
+    // 3) Crear impresora si no existe
     if (!impresoraId) {
       const tempSerie = numeroSerie || `TEMP-${Date.now()}-${Math.floor(Math.random()*900+100)}`;
       const { data: impNew, error: impErr } = await supabase
         .from('impresoras')
         .insert({
-          modelo: MODELO_DEFAULT,
-          maquina: MAQUINA_DEFAULT,
+          modelo: MODELO,
+          maquina: MAQUINA,
           numero_de_serie: tempSerie,
           tamano_de_boquilla: boquilla || null,
         })
@@ -194,7 +227,7 @@ export async function POST({ request }: { request: Request }) {
       impresoraId = impNew!.id;
     }
 
-    // ===== Insertar Ticket =====
+    /* ========== TICKET ========== */
     const marcaTemporal = hoyBA_MMDDYYYY();
     const insertRow: Record<string, any> = {
       cliente_id: clienteId,
@@ -220,7 +253,7 @@ export async function POST({ request }: { request: Request }) {
 
     const nuevoId = tInsert!.id as number;
 
-    // ===== Subir imágenes (opcional) =====
+    /* ========== IMÁGENES opcionales ========== */
     const subirYObtenerUrl = async (file: File | null, nombreArchivo: string) => {
       if (!file || (file as any).size <= 0) return null;
       const MAX_BYTES = 5 * 1024 * 1024;
@@ -253,7 +286,6 @@ export async function POST({ request }: { request: Request }) {
       await supabase.from('tickets_mian').update(updateImages).eq('id', nuevoId);
     }
 
-    // ✅ Redirigir SIN 'ticket=' para que la página use el nuevo sugerido
     return redirect303(`/addTicket?ok=1`);
   } catch (err: any) {
     return new Response(

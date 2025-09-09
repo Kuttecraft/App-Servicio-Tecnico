@@ -7,16 +7,10 @@ function toISODate(v?: string | null): string {
   if (!v) return '';
   const s = String(v).trim();
   if (!s || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') return '';
-
-  // 1) "YYYY-MM-DD" o ISO con hora
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-
-  // 2) "YYYY/MM/DD"
   m = s.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-
-  // 3) "DD/MM/YYYY" o "DD-MM-YYYY"
   m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
   if (m) {
     const dd = m[1].padStart(2, '0');
@@ -24,8 +18,6 @@ function toISODate(v?: string | null): string {
     const yyyy = m[3];
     return `${yyyy}-${mm}-${dd}`;
   }
-
-  // 4) Fallback Date.parse
   const d = new Date(s);
   if (!isNaN(d.getTime())) {
     const yyyy = d.getFullYear();
@@ -33,55 +25,29 @@ function toISODate(v?: string | null): string {
     const dd = String(d.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }
-
   return '';
 }
 
-/** Siempre mostrar como M/D/YYYY (mes/día/año) sin ceros a la izquierda. */
+/** Mostrar como M/D/YYYY (mes/día/año) sin ceros a la izquierda. */
 function toMDY(v?: string | null): string {
   if (!v) return '';
   const s = String(v).trim();
   if (!s || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') return '';
-
-  // ISO o YYYY-MM-DD
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) {
-    const y = Number(m[1]);
-    const mo = Number(m[2]);
-    const d = Number(m[3]);
-    return `${mo}/${d}/${y}`;
-  }
-
-  // YYYY/MM/DD
+  if (m) return `${Number(m[2])}/${Number(m[3])}/${Number(m[1])}`;
   m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
-  if (m) {
-    const y = Number(m[1]);
-    const mo = Number(m[2]);
-    const d = Number(m[3]);
-    return `${mo}/${d}/${y}`;
-  }
-
-  // DD/MM/YYYY o MM/DD/YYYY (ambigua) -> asumimos MM/DD si ambos <=12
+  if (m) return `${Number(m[2])}/${Number(m[3])}/${Number(m[1])}`;
   m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
   if (m) {
-    const a = Number(m[1]);
-    const b = Number(m[2]);
-    const y = Number(m[3]);
-
+    const a = Number(m[1]); const b = Number(m[2]); const y = Number(m[3]);
     let mm: number, dd: number;
     if (b > 12 && a <= 12) { mm = a; dd = b; }
     else if (a > 12 && b <= 12) { dd = a; mm = b; }
     else { mm = a; dd = b; }
-
     return `${mm}/${dd}/${y}`;
   }
-
-  // Fallback
   const d = new Date(s);
-  if (!isNaN(d.getTime())) {
-    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
-  }
-
+  if (!isNaN(d.getTime())) return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
   return '';
 }
 
@@ -99,58 +65,69 @@ interface EquipoCompleto {
   imagen_extra: string | null;
   notas_del_tecnico: string | null;
 
-  cliente?: { dni_cuit: string | null; correo_electronico: string | null; whatsapp: string | null; comentarios: string | null; };
+  cliente?: { id?: number; dni_cuit: string | null; correo_electronico: string | null; whatsapp: string | null; comentarios: string | null; };
   tecnicos?: { nombre: string; apellido: string };
   impresoras?: { modelo: string; maquina: string; numero_de_serie: string; tamano_de_boquilla: string | null };
-  delivery?: {
-    pagado: string;
-    cotizar_delivery: string | null;
-    informacion_adicional_delivery: string | null;
-    fecha_de_entrega: string | null;
-  };
+  delivery?: { pagado: string; cotizar_delivery: string | null; informacion_adicional_delivery: string | null; fecha_de_entrega: string | null; };
   presupuestos?: { monto: string; link_presupuesto: string; cubre_garantia: string; fecha_presupuesto: string };
 }
 
-const { id } = Astro.params;
+const { id } = Astro.params as { id: string };
 
 // Perfil (para campos admin)
 const perfil = (Astro.locals as any)?.perfil;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 
-// Traer ticket + joins
+/* ================== CARGA PRINCIPAL ================== */
 const { data, error } = await supabase
   .from('tickets_mian')
   .select(`
     id, ticket, estado, marca_temporal, fecha_de_reparacion, tecnico_id, cliente_id, impresora_id,
     imagen, imagen_ticket, imagen_extra, notas_del_tecnico,
-    cliente:cliente_id (dni_cuit, correo_electronico, whatsapp, comentarios),
-    tecnicos:tecnico_id (nombre, apellido),
-    impresoras:impresora_id (modelo, maquina, numero_de_serie, tamano_de_boquilla),
-    delivery (pagado, cotizar_delivery, informacion_adicional_delivery, fecha_de_entrega),
-    presupuestos (monto, link_presupuesto, cubre_garantia, fecha_presupuesto)
+    cliente:cliente_id ( id, dni_cuit, correo_electronico, whatsapp, comentarios ),
+    tecnicos:tecnico_id ( nombre, apellido ),
+    impresoras:impresora_id ( modelo, maquina, numero_de_serie, tamano_de_boquilla ),
+    delivery ( pagado, cotizar_delivery, informacion_adicional_delivery, fecha_de_entrega ),
+    presupuestos ( monto, link_presupuesto, cubre_garantia, fecha_presupuesto )
   `)
   .eq('id', id)
   .maybeSingle();
 
-if (error) {
-  console.error('[editar] supabase error:', error);
-}
+if (error) console.error('[editar] supabase error:', error);
 
 const row = (data ?? null) as any;
 
-const equipo: (EquipoCompleto | null) = row ? {
+/* Normalización defensiva */
+let clienteJoin = row?.cliente;
+if (Array.isArray(clienteJoin)) clienteJoin = clienteJoin[0] ?? null;
+
+let equipo: any = row ? {
   ...row,
-  cliente: Array.isArray(row?.cliente) ? row.cliente[0] : row?.cliente,
+  cliente: clienteJoin ?? null,
   tecnicos: Array.isArray(row?.tecnicos) ? row.tecnicos[0] : row?.tecnicos,
   impresoras: Array.isArray(row?.impresoras) ? row.impresoras[0] : row?.impresoras,
   delivery: Array.isArray(row?.delivery) ? row.delivery[0] : row?.delivery,
   presupuestos: Array.isArray(row?.presupuestos) ? row.presupuestos[0] : row?.presupuestos,
 } : null;
 
+/* Fallback robusto de cliente si el join vino vacío/incompleto */
+if (equipo && (!equipo.cliente || (
+  equipo.cliente.dni_cuit == null &&
+  equipo.cliente.whatsapp == null &&
+  equipo.cliente.correo_electronico == null &&
+  equipo.cliente.comentarios == null
+))) {
+  const { data: cliFB } = await supabase
+    .from('cliente')
+    .select('id, dni_cuit, correo_electronico, whatsapp, comentarios')
+    .eq('id', equipo.cliente_id)
+    .maybeSingle();
+  if (cliFB) equipo.cliente = cliFB;
+}
+
 const estados = [
-  "Nuevo", "Retirar","Presupuestar","Enviar presupuesto","P. Enviado",
-  "Reparación","Prueba","Lista","Entregada",
-  "Feedback Enviado","Archivada","No realizada"
+  "Nuevo","Retirar","Presupuestar","Enviar presupuesto","P. Enviado",
+  "Reparación","Prueba","Lista","Entregada","Feedback Enviado","Archivada","No realizada"
 ];
 
 // Fallbacks de imágenes
@@ -161,236 +138,241 @@ const urlExtra  = equipo?.imagen_extra  || supabase.storage.from('imagenes').get
 // selects booleanos
 const valorCubreGarantia = (equipo?.presupuestos?.cubre_garantia === 'true') ? 'true' : 'false';
 const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
-
-// para seleccionar correctamente el estado actual
 const estadoActual = (equipo?.estado || '').trim();
 ---
 
 <BasePrivateLayout>
+  <style>
+    .section-card { border: 1px solid rgba(0,0,0,.08); border-radius: 12px; padding: 1rem; background: #fff; }
+    .section-title { font-weight: 700; font-size: .95rem; color: #0d6efd; margin-bottom: .5rem; display: flex; align-items: center; gap: .5rem; }
+    .section-title.center { justify-content: center; }
+    .grid-2 { display: grid; grid-template-columns: 1fr; gap: .75rem; }
+    @media (min-width: 768px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+    .actions { display: flex; gap: .5rem; justify-content: flex-end; }
+
+    /* Imágenes */
+    .img-row { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem; }
+    @media (min-width:768px){ .img-row{ flex-direction:row; align-items:center; justify-content:center; gap:1.25rem; } }
+    .img-box { border-radius:15px; overflow:hidden; border:1px solid rgba(0,0,0,.1); box-shadow:0 2px 8px rgba(0,0,0,.06); }
+    .img-box img { display:block; width:auto; height:auto; max-width:300px; max-height:300px; object-fit:contain; }
+    .btn-col { display:flex; flex-direction:column; align-items:center; gap:.5rem; }
+  </style>
+
   <div class="container mt-4">
-    <h1 class="h3 mb-4">Editar equipo</h1>
+    <h1 class="h4 mb-3">Editar ticket</h1>
 
     {equipo ? (
       <form
         method="POST"
         action={`/api/actualizarTicket?id=${encodeURIComponent(String(equipo.id))}`}
         enctype="multipart/form-data"
-        class="card p-4 shadow-sm"
-        style="max-width: 900px; margin: auto;"
+        class="d-flex flex-column gap-3"
         id="form-editar-equipo"
+        style="max-width: 980px; margin: 0 auto;"
       >
         <input type="hidden" name="ticketId" value={String(equipo.id)} />
         <input type="hidden" name="id"        value={String(equipo.id)} />
 
-        <div class="row g-3">
-          {/* Estado */}
-          <div class="col-md-6">
-            <label class="form-label">Estado</label>
-            <select name="estado" class="form-select" required>
-              {estados.map((op) => (
-                <option
-                  value={op}
-                  selected={estadoActual.toLowerCase() === op.toLowerCase()}
-                >
-                  {op}
-                </option>
-              ))}
-            </select>
+        <!-- 1) DATOS DEL TICKET -->
+        <div class="section-card">
+          <div class="section-title"><i class="bi bi-ticket-perforated"></i> Datos del ticket</div>
+          <div class="grid-2">
+            <div>
+              <label class="form-label">N° Ticket</label>
+              <input type="number" class="form-control" value={equipo.ticket} disabled />
+            </div>
+            <div>
+              <label class="form-label">Estado</label>
+              <select name="estado" class="form-select" required>
+                {estados.map((op) => (
+                  <option value={op} selected={estadoActual.toLowerCase() === op.toLowerCase()}>{op}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Técnico</label>
+              <input name="tecnico" type="text" class="form-control" value={`${(equipo.tecnicos?.nombre)||''} ${(equipo.tecnicos?.apellido)||''}`} />
+            </div>
+            <div>
+              <label class="form-label">Fecha formulario</label>
+              <input name="fechaFormulario" type="text" class="form-control" value={toMDY(equipo.marca_temporal)} />
+            </div>
+            <div>
+              <label class="form-label">Fecha listo</label>
+              <input type="date" class="form-control" value={toISODate(equipo.fecha_de_reparacion)} disabled />
+            </div>
           </div>
+        </div>
 
-          {/* IMPRESORA */}
-          <div class="col-md-6">
-            <label class="form-label">Modelo</label>
-            <input name="modelo" type="text" class="form-control" value={equipo.impresoras?.modelo || ''} />
+        <!-- 2) DATOS DEL CLIENTE -->
+        <div class="section-card">
+          <div class="section-title"><i class="bi bi-person-badge"></i> Datos del cliente</div>
+          <div class="grid-2">
+            <div>
+              <label class="form-label">DNI/CUIT</label>
+              <input name="dniCuit" type="text" class="form-control" value={equipo.cliente?.dni_cuit || ''} />
+            </div>
+            <div>
+              <label class="form-label">WhatsApp</label>
+              <input name="whatsapp" type="text" class="form-control" value={equipo.cliente?.whatsapp || ''} />
+            </div>
+            <div class="col-12">
+              <label class="form-label">Correo</label>
+              <input name="correo" type="email" class="form-control" value={equipo.cliente?.correo_electronico || ''} />
+            </div>
           </div>
-          <div class="col-md-6">
-            <label class="form-label">Máquina</label>
-            <input name="maquina" type="text" class="form-control" value={equipo.impresoras?.maquina || ''} />
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">N° de serie</label>
-            <input name="numeroSerie" type="text" class="form-control" value={equipo.impresoras?.numero_de_serie || ''} />
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Tamaño de boquilla</label>
-            <input name="boquilla" type="text" class="form-control" value={equipo.impresoras?.tamano_de_boquilla || ''} />
-          </div>
+        </div>
 
-          {/* Fechas y técnico */}
-          <div class="col-md-6">
-            <label class="form-label">Fecha formulario</label>
-            {/* SIEMPRE en M/D/YYYY */}
-            <input name="fechaFormulario" type="text" class="form-control" value={toMDY(equipo.marca_temporal)} />
+        <!-- 3) IMPRESORA -->
+        <div class="section-card">
+          <div class="section-title"><i class="bi bi-printer"></i> Impresora</div>
+          <div class="grid-2">
+            <div>
+              <label class="form-label">Máquina</label>
+              <input name="maquina" type="text" class="form-control" value={equipo.impresoras?.modelo || ''} />
+            </div>
+            <div>
+              <label class="form-label">N° de serie</label>
+              <input name="numeroSerie" type="text" class="form-control" value={equipo.impresoras?.numero_de_serie || ''} />
+            </div>
+            <div class="col-12">
+              <label class="form-label">Tamaño de boquilla</label>
+              <input name="boquilla" type="text" class="form-control" value={equipo.impresoras?.tamano_de_boquilla || ''} />
+            </div>
           </div>
-          <div class="col-md-6">
-            <label class="form-label">Técnico</label>
-            <input name="tecnico" type="text" class="form-control" value={`${(equipo.tecnicos?.nombre)||''} ${(equipo.tecnicos?.apellido)||''}`} />
-          </div>
+        </div>
 
-          {/* Notas y comentarios */}
-          <div class="col-md-12">
-            <label class="form-label">Nota Técnico</label>
-            <textarea name="notaTecnico" class="form-control">{equipo.notas_del_tecnico || ''}</textarea>
+        <!-- 4) PRESUPUESTO -->
+        <div class="section-card">
+          <div class="section-title"><i class="bi bi-receipt"></i> Presupuesto</div>
+          <div class="grid-2">
+            <div>
+              <label class="form-label">Monto</label>
+              <input name="monto" type="number" step="0.01" class="form-control" value={equipo.presupuestos?.monto || ''} />
+            </div>
+            <div>
+              <label class="form-label">Link presupuesto</label>
+              <input name="linkPresupuesto" type="url" class="form-control" value={equipo.presupuestos?.link_presupuesto || ''} />
+            </div>
+            <div>
+              <label class="form-label">¿Cubre garantía?</label>
+              <select name="cubreGarantia" class="form-select" value={valorCubreGarantia}>
+                <option value="true">Sí</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Fecha presupuesto</label>
+              <input type="date" class="form-control" value={toISODate(equipo.presupuestos?.fecha_presupuesto)} disabled />
+            </div>
           </div>
-          <div class="col-md-12">
-            <label class="form-label">Comentarios</label>
-            <textarea name="comentarios" class="form-control">{equipo.cliente?.comentarios || ''}</textarea>
-          </div>
+        </div>
 
-          {/* Presupuesto / Delivery */}
-          <div class="col-md-6">
-            <label class="form-label">¿Cubre garantía?</label>
-            <select name="cubreGarantia" class="form-select" value={valorCubreGarantia}>
-              <option value="true">Sí</option>
-              <option value="false">No</option>
-            </select>
+        <!-- 5) DELIVERY -->
+        <div class="section-card">
+          <div class="section-title"><i class="bi bi-truck"></i> Delivery</div>
+          <div class="grid-2">
+            <div>
+              <label class="form-label">¿Cobrado?</label>
+              <select name="cobrado" class="form-select" value={valorCobrado}>
+                <option value="true">Sí</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+            {isAdmin && (
+              <>
+                <div>
+                  <label class="form-label">Modo delivery</label>
+                  <input name="costoDelivery" type="text" class="form-control" value={equipo.delivery?.cotizar_delivery || ''} />
+                </div>
+                <div>
+                  <label class="form-label">Info delivery</label>
+                  <input name="infoDelivery" type="text" class="form-control" value={equipo.delivery?.informacion_adicional_delivery || ''} />
+                </div>
+              </>
+            )}
+            <div>
+              <label class="form-label">Fecha de entrega</label>
+              <input type="date" class="form-control" value={toISODate(equipo.delivery?.fecha_de_entrega)} disabled />
+            </div>
           </div>
-          <div class="col-md-6">
-            <label class="form-label">¿Cobrado?</label>
-            <select name="cobrado" class="form-select" value={valorCobrado}>
-              <option value="true">Sí</option>
-              <option value="false">No</option>
-            </select>
-          </div>
+        </div>
 
-          {/* Fecha de entrega (solo visible) */}
-          <div class="col-md-6">
-            <label class="form-label">Fecha de entrega (solo visible)</label>
-            <input
-              type="date"
-              class="form-control"
-              value={toISODate(equipo.delivery?.fecha_de_entrega)}
-              disabled
-            />
+        <!-- 6) NOTAS & COMENTARIOS -->
+        <div class="section-card">
+          <div class="section-title"><i class="bi bi-journal-text"></i> Notas & Comentarios</div>
+          <div class="grid-2">
+            <div class="col-12">
+              <label class="form-label">Nota Técnico</label>
+              <textarea name="notaTecnico" class="form-control" rows="3">{equipo.notas_del_tecnico || ''}</textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Comentarios del cliente</label>
+              <textarea name="comentarios" class="form-control" rows="3">{equipo.cliente?.comentarios || ''}</textarea>
+            </div>
           </div>
+        </div>
 
-          <div class="col-md-6">
-            <label class="form-label">Monto</label>
-            <input name="monto" type="number" step="0.01" class="form-control" value={equipo.presupuestos?.monto || ''} />
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Link presupuesto</label>
-            <input name="linkPresupuesto" type="url" class="form-control" value={equipo.presupuestos?.link_presupuesto || ''} />
-          </div>
+        <!-- 7) IMÁGENES -->
+        <div class="section-card">
+          <div class="section-title center"><i class="bi bi-images"></i> Imágenes</div>
 
-          {isAdmin && (
-            <>
-              <div class="col-md-6">
-                <label class="form-label">Modo delivery</label>
-                <input name="costoDelivery" type="text" class="form-control" value={equipo.delivery?.cotizar_delivery || ''} />
+          <div class="mb-4">
+            <h6 class="mb-2 text-center">Imagen principal</h6>
+            <div class="img-row">
+              <div class="img-box">
+                <img id="img-actual-o-preview" src={urlMain} alt="Imagen actual" onerror="this.onerror=null;this.src='/logo.webp';" loading="lazy" />
               </div>
-              <div class="col-md-6">
-                <label class="form-label">Info delivery</label>
-                <input name="infoDelivery" type="text" class="form-control" value={equipo.delivery?.informacion_adicional_delivery || ''} />
+              <div class="btn-col">
+                <label class="btn btn-primary fw-semibold">
+                  <i class="bi bi-upload me-2"></i> Cambiar imagen
+                  <input type="file" name="imagenArchivo" accept="image/*" id="input-imagen-archivo" style="display:none;" />
+                </label>
+                <input type="hidden" name="borrarImagen" id="input-borrar-imagen" value="false" />
+                <button type="button" class="btn btn-danger px-4" id="btn-eliminar-equipo">Eliminar imagen</button>
               </div>
-            </>
-          )}
-
-          {/* Datos cliente */}
-          <div class="col-md-6">
-            <label class="form-label">DNI/CUIT</label>
-            <input name="dniCuit" type="text" class="form-control" value={equipo.cliente?.dni_cuit || ''} />
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">WhatsApp</label>
-            <input name="whatsapp" type="text" class="form-control" value={equipo.cliente?.whatsapp || ''} />
-          </div>
-          <div class="col-md-12">
-            <label class="form-label">Correo</label>
-            <input name="correo" type="email" class="form-control" value={equipo.cliente?.correo_electronico || ''} />
+            </div>
           </div>
 
-          {/* Fechas presupuesto/listo */}
-          <div class="col-md-6">
-            <label class="form-label">Fecha presupuesto (solo visible)</label>
-            <input type="date" class="form-control" value={toISODate(equipo.presupuestos?.fecha_presupuesto)} disabled />
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Fecha listo (solo visible)</label>
-            <input
-              type="date"
-              class="form-control"
-              value={toISODate(equipo.fecha_de_reparacion)}
-              disabled
-            />
-          </div>
-
-          <!-- ============ IMÁGENES ============ -->
-          <div class="col-md-12">
-            <h6 class="mt-3">Imagen principal</h6>
-            <div class="mb-3 d-flex flex-column align-items-center" style="gap: 1rem;">
-              <div class="rounded shadow-sm border overflow-hidden" style="max-width: 320px; max-height: 320px; border-radius: 15px;">
-                <img
-                  id="img-actual-o-preview"
-                  src={urlMain}
-                  alt="Imagen actual"
-                  onerror="this.onerror=null;this.src='/logo.webp';"
-                  class="img-fluid"
-                  style="width: 100%; height: 100%; object-fit: cover;"
-                  loading="lazy"
-                />
+          <div class="mb-4">
+            <h6 class="mb-2 text-center">Imagen del ticket</h6>
+            <div class="img-row">
+              <div class="img-box">
+                <img id="img-ticket-preview" src={urlTicket} alt="Imagen ticket" onerror="this.onerror=null;this.src='/logo.webp';" loading="lazy" />
               </div>
-              <label class="btn btn-primary fw-semibold">
-                <i class="bi bi-upload me-2"></i> Cambiar imagen
-                <input type="file" name="imagenArchivo" accept="image/*" id="input-imagen-archivo" style="display:none;" />
-              </label>
-            </div>
-            <input type="hidden" name="borrarImagen" id="input-borrar-imagen" value="false" />
-            <div class="mt-2 d-flex flex-column flex-md-row gap-2 justify-content-center align-items-stretch">
-              <button type="button" class="btn btn-danger order-2 order-md-1 px-4" id="btn-eliminar-equipo">Eliminar imagen</button>
-              <button type="submit" class="btn btn-success order-1 order-md-2 px-4">Guardar cambios</button>
+              <div class="btn-col">
+                <label class="btn btn-primary fw-semibold">
+                  <i class="bi bi-upload me-2"></i> Cambiar imagen ticket
+                  <input type="file" name="imagenTicketArchivo" accept="image/*" id="input-imagen-ticket" style="display:none;" />
+                </label>
+                <input type="hidden" name="borrarImagenTicket" id="input-borrar-imagen-ticket" value="false" />
+                <button type="button" class="btn btn-danger px-4" id="btn-eliminar-imagen-ticket">Eliminar imagen ticket</button>
+              </div>
             </div>
           </div>
 
-          <div class="col-md-12">
-            <h6 class="mt-4">Imagen del ticket</h6>
-            <div class="mb-3 d-flex flex-column align-items-center" style="gap: 1rem;">
-              <div class="rounded shadow-sm border overflow-hidden" style="max-width: 320px; max-height: 320px; border-radius: 15px;">
-                <img
-                  id="img-ticket-preview"
-                  src={urlTicket}
-                  alt="Imagen ticket"
-                  onerror="this.onerror=null;this.src='/logo.webp';"
-                  class="img-fluid"
-                  style="width: 100%; height: 100%; object-fit: cover;"
-                  loading="lazy"
-                />
+          <div>
+            <h6 class="mb-2 text-center">Imagen extra</h6>
+            <div class="img-row">
+              <div class="img-box">
+                <img id="img-extra-preview" src={urlExtra} alt="Imagen extra" onerror="this.onerror=null;this.src='/logo.webp';" loading="lazy" />
               </div>
-              <label class="btn btn-primary fw-semibold">
-                <i class="bi bi-upload me-2"></i> Cambiar imagen ticket
-                <input type="file" name="imagenTicketArchivo" accept="image/*" id="input-imagen-ticket" style="display:none;" />
-              </label>
-            </div>
-            <input type="hidden" name="borrarImagenTicket" id="input-borrar-imagen-ticket" value="false" />
-            <div class="mt-2 d-flex flex-column flex-md-row gap-2 justify-content-center align-items-stretch">
-              <button type="button" class="btn btn-danger px-4" id="btn-eliminar-imagen-ticket">Eliminar imagen ticket</button>
+              <div class="btn-col">
+                <label class="btn btn-primary fw-semibold">
+                  <i class="bi bi-upload me-2"></i> Cambiar imagen extra
+                  <input type="file" name="imagenExtraArchivo" accept="image/*" id="input-imagen-extra" style="display:none;" />
+                </label>
+                <input type="hidden" name="borrarImagenExtra" id="input-borrar-imagen-extra" value="false" />
+                <button type="button" class="btn btn-danger px-4" id="btn-eliminar-imagen-extra">Eliminar imagen extra</button>
+              </div>
             </div>
           </div>
+        </div>
 
-          <div class="col-md-12">
-            <h6 class="mt-4">Imagen extra</h6>
-            <div class="mb-3 d-flex flex-column align-items-center" style="gap: 1rem;">
-              <div class="rounded shadow-sm border overflow-hidden" style="max-width: 320px; max-height: 320px; border-radius: 15px;">
-                <img
-                  id="img-extra-preview"
-                  src={urlExtra}
-                  alt="Imagen extra"
-                  onerror="this.onerror=null;this.src='/logo.webp';"
-                  class="img-fluid"
-                  style="width: 100%; height: 100%; object-fit: cover;"
-                  loading="lazy"
-                />
-              </div>
-              <label class="btn btn-primary fw-semibold">
-                <i class="bi bi-upload me-2"></i> Cambiar imagen extra
-                <input type="file" name="imagenExtraArchivo" accept="image/*" id="input-imagen-extra" style="display:none;" />
-              </label>
-            </div>
-            <input type="hidden" name="borrarImagenExtra" id="input-borrar-imagen-extra" value="false" />
-            <div class="mt-2 d-flex flex-column flex-md-row gap-2 justify-content-center align-items-stretch">
-              <button type="button" class="btn btn-danger px-4" id="btn-eliminar-imagen-extra">Eliminar imagen extra</button>
-            </div>
-          </div>
+        <div class="actions">
+          <button type="submit" class="btn btn-success px-4">
+            <i class="bi bi-check2-square me-1"></i> Guardar cambios
+          </button>
         </div>
       </form>
     ) : (

@@ -1,24 +1,54 @@
 ---
+/**
+ * PrinterCard.astro
+ * Muestra una tarjeta de ticket/impresora
+ * - Label "Máquina" pero leyendo el valor desde `modelo`
+ * - Prioridad de imágenes: imagen_ticket > imagen > imagen_extra > /logo.webp
+ */
+
+export interface Props {
+  id?: number | string;
+  ticket?: number | string;
+  cliente?: string;
+  modelo?: string | null;       // 👈 real source
+  maquina?: string | null;      // fallback por compatibilidad
+  estado?: string;
+  whatsapp?: string | null;
+
+  onClickUrl?: string;
+  onClickUrlEditar?: string;
+
+  imagen?: string | null;
+  imagen_ticket?: string | null;
+  imagen_extra?: string | null;
+}
+
 const {
   id,
   ticket = "Sin ticket",
   cliente = "Desconocido",
-  // 👇 Preferimos 'modelo'; mantenemos 'maquina' como fallback por compatibilidad
+
+  // Preferimos 'modelo'; mantenemos 'maquina' como fallback por compatibilidad
   modelo: modeloProp = undefined,
   maquina: maquinaProp = undefined,
+
   estado = "Sin estado",
   whatsapp = "No especificado",
+
   onClickUrl = "#",
   onClickUrlEditar = "#",
-  imagen = null,         // Imagen principal
-  imagen_ticket = null,  // Nueva imagen_ticket
-  imagen_extra = null    // Nueva imagen_extra
-} = Astro.props;
+
+  // Imágenes
+  imagen = null,
+  imagen_ticket = null,
+  imagen_extra = null,
+} = Astro.props as Props;
 
 // 👉 Modelo mostrado: 1) modelo 2) maquina 3) "Desconocido"
-const modelo = (modeloProp && String(modeloProp).trim())
-  || (maquinaProp && String(maquinaProp).trim())
-  || "Desconocido";
+const modelo =
+  (modeloProp && String(modeloProp).trim()) ||
+  (maquinaProp && String(maquinaProp).trim()) ||
+  "Desconocido";
 
 // Lógica de prioridad de imágenes:
 // 1. imagen_ticket
@@ -26,29 +56,32 @@ const modelo = (modeloProp && String(modeloProp).trim())
 // 3. imagen_extra
 // 4. logo por defecto
 const imagenFinal =
-  imagen_ticket ||
-  imagen ||
-  imagen_extra ||
+  (imagen_ticket && String(imagen_ticket)) ||
+  (imagen && String(imagen)) ||
+  (imagen_extra && String(imagen_extra)) ||
   "/logo.webp";
 
-// 🎨 Mapa de colores pastel SUAVES (punto medio-bajo de saturación)
-   const estadoColores: Record<string, string> = {
-   "Nuevo": "#E2FFF6",        // mint muy suave para items recién creados
-   "Retirar": "#FFE9CC",
-   "Presupuestar": "#FFD9D9",
-   "Enviar presupuesto": "#E9FCEC",
-   "P. Enviado": "#D9EBFF",
-   "Reparación": "#FFFDE1",
-   "Prueba": "#E3DBFF",
-   "Lista": "#FFE3DC",
-   "Entregada": "#E6F6FF",
-   "Feedback Enviado": "#FAE4F6",
-   "Archivada": "#EDEDED",
-   "No realizada": "#FFF1D9"
- };
+// 🎨 Colores por estado (pastel)
+const estadoColores: Record<string, string> = {
+  "Nuevo": "#E2FFF6",
+  "Retirar": "#FFE9CC",
+  "Presupuestar": "#FFD9D9",
+  "Enviar presupuesto": "#E9FCEC",
+  "P. Enviado": "#D9EBFF",
+  "Reparación": "#FFFDE1",
+  "Prueba": "#E3DBFF",
+  "Lista": "#FFE3DC",
+  "Entregada": "#E6F6FF",
+  "Feedback Enviado": "#FAE4F6",
+  "Archivada": "#EDEDED",
+  "No realizada": "#FFF1D9"
+};
 
 // Color actual o blanco si no está en el mapa
 const colorEstado = estadoColores[estado] || "#FFFFFF";
+
+// Accesible: alt armado
+const altImagen = `Imagen del equipo de ${cliente}`;
 ---
 
 <style>
@@ -62,10 +95,7 @@ const colorEstado = estadoColores[estado] || "#FFFFFF";
     border: 1px solid rgba(0,0,0,.06); /* contorno sutil */
   }
 
-  /* Pequeña animación al pasar el mouse */
-  .pcard:hover {
-    transform: translateY(-3px);
-  }
+  .pcard:hover { transform: translateY(-3px); }
 
   /* Contenedor cuadrado para la imagen */
   .pcard__imgwrap {
@@ -73,7 +103,7 @@ const colorEstado = estadoColores[estado] || "#FFFFFF";
     aspect-ratio: 1 / 1;       /* siempre cuadrado */
     border-radius: 15px;
     overflow: hidden;
-    margin: .25rem auto  .5rem auto; /* centrado */
+    margin: .25rem auto .5rem auto; /* centrado */
     box-shadow: 0 2px 8px rgba(0,0,0,.08);
     border: 1px solid rgba(0,0,0,.06);
     background: #f5f6f8;       /* placeholder si tarda en cargar */
@@ -101,6 +131,13 @@ const colorEstado = estadoColores[estado] || "#FFFFFF";
     text-decoration: none;
     font-size: .9rem;
   }
+
+  /* Texto acotado si es muy largo */
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 </style>
 
 <!-- Fondo de la tarjeta dinámico según el estado -->
@@ -110,23 +147,23 @@ const colorEstado = estadoColores[estado] || "#FFFFFF";
     <img
       class="pcard__img"
       src={`${imagenFinal}?t=${Date.now()}`}
-      alt={`Imagen del equipo de ${cliente}`}
+      alt={altImagen}
       loading="lazy"
     />
   </div>
 
   <div class="pcard__body">
-    <h6 class="fw-bold text-dark mt-1 mb-1" style="font-size:1.12rem;">
+    <h6 class="fw-bold text-dark mt-1 mb-1 truncate" title={cliente} style="font-size:1.12rem;">
       {cliente}
     </h6>
 
     <ul class="list-unstyled mb-2 small text-secondary">
       <li><strong>ID:</strong> {id}</li>
       <li><strong>Ticket:</strong> {ticket}</li>
-      <!-- 👇 ahora muestra 'modelo' -->
-      <li><strong>Maquina:</strong> {modelo}</li>
+      <!-- 👇 label “Máquina” pero valor real desde `modelo` -->
+      <li class="truncate" title={modelo}><strong>Máquina:</strong> {modelo}</li>
       <li><strong>Estado:</strong> {estado}</li>
-      <li><strong>WhatsApp:</strong> {whatsapp}</li>
+      <li class="truncate" title={whatsapp || 'No especificado'}><strong>WhatsApp:</strong> {whatsapp || 'No especificado'}</li>
     </ul>
   </div>
 

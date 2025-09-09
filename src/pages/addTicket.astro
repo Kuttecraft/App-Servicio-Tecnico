@@ -35,9 +35,7 @@ try {
 }
 
 // ⚠️ clave: si venimos de ok=1, ignoramos cualquier ?ticket= de la URL
-const ticket = ok
-  ? ticketSugerido
-  : (url.searchParams.get('ticket') || ticketSugerido);
+const ticket = ok ? ticketSugerido : (url.searchParams.get('ticket') || ticketSugerido);
 
 const cobrado = "No";
 ---
@@ -103,7 +101,7 @@ const cobrado = "No";
         <input type="text" class="form-control" name="modelo" value={modelo} />
       </div>
 
-      <!-- Datos impresora (sin "Máquina") -->
+      <!-- Datos impresora -->
       <div class="col-md-6">
         <label class="form-label">N° de Serie</label>
         <input type="text" class="form-control" name="numeroSerie" value={numeroSerie} />
@@ -178,16 +176,13 @@ const cobrado = "No";
     </form>
   </div>
 
-  <!-- Mensajito visual al volver con ok=1 -->
   <script is:inline>
     (function() {
       const usp = new URLSearchParams(location.search);
       if (usp.get('ok') === '1') {
-        // Limpia previews por las dudas
         document.getElementById('previewPrincipal')?.classList.add('d-none');
         document.getElementById('previewTicket')?.classList.add('d-none');
         document.getElementById('previewExtra')?.classList.add('d-none');
-        // Focus al primer campo
         const first = document.querySelector('input[name="cliente"]');
         if (first) first.focus();
       }
