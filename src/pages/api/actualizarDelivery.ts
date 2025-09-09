@@ -20,17 +20,19 @@ export async function POST(context: { request: Request }) {
     if (typeof value === 'string') fields[key] = value.trim();
   });
 
-  const base: Record<string, any> = {
+  // ⚠️ delivery NO tiene direccion/localidad en el schema
+  const baseDelivery: Record<string, any> = {
     cotizar_delivery: fields.cotizar_delivery || null,
     informacion_adicional_delivery: fields.informacion_adicional_delivery || null,
     medio_de_entrega: fields.medio_de_entrega || null,
     forma_de_pago: fields.forma_de_pago || null,
     pagado: fields.pagado || null, // "true" | "false" | null
-    // ✅ nuevos campos
-    direccion: fields.direccion || null,
-    localidad: fields.localidad || null,
     ticket_id: parseInt(ticketId, 10),
   };
+
+  // Guardaremos direccion/localidad en la tabla cliente (si vinieron)
+  const nuevaDireccion = fields.direccion || null;
+  const nuevaLocalidad = fields.localidad || null;
 
   // ¿Existe delivery?
   const { data: existing, error: selErr } = await supabase
@@ -52,7 +54,7 @@ export async function POST(context: { request: Request }) {
 
   if (existing) {
     const datos = {
-      ...base,
+      ...baseDelivery,
       fecha_de_entrega: existing.fecha_de_entrega ?? hoyYMD,
     };
     ({ error } = await supabase
@@ -61,7 +63,7 @@ export async function POST(context: { request: Request }) {
       .eq('ticket_id', ticketId));
   } else {
     const datos = {
-      ...base,
+      ...baseDelivery,
       fecha_de_entrega: hoyYMD,
     };
     ({ error } = await supabase
@@ -74,6 +76,28 @@ export async function POST(context: { request: Request }) {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  // ✅ Si el form trae direccion/localidad, actualizamos al cliente del ticket
+  if (nuevaDireccion || nuevaLocalidad) {
+    const { data: tkt, error: tErr } = await supabase
+      .from('tickets_mian')
+      .select('cliente_id')
+      .eq('id', ticketId)
+      .single();
+
+    if (!tErr && tkt?.cliente_id) {
+      const updateCliente: Record<string, any> = {};
+      if (nuevaDireccion !== null) updateCliente.direccion = nuevaDireccion;
+      if (nuevaLocalidad !== null) updateCliente.localidad = nuevaLocalidad;
+
+      if (Object.keys(updateCliente).length > 0) {
+        await supabase
+          .from('cliente')
+          .update(updateCliente)
+          .eq('id', tkt.cliente_id);
+      }
+    }
   }
 
   return new Response(null, {
