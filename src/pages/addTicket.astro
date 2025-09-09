@@ -9,8 +9,7 @@ const cliente = ok ? '' : (url.searchParams.get('cliente') || '');
 const dniCuit = ok ? '' : (url.searchParams.get('dniCuit') || '');
 const correo = ok ? '' : (url.searchParams.get('correo') || '');
 const whatsapp = ok ? '' : (url.searchParams.get('whatsapp') || '');
-// ⚠️ Ya no usamos "modelo"
-const maquina = ok ? '' : (url.searchParams.get('maquina') || '');
+const modelo = ok ? '' : (url.searchParams.get('modelo') || '');
 const numeroSerie = ok ? '' : (url.searchParams.get('numeroSerie') || '');
 const boquilla = ok ? '' : (url.searchParams.get('boquilla') || '');
 const tecnico = ok ? '' : (url.searchParams.get('tecnico') || '');
@@ -99,14 +98,12 @@ const cobrado = "No";
         <input type="text" class="form-control" name="whatsapp" value={whatsapp} />
       </div>
 
-      <!-- ✅ Volvió "Máquina" -->
       <div class="col-md-6">
-        <label class="form-label">Máquina</label>
-        <input type="text" class="form-control" name="maquina" value={maquina} />
+        <label class="form-label">Maquina</label>
+        <input type="text" class="form-control" name="modelo" value={modelo} />
       </div>
 
-      <!-- Ya no hay "Modelo" -->
-
+      <!-- Datos impresora (sin "Máquina") -->
       <div class="col-md-6">
         <label class="form-label">N° de Serie</label>
         <input type="text" class="form-control" name="numeroSerie" value={numeroSerie} />
@@ -186,9 +183,11 @@ const cobrado = "No";
     (function() {
       const usp = new URLSearchParams(location.search);
       if (usp.get('ok') === '1') {
+        // Limpia previews por las dudas
         document.getElementById('previewPrincipal')?.classList.add('d-none');
         document.getElementById('previewTicket')?.classList.add('d-none');
         document.getElementById('previewExtra')?.classList.add('d-none');
+        // Focus al primer campo
         const first = document.querySelector('input[name="cliente"]');
         if (first) first.focus();
       }
