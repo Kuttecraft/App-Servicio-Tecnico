@@ -225,14 +225,17 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       }
     }
 
-    // ========== Presupuesto ==========
-    const fechaPresuNorm = normDate(fields.timestampPresupuesto); // si no viene, no se pisa
+        // ========== Presupuesto ==========
+    const fechaPresuNorm = normDate(fields.timestampPresupuesto); // reutiliza la función global ya declarada
     const presUpdate: any = {
       monto: isNaN(parseFloat(fields.monto)) ? '0' : String(parseFloat(fields.monto)),
       link_presupuesto: fields.linkPresupuesto || null,
       cubre_garantia: (fields.cubre_garantia ?? fields.cubreGarantia) === 'true' ? 'true' : 'false',
     };
     if (fechaPresuNorm) presUpdate.fecha_presupuesto = fechaPresuNorm;
+
+    // Upsert y flag de guardado
+    let presGuardado = false;
 
     {
       const { data: updRows, error: updErr } = await supabase
@@ -243,22 +246,31 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
       if (updErr) return jsonError('Error al actualizar presupuesto: ' + updErr.message, 500);
 
-      const affected = Array.isArray(updRows) ? updRows.length : (updRows ? 1 : 0);
-      if (affected === 0) {
+      const afectadas = Array.isArray(updRows) ? updRows.length : (updRows ? 1 : 0);
+
+      if (afectadas === 0) {
         const presInsert: any = { ticket_id: idNum, ...presUpdate };
-        const { error: insErr } = await supabase.from('presupuestos').insert(presInsert);
+        const { data: insRows, error: insErr } = await supabase
+          .from('presupuestos')
+          .insert(presInsert)
+          .select('id');
+
         if (insErr) return jsonError('Error al crear presupuesto: ' + insErr.message, 500);
+        presGuardado = Array.isArray(insRows) ? insRows.length > 0 : Boolean(insRows);
+      } else {
+        presGuardado = true;
       }
     }
 
-    // ✅ Marcamos el estado como "P. Enviado" sólo si efectivamente se envió/actualizó presupuesto
-    {
+    // ✅ si se guardó/creó un presupuesto → marcar estado "P. Enviado"
+    if (presGuardado) {
       const { error: estadoErr } = await supabase
         .from('tickets_mian')
         .update({ estado: 'P. Enviado' })
         .eq('id', idNum);
       if (estadoErr) return jsonError('No se pudo marcar el estado como P. Enviado: ' + estadoErr.message, 500);
     }
+
 
     // ========== Imágenes ==========
     const contentType = (f: File | null) => (f as any)?.type || 'image/webp';

@@ -18,13 +18,15 @@ const { data: ticket } = await supabase
   .eq('id', id)
   .single();
 
-// Presupuesto (si existe)
-const { data: presupuesto } = await supabase
+// Presupuesto: traer SIEMPRE la última fila (evita problemas si hay duplicados)
+const { data: presuRows } = await supabase
   .from('presupuestos')
   .select('*')
   .eq('ticket_id', id)
-  .maybeSingle();
+  .order('id', { ascending: false })
+  .limit(1);
 
+const presupuesto = Array.isArray(presuRows) ? (presuRows[0] ?? null) : null;
 const isVerificar = Boolean(presupuesto?.id);
 
 // Mezcla datos (ticket + presupuesto)

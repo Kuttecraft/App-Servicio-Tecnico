@@ -1,11 +1,9 @@
 ---
-// Props: equipo (puede contener datos precargados o de edición)
 const { equipo } = Astro.props as { equipo: any };
 const isVerificar = Boolean(equipo?.id); // existe registro en presupuestos
 ---
 
-<!-- Ahora apunta al endpoint que sí actualiza el estado del ticket -->
-<form method="POST" action={`/api/actualizarTicket?id=${equipo.ticketId}`} class="card shadow-sm">
+<form method="POST" action={`/api/actualizarPresupuesto?id=${equipo.ticketId}`} class="card shadow-sm">
   <div class="card-body">
     <div class="row g-3">
       <div class="col-md-6">
@@ -21,7 +19,6 @@ const isVerificar = Boolean(equipo?.id); // existe registro en presupuestos
 
       <div class="col-md-6">
         <label class="form-label">Link presupuesto</label>
-        <!-- Usamos name="link_presupuesto" y el backend acepta ambos: linkPresupuesto / link_presupuesto -->
         <input
           type="url"
           class="form-control"
@@ -33,7 +30,6 @@ const isVerificar = Boolean(equipo?.id); // existe registro en presupuestos
 
       <div class="col-md-6">
         <label class="form-label">¿Garantía activa?</label>
-        <!-- El backend también acepta garantia_activa tal cual -->
         <select name="garantia_activa" class="form-select">
           <option value="">Seleccionar</option>
           <option value="Sí" selected={equipo?.garantia_activa === 'Sí'}>Sí</option>
