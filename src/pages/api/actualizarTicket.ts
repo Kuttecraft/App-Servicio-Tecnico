@@ -196,9 +196,13 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     }
 
     // ========== Delivery ==========
-    const deliveryUpd: any = {
-      pagado: fields.cobrado === 'true' ? 'true' : 'false',
-    };
+    const deliveryUpd: any = {};
+    if (typeof fields.cobrado === 'string') {
+      deliveryUpd.pagado =
+        fields.cobrado === 'true' ? 'true' :
+        fields.cobrado === 'false' ? 'false' :
+        null;
+    }
     if (isAdmin) {
       if (typeof fields.costoDelivery === 'string') deliveryUpd.cotizar_delivery = fields.costoDelivery || null;
       if (typeof fields.infoDelivery === 'string')  deliveryUpd.informacion_adicional_delivery = fields.infoDelivery || null;

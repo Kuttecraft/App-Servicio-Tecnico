@@ -103,7 +103,7 @@ const hasDelivery = Boolean(deliveryExistente?.id);
 const fechaFormularioNorm = normDateLite(equipo?.marca_temporal);
 const fechaListoNorm      = normDateLite(equipo?.fecha_de_reparacion);
 
-// Contador de comentarios para el botón
+// Comentarios
 const { count: comentariosCount } = await supabase
   .from('ticket_comentarios')
   .select('id', { count: 'exact', head: true })
@@ -157,12 +157,16 @@ const { count: comentariosCount } = await supabase
             <div class="col"><strong>Ticket:</strong> {equipo?.ticket ?? '—'}</div>
             <div class="col"><strong>Estado:</strong> {equipo?.estado ?? '—'}</div>
 
-            <div class="col"><strong>¿Cobrado?:</strong> {booleanATexto(delivery?.pagado === 'true')}</div>
-            <div class="col"><strong>Retiro por hogar:</strong> {formatMoney(delivery?.cotizar_delivery)}</div>
+            <!-- ¿Cobrado? muestra — cuando es null -->
+            <div class="col">
+              <strong>¿Cobrado?:</strong> {delivery?.pagado == null ? '—' : booleanATexto(delivery.pagado === 'true')}
+            </div>
 
-            {delivery?.medio_de_entrega && (
-              <div class="col"><strong>Medio de entrega:</strong> {delivery.medio_de_entrega}</div>
-            )}
+            <!-- SOLO Medio de entrega (NO mostramos “Retiro por hogar”) -->
+            <div class="col">
+              <strong>Medio de entrega:</strong> {delivery?.medio_de_entrega ?? '—'}
+            </div>
+
             {delivery?.fecha_de_entrega && (
               <div class="col"><strong>Fecha de entrega:</strong> {formatearFecha(delivery.fecha_de_entrega)}</div>
             )}
@@ -172,6 +176,9 @@ const { count: comentariosCount } = await supabase
             {delivery?.informacion_adicional_delivery && (
               <div class="col"><strong>Info adicional:</strong> {delivery.informacion_adicional_delivery}</div>
             )}
+
+            <!-- Costo delivery (opcional; si no querés verlo, podés borrar este bloque) -->
+            <div class="col"><strong>Costo delivery:</strong> {formatMoney(delivery?.cotizar_delivery)}</div>
 
             <div class="col"><strong>Técnico:</strong> {equipo?.tecnico ? `${equipo.tecnico.nombre} ${equipo.tecnico.apellido}` : '—'}</div>
             <div class="col"><strong>DNI/CUIT:</strong> {equipo?.cliente?.dni_cuit ?? '—'}</div>
@@ -202,19 +209,17 @@ const { count: comentariosCount } = await supabase
                 )}
               </div>
 
-                {isAdmin && (
-                  <div class="col-6 d-flex">
-                    <a href={`/delivery/${equipo?.id}`} class="btn btn-outline-success btn-sm w-100">
-                      <i class={`bi ${hasDelivery ? 'bi-shield-check' : 'bi-receipt'}`}></i>
-                      {' '}
-                      {hasDelivery ? 'Verificar delivery' : 'Añadir delivery'}
-                    </a>
-                  </div>
-                )}
-
+              {isAdmin && (
+                <div class="col-6 d-flex">
+                  <a href={`/delivery/${equipo?.id}`} class="btn btn-outline-success btn-sm w-100">
+                    <i class={`bi ${hasDelivery ? 'bi-shield-check' : 'bi-receipt'}`}></i>
+                    {' '}
+                    {hasDelivery ? 'Verificar delivery' : 'Añadir delivery'}
+                  </a>
+                </div>
+              )}
             </div>
 
-            <!-- Botón: Máquina Lista -->
             <div class="mt-3">
               {equipo?.estado !== 'Lista' ? (
                 <button class="btn btn-warning w-100" onclick={`window.maquinaLista('${equipo?.id}')`}>
@@ -227,7 +232,6 @@ const { count: comentariosCount } = await supabase
               )}
             </div>
 
-            <!-- Botón: Comentarios (lleva a /comentarios/[id]) -->
             <div class="mt-3">
               <a href={`/comentarios/${equipo?.id}`} class="btn btn-outline-secondary w-100">
                 <i class="bi bi-chat-dots"></i> Comentarios ({comentariosCount ?? 0})

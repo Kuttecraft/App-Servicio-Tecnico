@@ -35,7 +35,6 @@ const fechaMostrar = ddmmyyyy((equipo?.fecha_de_entrega as string) || hoyYMD);
     />
   </div>
 
-  <!-- NUEVOS CAMPOS -->
   <div class="col-md-6">
     <label class="form-label">Dirección</label>
     <input
@@ -57,9 +56,7 @@ const fechaMostrar = ddmmyyyy((equipo?.fecha_de_entrega as string) || hoyYMD);
       placeholder="Ciudad / localidad"
     />
   </div>
-  <!-- FIN NUEVOS CAMPOS -->
 
-  <!-- Fecha de entrega: solo día (auto), solo lectura y NO se envía al backend -->
   <div class="col-md-6">
     <label class="form-label">Fecha de entrega</label>
     <input type="text" class="form-control" value={fechaMostrar} readonly />

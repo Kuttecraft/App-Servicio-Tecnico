@@ -173,10 +173,19 @@ CREATE TABLE delivery (
     pagado TEXT
 );
 
+--7. Comentarios
+CREATE TABLE ticket_comentarios (
+    id         BIGSERIAL PRIMARY KEY,
+    ticket_id  BIGINT NOT NULL REFERENCES tickets_mian(id) ON DELETE CASCADE,
+    autor_id   BIGINT NOT NULL REFERENCES tecnicos(id) ON DELETE RESTRICT,
+    mensaje    TEXT   NOT NULL CHECK (btrim(mensaje) <> ''),  -- no vacío
+    creado_en  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 */
+
 /* Esta es aparte 
--- 7. Permisos de usuario (por técnico)
+-- 8. Permisos de usuario (por técnico)
 CREATE TABLE usuarios_perfil (
     id BIGSERIAL PRIMARY KEY,
     tecnico_id BIGINT NOT NULL REFERENCES tecnicos(id) ON DELETE CASCADE,
