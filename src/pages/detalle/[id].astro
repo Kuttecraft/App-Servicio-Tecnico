@@ -1,7 +1,7 @@
 ---
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import { supabase } from '../../lib/supabase';
-import { formatearFecha, booleanATexto } from '../../lib/utils';
+import { formatearFecha, booleanATexto, formatARS } from '../../lib/utils';
 
 const { id } = Astro.params as { id: string };
 
@@ -9,14 +9,6 @@ type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
 const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
-
-// Helper dinero
-const formatMoney = (v?: string | null) => {
-  if (!v) return '—';
-  const n = Number(v);
-  if (Number.isFinite(n)) return `$ ${n.toLocaleString('es-AR')}`;
-  return v;
-};
 
 // Normalizador de fecha a YYYY-MM-DD (tolerante)
 function normDateLite(value?: string | null): string | null {
@@ -162,7 +154,7 @@ const { count: comentariosCount } = await supabase
               <strong>¿Cobrado?:</strong> {delivery?.pagado == null ? '—' : booleanATexto(delivery.pagado === 'true')}
             </div>
 
-            <!-- SOLO Medio de entrega (NO mostramos “Retiro por hogar”) -->
+            <!-- SOLO Medio de entrega -->
             <div class="col">
               <strong>Medio de entrega:</strong> {delivery?.medio_de_entrega ?? '—'}
             </div>
@@ -177,8 +169,10 @@ const { count: comentariosCount } = await supabase
               <div class="col"><strong>Info adicional:</strong> {delivery.informacion_adicional_delivery}</div>
             )}
 
-            <!-- Costo delivery (opcional; si no querés verlo, podés borrar este bloque) -->
-            <div class="col"><strong>Costo delivery:</strong> {formatMoney(delivery?.cotizar_delivery)}</div>
+            <!-- 💰 Costo delivery → formateado ARS -->
+            <div class="col">
+              <strong>Costo delivery:</strong> {delivery?.cotizar_delivery ? formatARS(delivery.cotizar_delivery) : '—'}
+            </div>
 
             <div class="col"><strong>Técnico:</strong> {equipo?.tecnico ? `${equipo.tecnico.nombre} ${equipo.tecnico.apellido}` : '—'}</div>
             <div class="col"><strong>DNI/CUIT:</strong> {equipo?.cliente?.dni_cuit ?? '—'}</div>
