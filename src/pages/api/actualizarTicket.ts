@@ -139,6 +139,11 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       maquina_reparada: fields.maquina || fields.modelo || tRow.maquina_reparada || null,
     };
 
+    // guardamos “Detalle del problema” como notas_del_cliente del ticket
+    if (typeof fields.detalleCliente === 'string') {
+      datosTicketsMian.notas_del_cliente = fields.detalleCliente;
+    }
+
     // ========== Técnico (resolver por texto “Nombre Apellido”) ==========
     if (typeof fields.tecnico === 'string') {
       const tecnicoFull = fields.tecnico.trim();
@@ -190,7 +195,9 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       if (typeof fields.dniCuit === 'string' && fields.dniCuit !== '') updateCliente.dni_cuit = fields.dniCuit;
       if (typeof fields.whatsapp === 'string' && fields.whatsapp !== '') updateCliente.whatsapp = fields.whatsapp;
       if (typeof fields.correo === 'string' && fields.correo !== '') updateCliente.correo_electronico = fields.correo;
-      if (typeof fields.comentarios === 'string') updateCliente.comentarios = fields.comentarios; // puede ser vacío a propósito
+
+      // Sincronizamos el "Detalle del problema" también con la ficha del cliente (comentarios)
+      if (typeof fields.detalleCliente === 'string') updateCliente.comentarios = fields.detalleCliente;
 
       if (Object.keys(updateCliente).length > 0) {
         const { error } = await supabase.from('cliente').update(updateCliente).eq('id', tRow.cliente_id);
@@ -278,6 +285,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
         null;
     }
     if (isAdmin) {
+      if (typeof fields.medioEntrega === 'string') deliveryUpd.medio_de_entrega = fields.medioEntrega || null;
       if (typeof fields.costoDelivery === 'string') deliveryUpd.cotizar_delivery = fields.costoDelivery || null;
       if (typeof fields.infoDelivery === 'string')  deliveryUpd.informacion_adicional_delivery = fields.infoDelivery || null;
     }
@@ -375,7 +383,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     if (imagenExtraArchivo && imagenExtraArchivo.size > 0) await subirImagen(imagenExtraArchivo, nombreArchivoExtra, 'imagen_extra');
     else if (mustDelete(borrarImagenExtra))                 await borrarImagenCampo(nombreArchivoExtra, 'imagen_extra');
 
-    // Guardar los cambios acumulados del ticket (estado/fechas/notas/imagenes/maquina_reparada/tecnico_id)
+    // Guardar los cambios acumulados del ticket (estado/fechas/notas/imagenes/maquina_reparada/tecnico_id/cliente.detalle)
     {
       const { error } = await supabase.from('tickets_mian').update(datosTicketsMian).eq('id', idNum);
       if (error) return jsonError('Error al actualizar ticket: ' + error.message, 500);

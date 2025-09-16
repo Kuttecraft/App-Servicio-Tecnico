@@ -64,11 +64,12 @@ interface EquipoCompleto {
   imagen_ticket: string | null;
   imagen_extra: string | null;
   notas_del_tecnico: string | null;
+  notas_del_cliente: string | null;
 
   cliente?: { id?: number; dni_cuit: string | null; correo_electronico: string | null; whatsapp: string | null; comentarios: string | null; };
   tecnicos?: { nombre: string; apellido: string };
   impresoras?: { modelo: string; maquina: string; numero_de_serie: string; tamano_de_boquilla: string | null };
-  delivery?: { pagado: string; cotizar_delivery: string | null; informacion_adicional_delivery: string | null; fecha_de_entrega: string | null; };
+  delivery?: { pagado: string; cotizar_delivery: string | null; informacion_adicional_delivery: string | null; fecha_de_entrega: string | null; medio_de_entrega: string | null; };
   presupuestos?: { id?: number; monto: string; link_presupuesto: string; cubre_garantia: string; fecha_presupuesto: string };
 }
 
@@ -83,11 +84,11 @@ const { data, error } = await supabase
   .from('tickets_mian')
   .select(`
     id, ticket, estado, marca_temporal, fecha_de_reparacion, tecnico_id, cliente_id, impresora_id,
-    imagen, imagen_ticket, imagen_extra, notas_del_tecnico,
+    imagen, imagen_ticket, imagen_extra, notas_del_tecnico, notas_del_cliente,
     cliente:cliente_id ( id, dni_cuit, correo_electronico, whatsapp, comentarios ),
     tecnicos:tecnico_id ( nombre, apellido ),
     impresoras:impresora_id ( modelo, maquina, numero_de_serie, tamano_de_boquilla ),
-    delivery ( pagado, cotizar_delivery, informacion_adicional_delivery, fecha_de_entrega ),
+    delivery ( pagado, cotizar_delivery, informacion_adicional_delivery, fecha_de_entrega, medio_de_entrega ),
     presupuestos ( id, monto, link_presupuesto, cubre_garantia, fecha_presupuesto )
   `)
   .eq('id', id)
@@ -285,7 +286,11 @@ const estadoActual = (equipo?.estado || '').trim();
             {isAdmin && (
               <>
                 <div>
-                  <label class="form-label">Modo delivery</label>
+                  <label class="form-label">Modo de entrega</label>
+                  <input name="medioEntrega" type="text" class="form-control" value={equipo.delivery?.medio_de_entrega || ''} />
+                </div>
+                <div>
+                  <label class="form-label">Costo delivery</label>
                   <input name="costoDelivery" type="text" class="form-control" value={equipo.delivery?.cotizar_delivery || ''} />
                 </div>
                 <div>
@@ -310,8 +315,8 @@ const estadoActual = (equipo?.estado || '').trim();
               <textarea name="notaTecnico" class="form-control" rows="3">{equipo.notas_del_tecnico || ''}</textarea>
             </div>
             <div class="col-12">
-              <label class="form-label">Comentarios del cliente</label>
-              <textarea name="comentarios" class="form-control" rows="3">{equipo.cliente?.comentarios || ''}</textarea>
+              <label class="form-label">Comentarios del cliente (detalle del problema)</label>
+              <textarea name="detalleCliente" class="form-control" rows="3">{equipo.notas_del_cliente || equipo.cliente?.comentarios || ''}</textarea>
             </div>
           </div>
         </div>
