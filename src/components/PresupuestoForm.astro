@@ -1,6 +1,18 @@
 ---
 const { equipo } = Astro.props as { equipo: any };
-const isVerificar = Boolean(equipo?.id); // existe registro en presupuestos
+const isVerificar = Boolean(equipo?.id);
+
+function formatARS(v?: string | number | null): string {
+  if (v == null || v === '') return '';
+  const n = Number(String(v).replace(/[^\d,-]/g, '').replace(',', '.'));
+  if (!isFinite(n)) return String(v);
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(n);
+}
 ---
 
 <form method="POST" action={`/api/actualizarPresupuesto?id=${equipo.ticketId}`} class="card shadow-sm">
@@ -10,10 +22,10 @@ const isVerificar = Boolean(equipo?.id); // existe registro en presupuestos
         <label class="form-label">Monto</label>
         <input
           type="text"
-          class="form-control"
+          class="form-control currency-ars"
           name="monto"
-          value={equipo?.monto ?? ''}
-          placeholder="Ej: 19.100, incluye repuesto"
+          value={formatARS(equipo?.monto ?? '')}
+          placeholder="$20.000"
         />
       </div>
 
@@ -60,3 +72,30 @@ const isVerificar = Boolean(equipo?.id); // existe registro en presupuestos
     </div>
   </div>
 </form>
+
+<script>
+(function(){
+  function parseNumber(s){
+    if(!s) return 0;
+    s = s.replace(/[^\d,-]/g,'').replace(',', '.');
+    return Number(s) || 0;
+  }
+  function formatARS(n){
+    return new Intl.NumberFormat('es-AR',{
+      style:'currency',currency:'ARS',
+      minimumFractionDigits:0, maximumFractionDigits:2
+    }).format(n);
+  }
+  function onBlur(e){
+    const n = parseNumber(e.target.value);
+    e.target.value = n ? formatARS(n) : '';
+  }
+  function onInput(e){
+    e.target.value = e.target.value.replace(/[^\d,.-]/g,'');
+  }
+  document.querySelectorAll('.currency-ars').forEach(el=>{
+    el.addEventListener('blur', onBlur);
+    el.addEventListener('input', onInput);
+  });
+})();
+</script>

@@ -44,6 +44,31 @@ const fechaPresupuestoVista = fechaPresupuesto
 
 // Helper
 const v = (x: any) => (x ?? '') || '—';
+
+// Formateo ARS
+function parseToNumberLike(s?: string | null): string {
+  if (!s) return '';
+  let t = String(s).trim().replace(/[^\d.,-]/g,'');
+  const lastDot=t.lastIndexOf('.'), lastCom=t.lastIndexOf(',');
+  if(lastDot!==-1 && lastCom!==-1){
+    const dec = lastDot>lastCom?'.':','; const mil = dec==='.'?',':'.';
+    t = t.split(mil).join('');
+    if(dec===',') t = t.replace(',', '.');
+  } else if(lastCom!==-1 && lastDot===-1){
+    t = t.replace(',', '.');
+  }
+  return t;
+}
+function formatARS(v?: string | number | null): string {
+  if (v == null || v === '') return '';
+  const asStr = typeof v === 'number' ? String(v) : String(v);
+  const norm = parseToNumberLike(asStr);
+  const n = Number(norm);
+  if (!isFinite(n)) return String(v);
+  const parts = norm.split('.');
+  const decimals = parts[1]?.length ? Math.min(2, parts[1].length) : 0;
+  return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
 ---
 
 <BasePrivateLayout>
@@ -79,7 +104,7 @@ const v = (x: any) => (x ?? '') || '—';
                 <div class="row g-3">
                   <div class="col-md-6">
                     <label class="form-label fw-semibold">Monto</label>
-                    <input type="text" class="form-control" value={v(equipo.monto)} readonly />
+                    <input type="text" class="form-control" value={formatARS(equipo.monto)} readonly />
                   </div>
                   <div class="col-md-6">
                     <label class="form-label fw-semibold">¿Garantía activa?</label>

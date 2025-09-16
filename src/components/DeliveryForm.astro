@@ -1,8 +1,7 @@
 ---
-/* Props: equipo (viene del detalle del ticket) */
 const { equipo } = Astro.props as { equipo: any };
 
-// Utilidades para mostrar solo día en dd/mm/yyyy
+// Utilidad fecha dd/mm/yyyy
 function ddmmyyyy(ymd: string) {
   if (!ymd) return '';
   const y = ymd.slice(0, 4), m = ymd.slice(5, 7), d = ymd.slice(8, 10);
@@ -10,6 +9,18 @@ function ddmmyyyy(ymd: string) {
 }
 const hoyYMD = new Date().toISOString().slice(0, 10);
 const fechaMostrar = ddmmyyyy((equipo?.fecha_de_entrega as string) || hoyYMD);
+
+function formatARS(v?: string | number | null): string {
+  if (v == null || v === '') return '';
+  const n = Number(String(v).replace(/[^\d,-]/g, '').replace(',', '.'));
+  if (!isFinite(n)) return String(v);
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(n);
+}
 ---
 
 <form method="POST" action={`/api/actualizarDelivery?id=${equipo.ticketId}`} class="row g-3">
@@ -17,10 +28,10 @@ const fechaMostrar = ddmmyyyy((equipo?.fecha_de_entrega as string) || hoyYMD);
     <label class="form-label">Costo delivery</label>
     <input
       type="text"
-      class="form-control"
+      class="form-control currency-ars"
       name="cotizar_delivery"
-      value={equipo?.cotizar_delivery ?? ''}
-      placeholder="Ej: 500.00"
+      value={formatARS(equipo?.cotizar_delivery ?? '')}
+      placeholder="$500"
     />
   </div>
 
@@ -99,3 +110,30 @@ const fechaMostrar = ddmmyyyy((equipo?.fecha_de_entrega as string) || hoyYMD);
     </button>
   </div>
 </form>
+
+<script>
+(function(){
+  function parseNumber(s){
+    if(!s) return 0;
+    s = s.replace(/[^\d,-]/g,'').replace(',', '.');
+    return Number(s) || 0;
+  }
+  function formatARS(n){
+    return new Intl.NumberFormat('es-AR',{
+      style:'currency',currency:'ARS',
+      minimumFractionDigits:0, maximumFractionDigits:2
+    }).format(n);
+  }
+  function onBlur(e){
+    const n = parseNumber(e.target.value);
+    e.target.value = n ? formatARS(n) : '';
+  }
+  function onInput(e){
+    e.target.value = e.target.value.replace(/[^\d,.-]/g,'');
+  }
+  document.querySelectorAll('.currency-ars').forEach(el=>{
+    el.addEventListener('blur', onBlur);
+    el.addEventListener('input', onInput);
+  });
+})();
+</script>

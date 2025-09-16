@@ -1,5 +1,27 @@
 import { supabase } from '../../lib/supabase';
 
+function normalizarMontoTexto(input?: string | null): string | null {
+  if (input == null) return null;
+  let s = String(input).trim();
+  if (!s) return null;
+  s = s.replace(/[^0-9.,-]/g, '');
+  const tienePunto = s.includes('.');
+  const tieneComa = s.includes(',');
+  if (tienePunto && tieneComa) {
+    const lastP = s.lastIndexOf('.');
+    const lastC = s.lastIndexOf(',');
+    const decimalSep = lastP > lastC ? '.' : ',';
+    const milesSep = decimalSep === '.' ? ',' : '.';
+    s = s.split(milesSep).join('');
+    if (decimalSep === ',') s = s.replace(',', '.');
+  } else if (tieneComa && !tienePunto) {
+    s = s.replace(',', '.');
+  }
+  const n = Number(s);
+  if (!isFinite(n)) return String(s || '');
+  return s;
+}
+
 export async function POST(context: { request: Request }) {
   const req = context.request;
   const url = new URL(req.url);
@@ -22,7 +44,10 @@ export async function POST(context: { request: Request }) {
 
   // delivery NO tiene direccion/localidad en el schema
   const baseDelivery: Record<string, any> = {
-    cotizar_delivery: fields.cotizar_delivery || null,
+    cotizar_delivery:
+      'cotizar_delivery' in fields
+        ? (normalizarMontoTexto(fields.cotizar_delivery) ?? null)
+        : null,
     informacion_adicional_delivery: fields.informacion_adicional_delivery || null,
     medio_de_entrega: fields.medio_de_entrega || null,
     forma_de_pago: fields.forma_de_pago || null,
