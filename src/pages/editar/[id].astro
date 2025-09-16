@@ -13,8 +13,8 @@ function toISODate(v?: string | null): string {
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
   if (m) {
-    const dd = m[1].padStart(2, '0');
-    const mm = m[2].padStart(2, '0');
+    const dd = String(m[1]).padStart(2, '0');
+    const mm = String(m[2]).padStart(2, '0');
     const yyyy = m[3];
     return `${yyyy}-${mm}-${dd}`;
   }
@@ -69,7 +69,7 @@ interface EquipoCompleto {
   tecnicos?: { nombre: string; apellido: string };
   impresoras?: { modelo: string; maquina: string; numero_de_serie: string; tamano_de_boquilla: string | null };
   delivery?: { pagado: string; cotizar_delivery: string | null; informacion_adicional_delivery: string | null; fecha_de_entrega: string | null; };
-  presupuestos?: { monto: string; link_presupuesto: string; cubre_garantia: string; fecha_presupuesto: string };
+  presupuestos?: { id?: number; monto: string; link_presupuesto: string; cubre_garantia: string; fecha_presupuesto: string };
 }
 
 const { id } = Astro.params as { id: string };
@@ -88,7 +88,7 @@ const { data, error } = await supabase
     tecnicos:tecnico_id ( nombre, apellido ),
     impresoras:impresora_id ( modelo, maquina, numero_de_serie, tamano_de_boquilla ),
     delivery ( pagado, cotizar_delivery, informacion_adicional_delivery, fecha_de_entrega ),
-    presupuestos ( monto, link_presupuesto, cubre_garantia, fecha_presupuesto )
+    presupuestos ( id, monto, link_presupuesto, cubre_garantia, fecha_presupuesto )
   `)
   .eq('id', id)
   .maybeSingle();
@@ -107,7 +107,10 @@ let equipo: any = row ? {
   tecnicos: Array.isArray(row?.tecnicos) ? row.tecnicos[0] : row?.tecnicos,
   impresoras: Array.isArray(row?.impresoras) ? row.impresoras[0] : row?.impresoras,
   delivery: Array.isArray(row?.delivery) ? row.delivery[0] : row?.delivery,
-  presupuestos: Array.isArray(row?.presupuestos) ? row.presupuestos[0] : row?.presupuestos,
+  // ✅ tomar SIEMPRE el último presupuesto por id
+  presupuestos: Array.isArray(row?.presupuestos)
+    ? (row.presupuestos.sort((a:any,b:any)=>Number(a.id)-Number(b.id))[row.presupuestos.length-1] ?? null)
+    : row?.presupuestos,
 } : null;
 
 /* Fallback robusto de cliente si el join vino vacío/incompleto */
@@ -135,7 +138,7 @@ const urlMain   = equipo?.imagen        || supabase.storage.from('imagenes').get
 const urlTicket = equipo?.imagen_ticket || supabase.storage.from('imagenes').getPublicUrl(`public/${id}_ticket.webp`).data.publicUrl;
 const urlExtra  = equipo?.imagen_extra  || supabase.storage.from('imagenes').getPublicUrl(`public/${id}_extra.webp`).data.publicUrl;
 
-// selects booleanos
+// selects booleanos (para setear selected manualmente)
 const valorCubreGarantia = (equipo?.presupuestos?.cubre_garantia === 'true') ? 'true' : 'false';
 const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
 const estadoActual = (equipo?.estado || '').trim();
@@ -256,9 +259,9 @@ const estadoActual = (equipo?.estado || '').trim();
             </div>
             <div>
               <label class="form-label">¿Cubre garantía?</label>
-              <select name="cubreGarantia" class="form-select" value={valorCubreGarantia}>
-                <option value="true">Sí</option>
-                <option value="false">No</option>
+              <select name="cubreGarantia" class="form-select">
+                <option value="true"  selected={valorCubreGarantia === 'true'}>Sí</option>
+                <option value="false" selected={valorCubreGarantia === 'false'}>No</option>
               </select>
             </div>
             <div>
@@ -274,9 +277,9 @@ const estadoActual = (equipo?.estado || '').trim();
           <div class="grid-2">
             <div>
               <label class="form-label">¿Cobrado?</label>
-              <select name="cobrado" class="form-select" value={valorCobrado}>
-                <option value="true">Sí</option>
-                <option value="false">No</option>
+              <select name="cobrado" class="form-select">
+                <option value="true"  selected={valorCobrado === 'true'}>Sí</option>
+                <option value="false" selected={valorCobrado === 'false'}>No</option>
               </select>
             </div>
             {isAdmin && (

@@ -1,5 +1,40 @@
 import { supabase } from '../../lib/supabase';
 
+function normalizarMontoTexto(input?: string | null): string | null {
+  if (input == null) return null;
+  let s = String(input).trim();
+  if (!s) return null;
+
+  // Quitar todo menos dígitos, coma, punto y signo menos
+  s = s.replace(/[^0-9.,-]/g, '');
+
+  const tienePunto = s.includes('.');
+  const tieneComa = s.includes(',');
+
+  if (tienePunto && tieneComa) {
+    // El separador decimal es el último que aparezca
+    const lastP = s.lastIndexOf('.');
+    const lastC = s.lastIndexOf(',');
+    const decimalSep = lastP > lastC ? '.' : ',';
+    const milesSep = decimalSep === '.' ? ',' : '.';
+
+    s = s.split(milesSep).join(''); // quitar miles
+    if (decimalSep === ',') s = s.replace(',', '.'); // dejar decimal como punto
+  } else if (tieneComa && !tienePunto) {
+    // Solo coma → usar coma como decimal
+    s = s.replace(',', '.');
+  } else {
+    // Solo punto o solo dígitos → queda igual
+  }
+
+  // Validar número
+  const n = Number(s);
+  if (!isFinite(n)) return String(s || '');
+
+  // Devolver string numérica estable (sin tocar cantidad de decimales)
+  return s;
+}
+
 export async function POST(context: { request: Request }) {
   const req = context.request;
   const url = new URL(req.url);
@@ -29,7 +64,11 @@ export async function POST(context: { request: Request }) {
 
   // Solo incluimos lo que realmente vino en el form
   const datos: Record<string, any> = { ticket_id: ticketIdNum };
-  if ('monto' in fields) datos.monto = fields.monto || null;
+
+  if ('monto' in fields) {
+    const montoNorm = normalizarMontoTexto(fields.monto);
+    datos.monto = montoNorm; // guardamos el string normalizado
+  }
   if ('link_presupuesto' in fields) datos.link_presupuesto = fields.link_presupuesto || null;
   if ('presupuesto_aprobado' in fields) datos.presupuesto_aprobado = fields.presupuesto_aprobado || null; // "Si" | "No" | null
   if ('garantia_activa' in fields) datos.garantia_activa = fields.garantia_activa || null;

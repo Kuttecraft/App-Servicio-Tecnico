@@ -35,6 +35,37 @@ function normDate(value?: string | null): string | null {
   return null;
 }
 
+/** Normaliza montos escritos como “$10.000”, “10.000,50”, “10000.5”, etc. → string numérico estable (decimal con punto). */
+function normalizarMontoTexto(input?: string | null): string | null {
+  if (input == null) return null;
+  let s = String(input).trim();
+  if (!s) return null;
+
+  // Dejar solo dígitos, coma, punto y signo menos
+  s = s.replace(/[^0-9.,-]/g, '');
+
+  const tienePunto = s.includes('.');
+  const tieneComa = s.includes(',');
+
+  if (tienePunto && tieneComa) {
+    // El separador decimal es el ÚLTIMO símbolo que aparezca (entre coma/punto)
+    const lastP = s.lastIndexOf('.');
+    const lastC = s.lastIndexOf(',');
+    const decimalSep = lastP > lastC ? '.' : ',';
+    const milesSep = decimalSep === '.' ? ',' : '.';
+
+    s = s.split(milesSep).join(''); // quitar miles
+    if (decimalSep === ',') s = s.replace(',', '.'); // decimal como punto
+  } else if (tieneComa && !tienePunto) {
+    // Solo coma → usar coma como decimal
+    s = s.replace(',', '.');
+  } // Solo punto o solo dígitos → queda igual
+
+  const n = Number(s);
+  if (!isFinite(n)) return String(s || '');
+  return s;
+}
+
 function jsonError(message: string, status = 500) {
   return new Response(JSON.stringify({ error: message }), {
     status,
@@ -88,7 +119,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     // ---------- Leer fila actual ----------
     const { data: tRow, error: tErr } = await supabase
       .from('tickets_mian')
-      .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion, estado, maquina_reparada')
+      .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion, estado, maquina_reparada, tecnico_id')
       .eq('id', idNum)
       .single();
     if (tErr || !tRow) return jsonError(`No se pudo obtener el ticket (id=${String(id)})`, 500);
@@ -104,10 +135,54 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       marca_temporal: (fechaFormularioNorm ?? tRow.marca_temporal) || null,
       fecha_de_reparacion: (fechaListoNorm ?? tRow.fecha_de_reparacion) || null,
       notas_del_tecnico: fields.notaTecnico || null,
-      // 👇 clave: en Editar el input se llama "maquina" (label Máquina),
-      // y ese valor es el que representa al "modelo".
+      // “maquina” (UI) representa el modelo
       maquina_reparada: fields.maquina || fields.modelo || tRow.maquina_reparada || null,
     };
+
+    // ========== Técnico (resolver por texto “Nombre Apellido”) ==========
+    if (typeof fields.tecnico === 'string') {
+      const tecnicoFull = fields.tecnico.trim();
+      if (tecnicoFull === '') {
+        datosTicketsMian.tecnico_id = null; // vaciar si lo dejan vacío
+      } else {
+        const parts = tecnicoFull.split(/\s+/).filter(Boolean);
+        const nombre = parts.shift() ?? '';
+        const apellido = parts.join(' ') || '';
+
+        let tecnicoId: number | null = null;
+
+        if (nombre && apellido) {
+          const { data: tecExact } = await supabase
+            .from('tecnicos')
+            .select('id')
+            .eq('nombre', nombre)
+            .eq('apellido', apellido)
+            .maybeSingle();
+          if (tecExact?.id) {
+            tecnicoId = tecExact.id;
+          } else {
+            const { data: tecLike } = await supabase
+              .from('tecnicos')
+              .select('id, nombre, apellido')
+              .ilike('nombre', `%${nombre}%`)
+              .ilike('apellido', `%${apellido}%`)
+              .order('id', { ascending: true })
+              .limit(1);
+            if (Array.isArray(tecLike) && tecLike[0]?.id) tecnicoId = tecLike[0].id;
+          }
+        } else if (nombre) {
+          const { data: tecByName } = await supabase
+            .from('tecnicos')
+            .select('id, nombre, apellido')
+            .ilike('nombre', `%${nombre}%`)
+            .order('id', { ascending: true })
+            .limit(1);
+          if (Array.isArray(tecByName) && tecByName[0]?.id) tecnicoId = tecByName[0].id;
+        }
+
+        if (tecnicoId !== null) datosTicketsMian.tecnico_id = tecnicoId;
+      }
+    }
 
     // ========== Cliente (merge: solo lo que venga no vacío) ==========
     if (tRow.cliente_id) {
@@ -124,14 +199,13 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     }
 
     // ========== Impresora ==========
-    const maquina      = fields.maquina || '';       // ← este es el “modelo” real desde UI
+    const maquina      = fields.maquina || ''; // ← modelo real desde UI
     const numeroSerie  = fields.numeroSerie || '';
     const boquilla     = fields.boquilla || '';
 
     if (maquina || numeroSerie || boquilla) {
       if (tRow.impresora_id) {
         const payloadImpresora: any = {};
-        // Importante: el input "maquina" alimenta modelo y maquina
         if (maquina) {
           payloadImpresora.modelo  = maquina;
           payloadImpresora.maquina = maquina;
@@ -208,7 +282,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       if (typeof fields.infoDelivery === 'string')  deliveryUpd.informacion_adicional_delivery = fields.infoDelivery || null;
     }
 
-    {
+    if (Object.keys(deliveryUpd).length > 0) {
       const { data: updRows, error: updErr } = await supabase
         .from('delivery')
         .update(deliveryUpd)
@@ -225,11 +299,13 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       }
     }
 
-        // ========== Presupuesto ==========
-    const fechaPresuNorm = normDate(fields.timestampPresupuesto); // reutiliza la función global ya declarada
+    // ========== Presupuesto ==========
+    const fechaPresuNorm = normDate(fields.timestampPresupuesto); // puede venir vacío
     const presUpdate: any = {
-      monto: isNaN(parseFloat(fields.monto)) ? '0' : String(parseFloat(fields.monto)),
-      link_presupuesto: fields.linkPresupuesto || null,
+      // Normalizamos cualquier formato ($, puntos, comas)
+      monto: ('monto' in fields) ? normalizarMontoTexto(fields.monto) : undefined,
+      link_presupuesto: ('linkPresupuesto' in fields) ? (fields.linkPresupuesto || null) : undefined,
+      // En DB la columna es cubre_garantia (texto 'true'|'false')
       cubre_garantia: (fields.cubre_garantia ?? fields.cubreGarantia) === 'true' ? 'true' : 'false',
     };
     if (fechaPresuNorm) presUpdate.fecha_presupuesto = fechaPresuNorm;
@@ -237,7 +313,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     // Upsert y flag de guardado
     let presGuardado = false;
 
-    {
+    if (Object.values(presUpdate).some(v => v !== undefined)) {
       const { data: updRows, error: updErr } = await supabase
         .from('presupuestos')
         .update(presUpdate)
@@ -271,7 +347,6 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       if (estadoErr) return jsonError('No se pudo marcar el estado como P. Enviado: ' + estadoErr.message, 500);
     }
 
-
     // ========== Imágenes ==========
     const contentType = (f: File | null) => (f as any)?.type || 'image/webp';
     const subirImagen = async (archivo: File, nombreArchivo: string, campo: 'imagen'|'imagen_ticket'|'imagen_extra') => {
@@ -300,7 +375,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     if (imagenExtraArchivo && imagenExtraArchivo.size > 0) await subirImagen(imagenExtraArchivo, nombreArchivoExtra, 'imagen_extra');
     else if (mustDelete(borrarImagenExtra))                 await borrarImagenCampo(nombreArchivoExtra, 'imagen_extra');
 
-    // Guardar los cambios acumulados del ticket (estado/fechas/notas/imagenes/maquina_reparada)
+    // Guardar los cambios acumulados del ticket (estado/fechas/notas/imagenes/maquina_reparada/tecnico_id)
     {
       const { error } = await supabase.from('tickets_mian').update(datosTicketsMian).eq('id', idNum);
       if (error) return jsonError('Error al actualizar ticket: ' + error.message, 500);
