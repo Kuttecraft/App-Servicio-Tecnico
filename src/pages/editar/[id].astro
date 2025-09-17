@@ -55,7 +55,7 @@ function toMDY(v?: string | null): string {
 function parseToNumberLike(s?: string | null): string {
   if (!s) return '';
   let t = String(s).trim();
-  t = t.replace(/[^\d.,-]/g, '');           // deja dígitos, coma, punto, signo
+  t = t.replace(/[^\d.,-]/g, '');
   const lastDot = t.lastIndexOf('.');
   const lastCom = t.lastIndexOf(',');
   if (lastDot !== -1 && lastCom !== -1) {
@@ -65,8 +65,6 @@ function parseToNumberLike(s?: string | null): string {
     if (decimalSep === ',') t = t.replace(',', '.');
   } else if (lastCom !== -1 && lastDot === -1) {
     t = t.replace(',', '.');
-  } else {
-    // solo punto o solo dígitos → queda igual
   }
   return t;
 }
@@ -76,32 +74,9 @@ function formatARS(v?: string | number | null): string {
   const norm = parseToNumberLike(asStr);
   const n = Number(norm);
   if (!isFinite(n)) return String(v);
-  // Mostrar siempre con separador de miles y coma decimal si aplica (máx 2 decimales si existen)
   const parts = norm.split('.');
   const decimals = parts[1]?.length ? Math.min(2, parts[1].length) : 0;
   return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-}
-
-interface EquipoCompleto {
-  id: number;
-  ticket: number;
-  estado: string;
-  marca_temporal: string | null;
-  fecha_de_reparacion: string | null;
-  tecnico_id: number | null;
-  cliente_id: number;
-  impresora_id: number | null;
-  imagen: string | null;
-  imagen_ticket: string | null;
-  imagen_extra: string | null;
-  notas_del_tecnico: string | null;
-  notas_del_cliente: string | null;
-
-  cliente?: { id?: number; dni_cuit: string | null; correo_electronico: string | null; whatsapp: string | null; comentarios: string | null; };
-  tecnicos?: { nombre: string; apellido: string };
-  impresoras?: { modelo: string; maquina: string; numero_de_serie: string; tamano_de_boquilla: string | null };
-  delivery?: { pagado: string; cotizar_delivery: string | null; informacion_adicional_delivery: string | null; fecha_de_entrega: string | null; medio_de_entrega: string | null; };
-  presupuestos?: { id?: number; monto: string; link_presupuesto: string; cubre_garantia: string; fecha_presupuesto: string };
 }
 
 const { id } = Astro.params as { id: string };
@@ -139,13 +114,11 @@ let equipo: any = row ? {
   tecnicos: Array.isArray(row?.tecnicos) ? row.tecnicos[0] : row?.tecnicos,
   impresoras: Array.isArray(row?.impresoras) ? row.impresoras[0] : row?.impresoras,
   delivery: Array.isArray(row?.delivery) ? row.delivery[0] : row?.delivery,
-  // ✅ tomar SIEMPRE el último presupuesto por id
   presupuestos: Array.isArray(row?.presupuestos)
     ? (row.presupuestos.sort((a:any,b:any)=>Number(a.id)-Number(b.id))[row.presupuestos.length-1] ?? null)
     : row?.presupuestos,
 } : null;
 
-/* Fallback robusto de cliente si el join vino vacío/incompleto */
 if (equipo && (!equipo.cliente || (
   equipo.cliente.dni_cuit == null &&
   equipo.cliente.whatsapp == null &&
@@ -170,7 +143,7 @@ const urlMain   = equipo?.imagen        || supabase.storage.from('imagenes').get
 const urlTicket = equipo?.imagen_ticket || supabase.storage.from('imagenes').getPublicUrl(`public/${id}_ticket.webp`).data.publicUrl;
 const urlExtra  = equipo?.imagen_extra  || supabase.storage.from('imagenes').getPublicUrl(`public/${id}_extra.webp`).data.publicUrl;
 
-// selects booleanos (para setear selected manualmente)
+// selects booleanos
 const valorCubreGarantia = (equipo?.presupuestos?.cubre_garantia === 'true') ? 'true' : 'false';
 const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
 const estadoActual = (equipo?.estado || '').trim();
@@ -184,8 +157,6 @@ const estadoActual = (equipo?.estado || '').trim();
     .grid-2 { display: grid; grid-template-columns: 1fr; gap: .75rem; }
     @media (min-width: 768px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
     .actions { display: flex; gap: .5rem; justify-content: flex-end; }
-
-    /* Imágenes */
     .img-row { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem; }
     @media (min-width:768px){ .img-row{ flex-direction:row; align-items:center; justify-content:center; gap:1.25rem; } }
     .img-box { border-radius:15px; overflow:hidden; border:1px solid rgba(0,0,0,.1); box-shadow:0 2px 8px rgba(0,0,0,.06); }
@@ -224,10 +195,16 @@ const estadoActual = (equipo?.estado || '').trim();
                 ))}
               </select>
             </div>
+
+            <!-- Técnico dinámico desde /api/listarTecnicos (muestra email sin @) -->
             <div>
               <label class="form-label">Técnico</label>
-              <input name="tecnico" type="text" class="form-control" value={`${(equipo.tecnicos?.nombre)||''} ${(equipo.tecnicos?.apellido)||''}`} />
+              <select id="select-tecnico" name="tecnico_id" class="form-select" data-current-tecnicoid={String(equipo?.tecnico_id ?? '')}>
+                <option value="">— Sin asignar —</option>
+              </select>
+              <small id="tecHelp" class="form-text text-muted"></small>
             </div>
+
             <div>
               <label class="form-label">Fecha formulario</label>
               <input name="fechaFormulario" type="text" class="form-control" value={toMDY(equipo.marca_temporal)} />
@@ -434,44 +411,48 @@ const estadoActual = (equipo?.estado || '').trim();
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
   <script src="/scripts/form-mas-imagenes.js?v=1" defer></script>
 
+  <!-- Cargar técnicos dinámicamente desde usuarios_perfil (email sin @) -->
+  <script>
+    (async function(){
+      const sel  = document.getElementById('select-tecnico');
+      const help = document.getElementById('tecHelp');
+      if (!(sel instanceof HTMLSelectElement)) return;
+      const current = sel.dataset.currentTecnicoid ? Number(sel.dataset.currentTecnicoid) : null;
+
+      try {
+        const res  = await fetch('/api/listarTecnicos', { headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (!res.ok || !data?.items) throw new Error(data?.error || 'No se pudo cargar técnicos');
+
+        (data.items || []).forEach((it) => {
+          const opt = document.createElement('option');
+          opt.value = String(it.id);
+          opt.textContent = it.label; // email antes del @ desde usuarios_perfil
+          if (current && Number(it.id) === current) opt.selected = true;
+          sel.appendChild(opt);
+        });
+
+        if (help) help.textContent = '';
+      } catch (err) {
+        if (help) help.textContent = 'No se pudo cargar la lista de técnicos.';
+        console.error('[listarTecnicos]', err);
+      }
+    })();
+  </script>
+
   <!-- Formateo ARS al escribir -->
   <script>
     (function(){
-      function parseToNumberLike(s){
-        if(!s) return '';
-        let t = String(s).trim();
-        t = t.replace(/[^\d.,-]/g,'');
-        const lastDot=t.lastIndexOf('.'), lastCom=t.lastIndexOf(',');
-        if(lastDot!==-1 && lastCom!==-1){
-          const dec = lastDot>lastCom?'.':','; const mil = dec==='.'?',':'.';
-          t = t.split(mil).join('');
-          if(dec===',') t = t.replace(',', '.');
-        } else if(lastCom!==-1 && lastDot===-1){
-          t = t.replace(',', '.');
-        }
-        return t;
-      }
-      function formatARSFromStr(s){
-        const norm = parseToNumberLike(s);
-        const n = Number(norm);
-        if(!isFinite(n)) return s||'';
-        const parts = norm.split('.');
-        const decimals = parts[1]?.length ? Math.min(2, parts[1].length) : 0;
-        return '$' + n.toLocaleString('es-AR',{minimumFractionDigits:decimals, maximumFractionDigits:decimals});
-      }
-      function onBlurFormat(e){
-        e.target.value = formatARSFromStr(e.target.value);
-      }
-      function onInputClean(e){
-        // deja $ y números “amigables” al tipear
-        const val = e.target.value;
-        const keep = val.replace(/[^\d.,$-]/g,'');
-        e.target.value = keep;
-      }
-      document.querySelectorAll('.currency-ars').forEach((el)=>{
-        el.addEventListener('blur', onBlurFormat);
-        el.addEventListener('input', onInputClean);
-      });
+      function parseToNumberLike(s){ if(!s) return ''; let t=String(s).trim(); t=t.replace(/[^\d.,-]/g,'');
+        const lastDot=t.lastIndexOf('.'), lastCom=t.lastIndexOf(','); if(lastDot!==-1&&lastCom!==-1){
+          const dec=lastDot>lastCom?'.':','; const mil=dec==='.'?',':'.'; t=t.split(mil).join(''); if(dec===',') t=t.replace(',', '.');
+        } else if(lastCom!==-1&&lastDot===-1){ t=t.replace(',', '.'); } return t; }
+      function formatARSFromStr(s){ const n=Number(parseToNumberLike(s)); if(!isFinite(n)) return s||'';
+        const dec=(String(s).split('.')[1]||'').length; const d=dec?Math.min(2,dec):0;
+        return '$'+n.toLocaleString('es-AR',{minimumFractionDigits:d, maximumFractionDigits:d}); }
+      function onBlurFormat(e){ e.target.value = formatARSFromStr(e.target.value); }
+      function onInputClean(e){ const val=e.target.value; e.target.value = val.replace(/[^\d.,$-]/g,''); }
+      document.querySelectorAll('.currency-ars').forEach((el)=>{ el.addEventListener('blur', onBlurFormat); el.addEventListener('input', onInputClean); });
     })();
   </script>
 </BasePrivateLayout>
