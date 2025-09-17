@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
+import { resolverAutor } from '../../lib/resolverAutor';
 
 /** Normaliza a YYYY-MM-DD desde ISO, YYYY/MM/DD, MM/DD/YYYY o DD/MM/YYYY. */
 function normDate(value?: string | null): string | null {
@@ -143,6 +144,13 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     if (typeof fields.detalleCliente === 'string') {
       datosTicketsMian.notas_del_cliente = fields.detalleCliente;
     }
+
+    // Detectar cambio de estado (para comentar luego)
+    const oldEstado = (tRow.estado || '').trim();
+    const newEstado = (datosTicketsMian.estado || '').trim();
+    const hayCambioEstado =
+      newEstado !== '' &&
+      newEstado.toLowerCase() !== oldEstado.toLowerCase();
 
     // ========== Técnico (resolver por texto “Nombre Apellido”) ==========
     if (typeof fields.tecnico === 'string') {
@@ -346,13 +354,14 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       }
     }
 
-    // ✅ si se guardó/creó un presupuesto → marcar estado "P. Enviado"
+    // ✅ si se guardó/creó un presupuesto → marcar estado "P. Enviado" (sin comentario de sistema)
     if (presGuardado) {
       const { error: estadoErr } = await supabase
         .from('tickets_mian')
         .update({ estado: 'P. Enviado' })
         .eq('id', idNum);
       if (estadoErr) return jsonError('No se pudo marcar el estado como P. Enviado: ' + estadoErr.message, 500);
+      // (Se eliminó el comentario "Sistema marcó el estado: P. Enviado (auto por presupuesto)")
     }
 
     // ========== Imágenes ==========
@@ -383,10 +392,25 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     if (imagenExtraArchivo && imagenExtraArchivo.size > 0) await subirImagen(imagenExtraArchivo, nombreArchivoExtra, 'imagen_extra');
     else if (mustDelete(borrarImagenExtra))                 await borrarImagenCampo(nombreArchivoExtra, 'imagen_extra');
 
-    // Guardar los cambios acumulados del ticket (estado/fechas/notas/imagenes/maquina_reparada/tecnico_id/cliente.detalle)
+    // Guardar los cambios acumulados del ticket
     {
       const { error } = await supabase.from('tickets_mian').update(datosTicketsMian).eq('id', idNum);
       if (error) return jsonError('Error al actualizar ticket: ' + error.message, 500);
+    }
+
+    // === Comentario por cambio de estado manual (después de guardar ticket) ===
+    if (hayCambioEstado) {
+      try {
+        const autor = await resolverAutor(locals);
+        if (autor && autor.activo !== false) {
+          const mensaje = `Cambió el estado: ${oldEstado || '—'} → ${newEstado || '—'}`;
+          await supabase.from('ticket_comentarios').insert({
+            ticket_id: idNum,
+            autor_id: autor.id,
+            mensaje,
+          });
+        }
+      } catch { /* no bloquear */ }
     }
 
     return new Response(null, { status: 303, headers: { Location: `/detalle/${idNum}` } });
