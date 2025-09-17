@@ -110,6 +110,24 @@ const { count: comentariosCount } = await supabase
     .thumb:hover { transform: scale(1.04); }
     .thumb:focus-visible { outline: 2px solid #0d6efd; outline-offset: 2px; }
     .thumb.active { border-color: #0d6efd; }
+
+    /* Overlay imagen grande */
+    .zoom-overlay{
+      position:fixed; inset:0; display:none; z-index:2000;
+      background:rgba(0,0,0,.9); align-items:center; justify-content:center;
+      padding:24px;
+    }
+    .zoom-overlay.open{ display:flex; }
+    .zoom-overlay__img{
+      max-width:95vw; max-height:95vh; border-radius:12px;
+      box-shadow:0 10px 30px rgba(0,0,0,.6);
+    }
+    .zoom-overlay__close{
+      position:absolute; top:16px; right:16px; cursor:pointer;
+      background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35);
+      padding:8px 12px; border-radius:8px;
+    }
+    .zoom-overlay__close:hover{ background:rgba(255,255,255,.25); }
   </style>
 
   <div class="container mt-4 position-relative">
@@ -149,12 +167,9 @@ const { count: comentariosCount } = await supabase
             <div class="col"><strong>Ticket:</strong> {equipo?.ticket ?? '—'}</div>
             <div class="col"><strong>Estado:</strong> {equipo?.estado ?? '—'}</div>
 
-            <!-- ¿Cobrado? muestra — cuando es null -->
             <div class="col">
               <strong>¿Cobrado?:</strong> {delivery?.pagado == null ? '—' : booleanATexto(delivery.pagado === 'true')}
             </div>
-
-            <!-- SOLO Medio de entrega -->
             <div class="col">
               <strong>Medio de entrega:</strong> {delivery?.medio_de_entrega ?? '—'}
             </div>
@@ -169,7 +184,6 @@ const { count: comentariosCount } = await supabase
               <div class="col"><strong>Info adicional:</strong> {delivery.informacion_adicional_delivery}</div>
             )}
 
-            <!-- 💰 Costo delivery → formateado ARS -->
             <div class="col">
               <strong>Costo delivery:</strong> {delivery?.cotizar_delivery ? formatARS(delivery.cotizar_delivery) : '—'}
             </div>
@@ -258,7 +272,7 @@ const { count: comentariosCount } = await supabase
       const elements = document.querySelectorAll('button, a.btn');
       elements.forEach((el) => {
         if (el instanceof HTMLButtonElement) {
-          (el as HTMLButtonElement).disabled = true;
+          el.disabled = true;
         } else if (el instanceof HTMLAnchorElement) {
           el.classList.add('disabled'); el.setAttribute('aria-disabled', 'true'); el.style.pointerEvents = 'none';
         }
@@ -276,7 +290,7 @@ const { count: comentariosCount } = await supabase
       } finally {
         elements.forEach((el) => {
           if (el instanceof HTMLButtonElement) {
-            (el as HTMLButtonElement).disabled = false;
+            el.disabled = false;
           } else if (el instanceof HTMLAnchorElement) {
             el.classList.remove('disabled'); el.removeAttribute('aria-disabled'); el.style.pointerEvents = '';
           }
@@ -284,4 +298,122 @@ const { count: comentariosCount } = await supabase
       }
     }
   </script>
+
+  <!-- Miniaturas -> imagen principal (sin errores TS) -->
+  <script>
+    const thumbs = document.querySelectorAll('#thumbs .thumb');
+    const mainImg = document.getElementById('imagen-equipo');
+
+    if (thumbs && mainImg) {
+      thumbs.forEach((t) => {
+        t.addEventListener('click', () => {
+          thumbs.forEach((x) => x.classList.remove('active'));
+          t.classList.add('active');
+          const src = t.getAttribute('data-src') || t.getAttribute('src');
+          if (src && mainImg instanceof HTMLImageElement) {
+            mainImg.src = src + `?t=${Date.now()}`;
+          }
+        });
+        t.addEventListener('keydown', (ev) => {
+          if (ev instanceof KeyboardEvent) {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); if (t instanceof HTMLElement) t.click(); }
+          }
+        });
+      });
+    }
+  </script>
+
+<!-- ===== Overlay de imagen grande con zoom por doble click ===== -->
+<style>
+  .zoom-overlay{
+    position:fixed; inset:0; display:none; z-index:2000;
+    background:rgba(0,0,0,.9); align-items:center; justify-content:center;
+    padding:24px;
+  }
+  .zoom-overlay.open{ display:flex; }
+  .zoom-overlay__img{
+    max-width:95vw; max-height:95vh; border-radius:12px;
+    box-shadow:0 10px 30px rgba(0,0,0,.6);
+    user-select:none;
+    transition:transform .2s ease;
+    transform-origin:center center; /* clave para mantener centro */
+    cursor: zoom-in;
+  }
+  .zoom-overlay__close{
+    position:absolute; top:16px; right:16px; cursor:pointer;
+    background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35);
+    padding:8px 12px; border-radius:8px;
+  }
+  .zoom-overlay__close:hover{ background:rgba(255,255,255,.25); }
+</style>
+
+<div id="zoomOverlay" class="zoom-overlay" role="dialog" aria-modal="true" aria-label="Imagen ampliada">
+  <img id="zoomImg" class="zoom-overlay__img" alt="Vista ampliada" />
+  <button id="zoomClose" class="zoom-overlay__close" type="button">✕ Cerrar</button>
+</div>
+
+<script>
+  const mainImgZoom  = document.getElementById('imagen-equipo');
+  const overlayZoom  = document.getElementById('zoomOverlay');
+  const overlayImg   = document.getElementById('zoomImg');
+  const btnCloseZoom = document.getElementById('zoomClose');
+
+  if (
+    mainImgZoom  instanceof HTMLImageElement &&
+    overlayZoom  instanceof HTMLElement &&
+    overlayImg   instanceof HTMLImageElement &&
+    btnCloseZoom instanceof HTMLElement
+  ) {
+    let escala = 1;
+
+    function aplicar() {
+      overlayImg.style.transform = `scale(${escala})`;
+      overlayImg.style.cursor = escala > 1 ? 'zoom-out' : 'zoom-in';
+    }
+
+    // Abrir overlay al click en la imagen principal
+    mainImgZoom.addEventListener('click', () => {
+      overlayImg.src = mainImgZoom.currentSrc || mainImgZoom.src;
+      overlayZoom.classList.add('open');
+      document.body.style.overflow = 'hidden';
+      escala = 1; aplicar(); // arranca centrada sin zoom
+    });
+
+    function cerrarOverlay(){
+      overlayZoom.classList.remove('open');
+      document.body.style.overflow = '';
+      escala = 1; aplicar(); // reset al cerrar
+    }
+
+    btnCloseZoom.addEventListener('click', cerrarOverlay);
+    overlayZoom.addEventListener('click', (e) => {
+      if (e.target === overlayZoom) cerrarOverlay(); // clic en fondo
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && overlayZoom.classList.contains('open')) cerrarOverlay();
+    });
+
+    // ===== Zoom por doble click (desktop) / doble toque (mobile) =====
+    function toggleZoom() {
+      escala = (escala === 1) ? 2 : 1; // 1x <-> 2x
+      aplicar(); // queda centrada por flex + transform-origin:center
+    }
+
+    overlayImg.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      toggleZoom();
+    });
+
+    let lastTap = 0;
+    overlayImg.addEventListener('click', () => {
+      const now = Date.now();
+      if (now - lastTap < 300) { // doble toque
+        toggleZoom();
+      }
+      lastTap = now;
+    });
+  }
+</script>
+<!-- ===== fin overlay ===== -->
+
 </BasePrivateLayout>
