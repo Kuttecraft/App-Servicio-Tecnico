@@ -79,6 +79,19 @@ function formatARS(v?: string | number | null): string {
   return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
+/** ========= Normalizador de DNI/CUIT para mostrar ========= */
+function prettifyDniCuit(s?: string | null): string {
+  if (!s) return '';
+  const digits = String(s).replace(/\D+/g, '');
+  if (digits.length === 8) {
+    return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5,8)}`; // DNI
+  }
+  if (digits.length === 11) {
+    return `${digits.slice(0,2)}-${digits.slice(2,10)}-${digits.slice(10,11)}`; // CUIT
+  }
+  return String(s);
+}
+
 const { id } = Astro.params as { id: string };
 
 // Perfil (para campos admin)
@@ -222,7 +235,18 @@ const estadoActual = (equipo?.estado || '').trim();
           <div class="grid-2">
             <div>
               <label class="form-label">DNI/CUIT</label>
-              <input name="dniCuit" type="text" class="form-control" value={equipo.cliente?.dni_cuit || ''} />
+              <!-- Máximo recomendado: 14 (11 dígitos + 2 guiones = 13; con puntos puede ser 14) -->
+              <input
+                name="dniCuit"
+                id="input-dni-cuit"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                class="form-control"
+                value={prettifyDniCuit(equipo.cliente?.dni_cuit || '')}
+                maxlength="14"
+                placeholder="Ej: 12.345.678 o 20-12345678-3"
+              />
             </div>
             <div>
               <label class="form-label">WhatsApp</label>
@@ -411,7 +435,7 @@ const estadoActual = (equipo?.estado || '').trim();
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
   <script src="/scripts/form-mas-imagenes.js?v=1" defer></script>
 
-  <!-- Cargar técnicos dinámicamente desde usuarios_perfil (email sin @) -->
+  <!-- Cargar técnicos dinámicamente desde /api/listarTecnicos -->
   <script>
     (async function(){
       const sel  = document.getElementById('select-tecnico');
@@ -427,7 +451,7 @@ const estadoActual = (equipo?.estado || '').trim();
         (data.items || []).forEach((it) => {
           const opt = document.createElement('option');
           opt.value = String(it.id);
-          opt.textContent = it.label; // email antes del @ desde usuarios_perfil
+          opt.textContent = it.label;
           if (current && Number(it.id) === current) opt.selected = true;
           sel.appendChild(opt);
         });
@@ -450,9 +474,44 @@ const estadoActual = (equipo?.estado || '').trim();
       function formatARSFromStr(s){ const n=Number(parseToNumberLike(s)); if(!isFinite(n)) return s||'';
         const dec=(String(s).split('.')[1]||'').length; const d=dec?Math.min(2,dec):0;
         return '$'+n.toLocaleString('es-AR',{minimumFractionDigits:d, maximumFractionDigits:d}); }
-      function onBlurFormat(e){ e.target.value = formatARSFromStr(e.target.value); }
-      function onInputClean(e){ const val=e.target.value; e.target.value = val.replace(/[^\d.,$-]/g,''); }
-      document.querySelectorAll('.currency-ars').forEach((el)=>{ el.addEventListener('blur', onBlurFormat); el.addEventListener('input', onInputClean); });
+      function onBlurFormat(e){ const el = e.target as HTMLInputElement; el.value = formatARSFromStr(el.value); }
+      function onInputClean(e){ const el = e.target as HTMLInputElement; el.value = el.value.replace(/[^\d.,$-]/g,''); }
+      document.querySelectorAll('.currency-ars').forEach((el)=>{ el.addEventListener('blur', onBlurFormat as any); el.addEventListener('input', onInputClean as any); });
+    })();
+  </script>
+
+  <!-- Formateo DNI/CUIT en vivo: 8 dígitos -> XX.XXX.XXX | 11 dígitos -> XX-XXXXXXXX-X -->
+  <script>
+    (function(){
+      function formatDniCuit(raw){
+        const digits = String(raw||'').replace(/\D+/g, '');
+        if (digits.length === 8) {
+          return digits.slice(0,2)+'.'+digits.slice(2,5)+'.'+digits.slice(5,8);
+        }
+        if (digits.length === 11) {
+          return digits.slice(0,2)+'-'+digits.slice(2,10)+'-'+digits.slice(10);
+        }
+        // si no matchea largo, permitimos puntos/guiones existentes y quitamos lo demás
+        return String(raw||'').replace(/[^\d\.\-]/g,'');
+      }
+      const input = document.getElementById('input-dni-cuit');
+      if (input) {
+        input.addEventListener('input', (e) => {
+          const el = e.target as HTMLInputElement;
+          const before = el.value;
+          const after = formatDniCuit(before);
+          if (before !== after) {
+            // intentamos preservar caret al final
+            const atEnd = el.selectionStart === before.length;
+            el.value = after;
+            try { if (atEnd) el.setSelectionRange(after.length, after.length); } catch {}
+          }
+        });
+        input.addEventListener('blur', (e) => {
+          const el = e.target as HTMLInputElement;
+          el.value = formatDniCuit(el.value);
+        });
+      }
     })();
   </script>
 </BasePrivateLayout>

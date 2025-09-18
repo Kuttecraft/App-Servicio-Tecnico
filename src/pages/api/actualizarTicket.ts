@@ -95,6 +95,24 @@ function normalizarMontoTexto(input?: string | null): string | null {
   return s;
 }
 
+/** Normaliza DNI/CUIT (servidor, fuente de verdad). */
+function normalizarDniCuit(input?: string | null): string | null {
+  if (input == null) return null;
+  const raw = String(input).trim();
+  if (!raw) return null;
+  const digits = raw.replace(/\D+/g, '');
+  if (digits.length === 7) {
+    return `${digits[0]}.${digits.slice(1,4)}.${digits.slice(4)}`;
+  }
+  if (digits.length === 8) {
+    return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5)}`;
+  }
+  if (digits.length === 11) {
+    return `${digits.slice(0,2)}-${digits.slice(2,10)}-${digits.slice(10)}`;
+  }
+  return raw;
+}
+
 function jsonError(message: string, status = 500) {
   return new Response(JSON.stringify({ error: message }), {
     status,
@@ -222,7 +240,9 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     // ========== Cliente (merge: solo lo que venga no vacío) ==========
     if (tRow.cliente_id) {
       const updateCliente: Record<string, any> = {};
-      if (typeof fields.dniCuit === 'string' && fields.dniCuit !== '') updateCliente.dni_cuit = fields.dniCuit;
+      if (typeof fields.dniCuit === 'string' && fields.dniCuit !== '') {
+        updateCliente.dni_cuit = normalizarDniCuit(fields.dniCuit);
+      }
       if (typeof fields.whatsapp === 'string' && fields.whatsapp !== '') updateCliente.whatsapp = fields.whatsapp;
       if (typeof fields.correo === 'string' && fields.correo !== '') updateCliente.correo_electronico = fields.correo;
 

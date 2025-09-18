@@ -16,6 +16,33 @@ function partirNombreApellido(completo: string): { nombre: string; apellido: str
 
 function normalizarMime(file: File | null): string | null { return file ? 'image/webp' : null; }
 
+/** Normaliza DNI/CUIT:
+ * - 7 dígitos → X.XXX.XXX
+ * - 8 dígitos → XX.XXX.XXX
+ * - 11 dígitos → XX-XXXXXXXX-X (CUIT)
+ * - Otros → devuelve trimmed sin tocar
+ */
+function normalizarDniCuit(input?: string | null): string | null {
+  if (input == null) return null;
+  const raw = String(input).trim();
+  if (!raw) return null;
+  const digits = raw.replace(/\D+/g, '');
+  if (digits.length === 7) {
+    // X.XXX.XXX
+    return `${digits[0]}.${digits.slice(1,4)}.${digits.slice(4)}`;
+  }
+  if (digits.length === 8) {
+    // XX.XXX.XXX
+    return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5)}`;
+  }
+  if (digits.length === 11) {
+    // CUIT XX-XXXXXXXX-X
+    return `${digits.slice(0,2)}-${digits.slice(2,10)}-${digits.slice(10)}`;
+  }
+  // si no calza, devolvemos lo que vino, pero trimmed
+  return raw;
+}
+
 const TZ_BA = 'America/Argentina/Buenos_Aires';
 function hoyBA_MMDDYYYY(): string {
   return new Intl.DateTimeFormat('en-US', {
@@ -31,7 +58,8 @@ export async function POST({ request }: { request: Request }) {
     const form = await request.formData();
 
     const clienteNombreCompleto = String(form.get('cliente') ?? '').trim();
-    const dniCuit     = String(form.get('dniCuit') ?? '').trim();
+    const dniCuitRaw  = String(form.get('dniCuit') ?? '').trim();
+    const dniCuit     = normalizarDniCuit(dniCuitRaw) || '';
     const correo      = String(form.get('correo') ?? '').trim();
     const whatsapp    = String(form.get('whatsapp') ?? '').trim();
 
@@ -61,7 +89,7 @@ export async function POST({ request }: { request: Request }) {
       let found: { id: number } | null = null;
       let foundRow: any = null;
 
-      // 1) Buscar por DNI/CUIT primero
+      // 1) Buscar por DNI/CUIT primero (usando el valor normalizado)
       if (dniCuit) {
         const { data } = await supabase
           .from('cliente')
@@ -72,7 +100,7 @@ export async function POST({ request }: { request: Request }) {
         if (data) { found = { id: data.id }; foundRow = data; }
       }
 
-      // 2) Si no encontró, buscar por nombre del cliente
+      // 2) Si no encontró, buscar por nombre del cliente (case-insensitive exact)
       if (!found) {
         const { data } = await supabase
           .from('cliente')
@@ -98,7 +126,7 @@ export async function POST({ request }: { request: Request }) {
           updatePayload.dni_cuit = dniCuit;
         }
         if (whatsapp && whatsapp !== (foundRow.whatsapp || '')) {
-          updatePayload.whatsapp = whatsapp;       // 👈 ahora se actualiza siempre
+          updatePayload.whatsapp = whatsapp;
         }
         if (correo && correo !== (foundRow.correo_electronico || '')) {
           updatePayload.correo_electronico = correo;
@@ -119,8 +147,8 @@ export async function POST({ request }: { request: Request }) {
             nombre,
             apellido,
             dni_cuit: dniCuit || null,
-            whatsapp: whatsapp || null,            // 👈 guardado en alta
-            correo_electronico: correo || null,   // 👈 guardado en alta
+            whatsapp: whatsapp || null,
+            correo_electronico: correo || null,
           })
           .select('id')
           .single();
@@ -284,6 +312,11 @@ export async function POST({ request }: { request: Request }) {
       if (imagenTicketUrl) updateImages.imagen_ticket = imagenTicketUrl;
       if (imagenExtraUrl) updateImages.imagen_extra = imagenExtraUrl;
       await supabase.from('tickets_mian').update(updateImages).eq('id', nuevoId);
+    }
+
+    // ⚠️ importante: si actualizamos/creamos el cliente y normalizamos DNI/CUIT, aseguremos persistirlo
+    if (dniCuit) {
+      await supabase.from('cliente').update({ dni_cuit: dniCuit }).eq('id', clienteId);
     }
 
     return redirect303(`/addTicket?ok=1`);

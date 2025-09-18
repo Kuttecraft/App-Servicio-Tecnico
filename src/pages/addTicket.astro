@@ -78,7 +78,7 @@ const cobrado = "No";
       </div>
       <div class="col-md-6">
         <label class="form-label">DNI/CUIT</label>
-        <input type="text" class="form-control" name="dniCuit" value={dniCuit} />
+        <input type="text" class="form-control" name="dniCuit" id="dniCuit" value={dniCuit} />
       </div>
 
       <div class="col-md-6">
@@ -186,6 +186,27 @@ const cobrado = "No";
         const first = document.querySelector('input[name="cliente"]');
         if (first) first.focus();
       }
+    })();
+  </script>
+
+  <!-- Autoformato DNI/CUIT en el cliente (solo visual; el servidor normaliza de todos modos) -->
+  <script is:inline>
+    (function(){
+      const el = document.getElementById('dniCuit');
+      if (!(el instanceof HTMLInputElement)) return;
+
+      function formatDniCuit(value){
+        const digits = String(value||'').replace(/\D+/g,'');
+        if (digits.length === 7) return `${digits[0]}.${digits.slice(1,4)}.${digits.slice(4)}`;
+        if (digits.length === 8) return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5)}`;
+        if (digits.length === 11) return `${digits.slice(0,2)}-${digits.slice(2,10)}-${digits.slice(10)}`;
+        return value;
+      }
+      el.addEventListener('blur', () => { el.value = formatDniCuit(el.value); });
+      // opcional: permitir solo dígitos, puntos y guiones al escribir
+      el.addEventListener('input', () => {
+        el.value = el.value.replace(/[^\d.\-]/g,'').replace(/\.{2,}/g,'.').replace(/\-{2,}/g,'-');
+      });
     })();
   </script>
 
