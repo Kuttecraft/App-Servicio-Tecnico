@@ -27,19 +27,9 @@ function normalizarDniCuit(input?: string | null): string | null {
   const raw = String(input).trim();
   if (!raw) return null;
   const digits = raw.replace(/\D+/g, '');
-  if (digits.length === 7) {
-    // X.XXX.XXX
-    return `${digits[0]}.${digits.slice(1,4)}.${digits.slice(4)}`;
-  }
-  if (digits.length === 8) {
-    // XX.XXX.XXX
-    return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5)}`;
-  }
-  if (digits.length === 11) {
-    // CUIT XX-XXXXXXXX-X
-    return `${digits.slice(0,2)}-${digits.slice(2,10)}-${digits.slice(10)}`;
-  }
-  // si no calza, devolvemos lo que vino, pero trimmed
+  if (digits.length === 7) return `${digits[0]}.${digits.slice(1,4)}.${digits.slice(4)}`;
+  if (digits.length === 8) return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5)}`;
+  if (digits.length === 11) return `${digits.slice(0,2)}-${digits.slice(2,10)}-${digits.slice(10)}`;
   return raw;
 }
 
@@ -66,7 +56,11 @@ export async function POST({ request }: { request: Request }) {
     // Campo visual “Maquina” → name="modelo"
     const modeloForm  = String(form.get('modelo') ?? '').trim();
     const numeroSerie = String(form.get('numeroSerie') ?? '').trim();
-    const boquilla    = String(form.get('boquilla') ?? '').trim();
+
+    // Validación suave de boquilla: solo opciones conocidas (o vacío)
+    const opcionesBoquilla = new Set(["0.2mm","0.3mm","0.4mm","0.5mm","0.6mm","0.8mm","1mm"]);
+    const boquillaRaw = String(form.get('boquilla') ?? '').trim();
+    const boquilla    = opcionesBoquilla.has(boquillaRaw) ? boquillaRaw : '';
 
     const tecnicoNombre = String(form.get('tecnico') ?? '').trim();
     const estado        = String(form.get('estado') ?? '').trim();
@@ -216,21 +210,36 @@ export async function POST({ request }: { request: Request }) {
     if (hasSerie) {
       const { data: impFound } = await supabase
         .from('impresoras')
-        .select('id')
+        .select('id, tamano_de_boquilla')
         .eq('numero_de_serie', numeroSerie)
         .maybeSingle();
-      if (impFound?.id) impresoraId = impFound.id;
+      if (impFound?.id) {
+        impresoraId = impFound.id;
+        // si vino boquilla y cambió, actualizar
+        if (boquilla && boquilla !== (impFound.tamano_de_boquilla || null)) {
+          await supabase.from('impresoras')
+            .update({ tamano_de_boquilla: boquilla })
+            .eq('id', impresoraId);
+        }
+      }
     }
 
     // 2) Por combinación modelo+maquina
     if (!impresoraId && hasModelo) {
       const { data: byCombo } = await supabase
         .from('impresoras')
-        .select('id')
+        .select('id, tamano_de_boquilla')
         .match({ modelo: MODELO, maquina: MAQUINA })
         .limit(1)
         .maybeSingle();
-      if (byCombo?.id) impresoraId = byCombo.id;
+      if (byCombo?.id) {
+        impresoraId = byCombo.id;
+        if (boquilla && boquilla !== (byCombo.tamano_de_boquilla || null)) {
+          await supabase.from('impresoras')
+            .update({ tamano_de_boquilla: boquilla })
+            .eq('id', impresoraId);
+        }
+      }
     }
 
     // 3) Crear impresora si no existe

@@ -22,6 +22,9 @@ const estados = [
 ];
 const estado = ok ? estados[0] : (url.searchParams.get('estado') || estados[0]);
 
+// Lista de boquillas (según la imagen)
+const boquillas = ["0.2mm","0.3mm","0.4mm","0.5mm","0.6mm","0.8mm","1mm"];
+
 let ticketSugerido = 1;
 try {
   let base = Astro.site?.toString() || 'http://localhost:4321';
@@ -106,9 +109,16 @@ const cobrado = "No";
         <label class="form-label">N° de Serie</label>
         <input type="text" class="form-control" name="numeroSerie" value={numeroSerie} />
       </div>
+
+      <!-- Campo boquilla: lista -->
       <div class="col-md-6">
         <label class="form-label">Tamaño de boquilla</label>
-        <input type="text" class="form-control" name="boquilla" value={boquilla} />
+        <select class="form-select" name="boquilla">
+          <option value="" selected={!boquilla}>Seleccionar…</option>
+          {boquillas.map((b) => (
+            <option value={b} selected={b === boquilla}>{b}</option>
+          ))}
+        </select>
       </div>
 
       <div class="col-md-6">
