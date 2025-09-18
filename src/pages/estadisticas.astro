@@ -77,7 +77,7 @@ const defaultMonth = `${yyyy}-${mm}`;
           <div id="ids-modelo-list" class="small"></div>
         </div>
 
-        <!-- 👉 NUEVO: IDs por técnico (visible solo cuando group === 'tecnico') -->
+        <!-- IDs por técnico (visible solo cuando group === 'tecnico') -->
         <div id="ids-tecnico-wrap" class="mt-4 d-none">
           <h3 class="h6 mb-2">ID de las máquinas según técnico</h3>
           <div id="ids-tecnico-list" class="small"></div>
@@ -86,8 +86,9 @@ const defaultMonth = `${yyyy}-${mm}`;
     </div>
   </div>
 
-  <!-- Estilos para los links de IDs -->
+  <!-- Estilos -->
   <style is:inline>
+    /* links de IDs */
     #ids-estado-list .id-link,
     #ids-modelo-list .id-link,
     #ids-tecnico-list .id-link {
@@ -103,6 +104,17 @@ const defaultMonth = `${yyyy}-${mm}`;
     #ids-tecnico-list .id-link:hover {
       background: rgba(13,110,253,.08);
     }
+
+    /* puntito de color al lado del estado/modelo/tec */
+    .dot {
+      display: inline-block;
+      width: .75rem;
+      height: .75rem;
+      border-radius: 50%;
+      margin-right: .35rem;
+      vertical-align: middle;
+      border: 1px solid rgba(0,0,0,.08);
+    }
   </style>
 
   <!-- Chart.js -->
@@ -110,6 +122,33 @@ const defaultMonth = `${yyyy}-${mm}`;
 
   <script is:inline>
     (function () {
+      // 🎨 Colores oficiales por estado (iguales al inicio)
+      var ESTADO_COLORS = {
+        "Nuevo": "#E2FFF6",
+        "Retirar": "#FFE9CC",
+        "Presupuestar": "#FFD9D9",
+        "Enviar presupuesto": "#E9FCEC",
+        "P. Enviado": "#D9EBFF",
+        "Reparación": "#FFFDE1",
+        "Prueba": "#E3DBFF",
+        "Lista": "#FFE3DC",
+        "Entregada": "#E6F6FF",
+        "Feedback Enviado": "#FAE4F6",
+        "Archivada": "#EDEDED",
+        "No realizada": "#FFF1D9"
+      };
+
+      // paleta fallback para modelo/técnico
+      var FALLBACK = ["#cfe8ff","#ffe0cc","#e4ffd6","#f8d5ff","#ffefbf","#d7f3ff","#ffd7e0","#e0f7f1","#e6e6e6","#dcd0ff","#ffdcdc","#d0ffd0"];
+
+      function colorsFor(labels, group) {
+        if (group === 'estado') {
+          return labels.map(function (l) { return ESTADO_COLORS[l] || '#e9ecef'; });
+        }
+        // para modelo/tecnico: asignar colores de la paleta, en ciclo
+        return labels.map(function (_, i) { return FALLBACK[i % FALLBACK.length]; });
+      }
+
       var chart;
       var $mes = document.getElementById('mes');
       var $group = document.getElementById('group');
@@ -121,7 +160,6 @@ const defaultMonth = `${yyyy}-${mm}`;
       var $chartTitle = document.getElementById('chartTitle');
       var $thLabel = document.getElementById('thLabel');
 
-      // Contenedores de IDs por estado, modelo y técnico
       var $idsEstadoWrap = document.getElementById('ids-estado-wrap');
       var $idsEstadoList = document.getElementById('ids-estado-list');
       var $idsModeloWrap = document.getElementById('ids-modelo-wrap');
@@ -137,15 +175,26 @@ const defaultMonth = `${yyyy}-${mm}`;
         });
       }
 
-      function renderTabla(items, total, campoLabel) {
+      function renderTabla(items, total, campoLabel, group) {
         $tbody.innerHTML = '';
         $thLabel.textContent = campoLabel;
 
-        items.forEach(function (row) {
+        // colores para los puntitos de la primera columna
+        var labels = items.map(function(i){ return i.label; });
+        var bg = colorsFor(labels, group);
+
+        items.forEach(function (row, idx) {
           var tr = document.createElement('tr');
 
           var tdLabel = document.createElement('td');
-          tdLabel.textContent = row.label;
+          // dot de color solo si es estado
+          if (group === 'estado') {
+            var dot = document.createElement('span');
+            dot.className = 'dot';
+            dot.style.background = bg[idx];
+            tdLabel.appendChild(dot);
+          }
+          tdLabel.appendChild(document.createTextNode(row.label));
 
           var tdCount = document.createElement('td');
           tdCount.className = 'text-end';
@@ -166,14 +215,21 @@ const defaultMonth = `${yyyy}-${mm}`;
         $tabla.style.display = items.length ? '' : 'none';
       }
 
-      function renderChart(labels, data) {
+      function renderChart(labels, data, group) {
         var ctx = document.getElementById('chartModelos');
         if (chart) chart.destroy();
+        var bg = colorsFor(labels, group);
+
         chart = new window.Chart(ctx, {
           type: 'pie',
           data: {
             labels: labels,
-            datasets: [{ data: data, borderWidth: 1 }]
+            datasets: [{
+              data: data,
+              backgroundColor: bg,
+              borderColor: '#ffffff',
+              borderWidth: 1
+            }]
           },
           options: {
             responsive: true,
@@ -209,9 +265,17 @@ const defaultMonth = `${yyyy}-${mm}`;
           var ids = idsByEstado[est] || [];
           var line = document.createElement('div');
           line.className = 'mb-1';
+
+          // dot de color para el título del estado
+          var dot = document.createElement('span');
+          dot.className = 'dot';
+          dot.style.background = (ESTADO_COLORS[est] || '#e9ecef');
+          line.appendChild(dot);
+
           var strong = document.createElement('strong');
           strong.textContent = est + ': ';
           line.appendChild(strong);
+
           if (ids.length === 0) {
             line.appendChild(document.createTextNode('—'));
           } else {
@@ -265,7 +329,6 @@ const defaultMonth = `${yyyy}-${mm}`;
         $idsModeloWrap.classList.remove('d-none');
       }
 
-      // 👉 NUEVO: render IDs agrupados por técnico
       function renderIdsByTecnico(idsByTecnico) {
         if (!idsByTecnico || Object.keys(idsByTecnico).length === 0) {
           $idsTecnicoWrap.classList.add('d-none');
@@ -319,11 +382,11 @@ const defaultMonth = `${yyyy}-${mm}`;
 
           var idsByEstado = resp.idsByEstado || null;
           var idsByModelo = resp.idsByModelo || null;
-          var idsByTecnico = resp.idsByTecnico || null; // 👈 NUEVO
+          var idsByTecnico = resp.idsByTecnico || null;
 
           if (!total) {
             $sinDatos.classList.remove('d-none');
-            renderTabla([], 0, campoLabel);
+            renderTabla([], 0, campoLabel, group);
             if (chart) chart.destroy();
             renderIdsByEstado(null);
             renderIdsByModelo(null);
@@ -337,8 +400,8 @@ const defaultMonth = `${yyyy}-${mm}`;
           var labels = items.map(function (i) { return i.label; });
           var data = items.map(function (i) { return i.count; });
 
-          renderTabla(items, total, campoLabel);
-          renderChart(labels, data);
+          renderTabla(items, total, campoLabel, group);
+          renderChart(labels, data, group);
 
           if (group === 'estado') {
             renderIdsByEstado(idsByEstado);
@@ -348,7 +411,7 @@ const defaultMonth = `${yyyy}-${mm}`;
             renderIdsByModelo(idsByModelo);
             renderIdsByEstado(null);
             renderIdsByTecnico(null);
-          } else { // técnico
+          } else {
             renderIdsByTecnico(idsByTecnico);
             renderIdsByEstado(null);
             renderIdsByModelo(null);
@@ -362,9 +425,9 @@ const defaultMonth = `${yyyy}-${mm}`;
         }
       }
 
-      $btn.addEventListener('click', cargar);
-      $mes.addEventListener('change', cargar);
-      $group.addEventListener('change', cargar);
+      document.getElementById('btn-actualizar').addEventListener('click', cargar);
+      document.getElementById('mes').addEventListener('change', cargar);
+      document.getElementById('group').addEventListener('change', cargar);
       window.addEventListener('DOMContentLoaded', cargar);
     })();
   </script>
