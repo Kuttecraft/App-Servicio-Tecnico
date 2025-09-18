@@ -79,7 +79,7 @@ function formatARS(v?: string | number | null): string {
   return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-/** ========= Normalizador de DNI/CUIT para mostrar ========= */
+/** ========= Normalizador de DNI/CUIT para *mostrar* ========= */
 function prettifyDniCuit(s?: string | null): string {
   if (!s) return '';
   const digits = String(s).replace(/\D+/g, '');
@@ -105,7 +105,7 @@ const { data, error } = await supabase
     id, ticket, estado, marca_temporal, fecha_de_reparacion, tecnico_id, cliente_id, impresora_id,
     imagen, imagen_ticket, imagen_extra, notas_del_tecnico, notas_del_cliente,
     cliente:cliente_id ( id, dni_cuit, correo_electronico, whatsapp, comentarios ),
-    tecnicos:tecnico_id ( nombre, apellido ),
+    tecnicos:tecnico_id ( id, nombre, apellido, email ),
     impresoras:impresora_id ( modelo, maquina, numero_de_serie, tamano_de_boquilla ),
     delivery ( pagado, cotizar_delivery, informacion_adicional_delivery, fecha_de_entrega, medio_de_entrega ),
     presupuestos ( id, monto, link_presupuesto, cubre_garantia, fecha_presupuesto )
@@ -160,6 +160,19 @@ const urlExtra  = equipo?.imagen_extra  || supabase.storage.from('imagenes').get
 const valorCubreGarantia = (equipo?.presupuestos?.cubre_garantia === 'true') ? 'true' : 'false';
 const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
 const estadoActual = (equipo?.estado || '').trim();
+
+// Técnico actual -> label = parte antes de @
+const currentTecId: number | null =
+  equipo?.tecnico_id != null ? Number(equipo.tecnico_id) : null;
+
+const currentTecLabel: string = (() => {
+  const t = equipo?.tecnicos || null;
+  if (!t) return '';
+  const mail = String(t.email || '').trim();
+  if (mail.includes('@')) return mail.split('@')[0];
+  const nombre = String(t.nombre || '').trim();
+  return nombre || '';
+})();
 ---
 
 <BasePrivateLayout>
@@ -209,11 +222,19 @@ const estadoActual = (equipo?.estado || '').trim();
               </select>
             </div>
 
-            <!-- Técnico dinámico desde /api/listarTecnicos (muestra email sin @) -->
+            <!-- Técnico dinámico: label = email antes del @ -->
             <div>
               <label class="form-label">Técnico</label>
-              <select id="select-tecnico" name="tecnico_id" class="form-select" data-current-tecnicoid={String(equipo?.tecnico_id ?? '')}>
+              <select
+                id="select-tecnico"
+                name="tecnico_id"
+                class="form-select"
+                data-current-tecnicoid={String(equipo?.tecnico_id ?? '')}
+              >
                 <option value="">— Sin asignar —</option>
+                {currentTecId && currentTecLabel && (
+                  <option value={String(currentTecId)} selected>{currentTecLabel}</option>
+                )}
               </select>
               <small id="tecHelp" class="form-text text-muted"></small>
             </div>
@@ -235,7 +256,7 @@ const estadoActual = (equipo?.estado || '').trim();
           <div class="grid-2">
             <div>
               <label class="form-label">DNI/CUIT</label>
-              <!-- Máximo recomendado: 14 (11 dígitos + 2 guiones = 13; con puntos puede ser 14) -->
+              <!-- Máximo recomendado: 14 (11 dígitos + guiones) -->
               <input
                 name="dniCuit"
                 id="input-dni-cuit"
@@ -435,7 +456,7 @@ const estadoActual = (equipo?.estado || '').trim();
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
   <script src="/scripts/form-mas-imagenes.js?v=1" defer></script>
 
-  <!-- Cargar técnicos dinámicamente desde /api/listarTecnicos -->
+  <!-- Cargar técnicos dinámicamente desde /api/listarTecnicos (evita duplicados) -->
   <script>
     (async function(){
       const sel  = document.getElementById('select-tecnico');
@@ -448,11 +469,16 @@ const estadoActual = (equipo?.estado || '').trim();
         const data = await res.json();
         if (!res.ok || !data?.items) throw new Error(data?.error || 'No se pudo cargar técnicos');
 
+        // Evitar duplicar el option semilla (el actual)
+        const ya = new Set(Array.from(sel.options).map(o => Number(o.value) || 0));
+
         (data.items || []).forEach((it) => {
+          const idNum = Number(it.id);
+          if (ya.has(idNum)) return; // ya existe (semilla o previo)
           const opt = document.createElement('option');
           opt.value = String(it.id);
-          opt.textContent = it.label;
-          if (current && Number(it.id) === current) opt.selected = true;
+          opt.textContent = it.label; // local-part del email
+          if (current && idNum === current) opt.selected = true;
           sel.appendChild(opt);
         });
 
@@ -468,9 +494,9 @@ const estadoActual = (equipo?.estado || '').trim();
   <script>
     (function(){
       function parseToNumberLike(s){ if(!s) return ''; let t=String(s).trim(); t=t.replace(/[^\d.,-]/g,'');
-        const lastDot=t.lastIndexOf('.'), lastCom=t.lastIndexOf(','); if(lastDot!==-1&&lastCom!==-1){
-          const dec=lastDot>lastCom?'.':','; const mil=dec==='.'?',':'.'; t=t.split(mil).join(''); if(dec===',') t=t.replace(',', '.');
-        } else if(lastCom!==-1&&lastDot===-1){ t=t.replace(',', '.'); } return t; }
+        const lastDot=t.lastIndexOf('.'), lastCom=t.lastIndexOf(',');
+        if(lastDot!==-1&&lastCom!==-1){ const dec=lastDot>lastCom?'.':','; const mil=dec==='.'?',':'.'; t=t.split(mil).join(''); if(dec===',') t=t.replace(',', '.'); }
+        else if(lastCom!==-1&&lastDot===-1){ t=t.replace(',', '.'); } return t; }
       function formatARSFromStr(s){ const n=Number(parseToNumberLike(s)); if(!isFinite(n)) return s||'';
         const dec=(String(s).split('.')[1]||'').length; const d=dec?Math.min(2,dec):0;
         return '$'+n.toLocaleString('es-AR',{minimumFractionDigits:d, maximumFractionDigits:d}); }
@@ -495,13 +521,12 @@ const estadoActual = (equipo?.estado || '').trim();
         return String(raw||'').replace(/[^\d\.\-]/g,'');
       }
       const input = document.getElementById('input-dni-cuit');
-      if (input) {
+      if (input instanceof HTMLInputElement) {
         input.addEventListener('input', (e) => {
           const el = e.target as HTMLInputElement;
           const before = el.value;
           const after = formatDniCuit(before);
           if (before !== after) {
-            // intentamos preservar caret al final
             const atEnd = el.selectionStart === before.length;
             el.value = after;
             try { if (atEnd) el.setSelectionRange(after.length, after.length); } catch {}
@@ -518,16 +543,14 @@ const estadoActual = (equipo?.estado || '').trim();
   <!-- Normalizador de “Tamaño de boquilla” a `X mm` (solo en editar) -->
   <script>
     (function () {
-      // Devuelve solo el número con punto y hasta 2 decimales, o '' si no hay número
       function parseNozzle(raw) {
         if (raw == null) return '';
         let s = String(raw).toLowerCase().trim();
         s = s.replace(',', '.');
-        // primer número válido (.5 | 0.5 | 1. | 1.0 | 1)
         const m = s.match(/(\d+\.?\d*|\.\d+)/);
         if (!m) return '';
         let num = m[0];
-        if (num.startsWith('.')) num = '0' + num;   // .4 -> 0.4
+        if (num.startsWith('.')) num = '0' + num;     // .4 -> 0.4
         if (num.endsWith('.'))  num = num.slice(0,-1); // 1. -> 1
         const n = Number(num);
         if (!isFinite(n)) return '';
@@ -535,13 +558,11 @@ const estadoActual = (equipo?.estado || '').trim();
         out = out.replace(/\.?0+$/, ''); // quita ceros/punto sobrantes
         return out;
       }
-
       function normalizeToMm(raw) {
         const num = parseNozzle(raw);
         return num ? (num + ' mm') : '';
       }
 
-      // 👇 Tipado explícito para evitar "Property 'value' does not exist on type 'Element'"
       const input = document.querySelector<HTMLInputElement>('input[name="boquilla"]');
       if (!input) return;
 

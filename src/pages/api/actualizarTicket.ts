@@ -192,8 +192,20 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       datosTicketsMian.notas_del_cliente = fields.detalleCliente;
     }
 
-    // ========== Técnico (resolver por texto “Nombre Apellido”) ==========
-    if (typeof fields.tecnico === 'string') {
+    // ========== Técnico ==========
+    // 1) Prioridad al select <select name="tecnico_id"> desde editar.astro
+    if ('tecnico_id' in fields) {
+      const raw = fields.tecnico_id;
+      if (raw === '') {
+        datosTicketsMian.tecnico_id = null; // “— Sin asignar —”
+      } else {
+        const tid = Number(raw);
+        if (Number.isFinite(tid) && tid > 0) {
+          datosTicketsMian.tecnico_id = tid;
+        }
+      }
+    } else if (typeof fields.tecnico === 'string') {
+      // 2) Fallback legacy: texto “Nombre Apellido”
       const tecnicoFull = fields.tecnico.trim();
       if (tecnicoFull === '') {
         datosTicketsMian.tecnico_id = null; // vaciar si lo dejan vacío
