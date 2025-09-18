@@ -514,4 +514,56 @@ const estadoActual = (equipo?.estado || '').trim();
       }
     })();
   </script>
+
+  <!-- Normalizador de “Tamaño de boquilla” a `X mm` (solo en editar) -->
+  <script>
+    (function () {
+      // Devuelve solo el número con punto y hasta 2 decimales, o '' si no hay número
+      function parseNozzle(raw) {
+        if (raw == null) return '';
+        let s = String(raw).toLowerCase().trim();
+        s = s.replace(',', '.');
+        // primer número válido (.5 | 0.5 | 1. | 1.0 | 1)
+        const m = s.match(/(\d+\.?\d*|\.\d+)/);
+        if (!m) return '';
+        let num = m[0];
+        if (num.startsWith('.')) num = '0' + num;   // .4 -> 0.4
+        if (num.endsWith('.'))  num = num.slice(0,-1); // 1. -> 1
+        const n = Number(num);
+        if (!isFinite(n)) return '';
+        let out = n.toFixed(2);
+        out = out.replace(/\.?0+$/, ''); // quita ceros/punto sobrantes
+        return out;
+      }
+
+      function normalizeToMm(raw) {
+        const num = parseNozzle(raw);
+        return num ? (num + ' mm') : '';
+      }
+
+      // 👇 Tipado explícito para evitar "Property 'value' does not exist on type 'Element'"
+      const input = document.querySelector<HTMLInputElement>('input[name="boquilla"]');
+      if (!input) return;
+
+      // Normaliza al cargar si ya hay valor
+      if (input.value && input.value.trim()) {
+        input.value = normalizeToMm(input.value);
+      }
+
+      // Limpiar caracteres raros mientras escribe
+      input.addEventListener('input', (e) => {
+        const el = e.target as HTMLInputElement;
+        const before = el.value;
+        const cleaned = before.replace(/[^0-9.,a-zA-Z\s]/g, '');
+        if (before !== cleaned) el.value = cleaned;
+      });
+
+      // Normaliza al salir del campo
+      input.addEventListener('blur', (e) => {
+        const el = e.target as HTMLInputElement;
+        el.value = normalizeToMm(el.value);
+      });
+    })();
+  </script>
+
 </BasePrivateLayout>
