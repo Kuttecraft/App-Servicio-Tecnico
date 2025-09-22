@@ -16,12 +16,7 @@ function partirNombreApellido(completo: string): { nombre: string; apellido: str
 
 function normalizarMime(file: File | null): string | null { return file ? 'image/webp' : null; }
 
-/** Normaliza DNI/CUIT:
- * - 7 dígitos → X.XXX.XXX
- * - 8 dígitos → XX.XXX.XXX
- * - 11 dígitos → XX-XXXXXXXX-X (CUIT)
- * - Otros → devuelve trimmed sin tocar
- */
+/** Normaliza DNI/CUIT */
 function normalizarDniCuit(input?: string | null): string | null {
   if (input == null) return null;
   const raw = String(input).trim();
@@ -54,15 +49,14 @@ export async function POST({ request }: { request: Request }) {
     const whatsapp    = String(form.get('whatsapp') ?? '').trim();
 
     // -------- Impresora (selector + "Otra (especificar)") --------
-    // Campo visual “Maquina” → name="modelo"
-    // Si eligieron "Otra (especificar)", viene también name="modeloOtro"
-    const modeloElegido = String(form.get('modelo') ?? '').trim();
-    const modeloOtro    = String(form.get('modeloOtro') ?? '').trim();
-    const modeloForm    = (modeloElegido === 'OTRA__ESPECIFICAR' ? modeloOtro : modeloElegido).trim();
+    const modeloElegido = String(form.get('modelo') ?? '').trim();      // valor del select
+    const modeloOtroRaw = String(form.get('modeloOtro') ?? '').trim();  // texto libre
+    // ⚠️ Preferimos SIEMPRE el texto libre si viene con contenido:
+    const modeloForm    = (modeloOtroRaw && modeloOtroRaw.length > 0 ? modeloOtroRaw : modeloElegido).trim();
 
     const numeroSerie = String(form.get('numeroSerie') ?? '').trim();
 
-    // Validación suave de boquilla: solo opciones conocidas (o vacío)
+    // Boquilla conocida (o vacío)
     const opcionesBoquilla = new Set(["0.2mm","0.3mm","0.4mm","0.5mm","0.6mm","0.8mm","1mm"]);
     const boquillaRaw = String(form.get('boquilla') ?? '').trim();
     const boquilla    = opcionesBoquilla.has(boquillaRaw) ? boquillaRaw : '';
@@ -82,13 +76,12 @@ export async function POST({ request }: { request: Request }) {
       return new Response('Número de ticket inválido', { status: 400 });
     }
 
-    /* ========== CLIENTE: crear o ACTUALIZAR si existe ========== */
+    /* ========== CLIENTE ========== */
     let clienteId: number;
     {
       let found: { id: number } | null = null;
       let foundRow: any = null;
 
-      // 1) Buscar por DNI/CUIT primero (usando el valor normalizado)
       if (dniCuit) {
         const { data } = await supabase
           .from('cliente')
@@ -99,7 +92,6 @@ export async function POST({ request }: { request: Request }) {
         if (data) { found = { id: data.id }; foundRow = data; }
       }
 
-      // 2) Si no encontró, buscar por nombre del cliente (case-insensitive exact)
       if (!found) {
         const { data } = await supabase
           .from('cliente')
@@ -111,7 +103,6 @@ export async function POST({ request }: { request: Request }) {
       }
 
       if (found?.id) {
-        // MERGE: actualizar solo lo provisto (y diferente) para no perder info
         const updatePayload: Record<string, any> = {};
 
         if (clienteNombreCompleto && clienteNombreCompleto !== foundRow.cliente) {
@@ -121,23 +112,15 @@ export async function POST({ request }: { request: Request }) {
           if (apellido && apellido !== foundRow.apellido) updatePayload.apellido = apellido;
         }
 
-        if (dniCuit && dniCuit !== (foundRow.dni_cuit || '')) {
-          updatePayload.dni_cuit = dniCuit;
-        }
-        if (whatsapp && whatsapp !== (foundRow.whatsapp || '')) {
-          updatePayload.whatsapp = whatsapp;
-        }
-        if (correo && correo !== (foundRow.correo_electronico || '')) {
-          updatePayload.correo_electronico = correo;
-        }
+        if (dniCuit && dniCuit !== (foundRow.dni_cuit || '')) updatePayload.dni_cuit = dniCuit;
+        if (whatsapp && whatsapp !== (foundRow.whatsapp || '')) updatePayload.whatsapp = whatsapp;
+        if (correo && correo !== (foundRow.correo_electronico || '')) updatePayload.correo_electronico = correo;
 
         if (Object.keys(updatePayload).length > 0) {
           await supabase.from('cliente').update(updatePayload).eq('id', found.id);
         }
-
         clienteId = found.id;
       } else {
-        // Crear nuevo cliente
         const { nombre, apellido } = partirNombreApellido(clienteNombreCompleto);
         const { data, error } = await supabase
           .from('cliente')
@@ -160,7 +143,7 @@ export async function POST({ request }: { request: Request }) {
       }
     }
 
-    /* ========== TÉCNICO: buscar, o crear si no existe ========== */
+    /* ========== TÉCNICO ========== */
     let tecnicoId: number | null = null;
     if (tecnicoNombre) {
       const { nombre: nTec, apellido: aTec } = partirNombreApellido(tecnicoNombre);
@@ -203,7 +186,7 @@ export async function POST({ request }: { request: Request }) {
       }
     }
 
-    /* ========== IMPRESORA: usa 'modelo' y setea 'maquina = modelo' ========== */
+    /* ========== IMPRESORA ========== */
     const MODELO  = modeloForm || 'Generico';
     const MAQUINA = modeloForm || 'Desconocida';
 
@@ -220,7 +203,6 @@ export async function POST({ request }: { request: Request }) {
         .maybeSingle();
       if (impFound?.id) {
         impresoraId = impFound.id;
-        // si vino boquilla y cambió, actualizar
         if (boquilla && boquilla !== (impFound.tamano_de_boquilla || null)) {
           await supabase.from('impresoras')
             .update({ tamano_de_boquilla: boquilla })
@@ -328,7 +310,6 @@ export async function POST({ request }: { request: Request }) {
       await supabase.from('tickets_mian').update(updateImages).eq('id', nuevoId);
     }
 
-    // ⚠️ importante: si actualizamos/creamos el cliente y normalizamos DNI/CUIT, aseguremos persistirlo
     if (dniCuit) {
       await supabase.from('cliente').update({ dni_cuit: dniCuit }).eq('id', clienteId);
     }

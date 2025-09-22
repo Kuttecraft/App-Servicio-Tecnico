@@ -2,7 +2,6 @@
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 
 const url = new URL(Astro.request.url);
-
 const ok = url.searchParams.get('ok') === '1';
 
 const cliente = ok ? '' : (url.searchParams.get('cliente') || '');
@@ -23,10 +22,8 @@ const estados = [
 ];
 const estado = ok ? estados[0] : (url.searchParams.get('estado') || estados[0]);
 
-// Lista de boquillas
 const boquillas = ["0.2mm","0.3mm","0.4mm","0.5mm","0.6mm","0.8mm","1mm"];
 
-// Lista de impresoras (más "Otra (especificar)" al final)
 const impresoras = [
   "PK3 MK8",
   "PK3++ MK8",
@@ -38,7 +35,7 @@ const impresoras = [
   "Bambulab",
   "Creality",
   "Hellbot",
-  "OTRA__ESPECIFICAR" // marcador interno
+  "OTRA__ESPECIFICAR"
 ];
 
 let ticketSugerido = 1;
@@ -52,10 +49,7 @@ try {
 } catch {
   ticketSugerido = 1;
 }
-
-// ⚠️ si venimos de ok=1, ignoramos cualquier ?ticket=
 const ticket = ok ? ticketSugerido : (url.searchParams.get('ticket') || ticketSugerido);
-
 const cobrado = "No";
 ---
 
@@ -133,21 +127,15 @@ const cobrado = "No";
           value={modeloOtro}
           placeholder='Escribe el modelo (p. ej. "Ender 3 V3 KE")'
           autocomplete="off"
-          class:list={{
-            'form-control': true,
-            'mt-2': true,
-            'd-none': modelo !== 'OTRA__ESPECIFICAR'
-          }}
+          class:list={{ 'form-control': true, 'mt-2': true, 'd-none': modelo !== 'OTRA__ESPECIFICAR' && !modeloOtro }}
         />
       </div>
 
-      <!-- Datos impresora -->
       <div class="col-md-6">
         <label class="form-label">N° de Serie</label>
         <input type="text" class="form-control" name="numeroSerie" value={numeroSerie} />
       </div>
 
-      <!-- Campo boquilla: lista -->
       <div class="col-md-6">
         <label class="form-label">Tamaño de boquilla</label>
         <select class="form-select" name="boquilla">
@@ -239,25 +227,46 @@ const cobrado = "No";
     })();
   </script>
 
-  <!-- Toggle del campo "Otra (especificar)" (JS puro, sin TS) -->
+  <!-- Toggle y sincronización del campo "Otra (especificar)" -->
   <script is:inline>
     (function(){
-      var sel = document.getElementById('select-impresora');
+      var form = document.getElementById('form-crear-ticket');
+      var sel  = document.getElementById('select-impresora');
       var otro = document.getElementById('input-modelo-otro');
-      if (!sel || !otro) return;
+      if (!form || !sel || !otro) return;
 
       function sync(){
-        var isOther = sel.value === 'OTRA__ESPECIFICAR';
-        otro.classList.toggle('d-none', !isOther);
-        otro.required = isOther;
-        if (isOther && !otro.value) otro.focus();
+        var hasTyped = (otro.value || '').trim().length > 0;
+        var isOtherOption = sel.value === 'OTRA__ESPECIFICAR';
+        var show = isOtherOption || hasTyped;
+        otro.classList.toggle('d-none', !show);
+        otro.required = show;
       }
+
+      // Si el usuario escribe algo, forzamos el select a "OTRA__ESPECIFICAR"
+      otro.addEventListener('input', function(){
+        var hasTyped = (otro.value || '').trim().length > 0;
+        if (hasTyped && sel.value !== 'OTRA__ESPECIFICAR') {
+          sel.value = 'OTRA__ESPECIFICAR';
+        }
+        sync();
+      });
+
       sel.addEventListener('change', sync);
-      sync(); // estado inicial
+
+      // Al enviar, si hay texto en "otro" nos aseguramos de que el select quede en "OTRA__ESPECIFICAR"
+      form.addEventListener('submit', function(){
+        var hasTyped = (otro.value || '').trim().length > 0;
+        if (hasTyped && sel.value !== 'OTRA__ESPECIFICAR') sel.value = 'OTRA__ESPECIFICAR';
+        sync();
+      });
+
+      // estado inicial
+      sync();
     })();
   </script>
 
-  <!-- Autoformato DNI/CUIT en el cliente (JS puro) -->
+  <!-- Autoformato DNI/CUIT -->
   <script is:inline>
     (function(){
       var el = document.getElementById('dniCuit');
