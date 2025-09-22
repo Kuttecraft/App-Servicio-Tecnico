@@ -20,6 +20,9 @@ const veTickets = esAdmin;
 /* Usuarios / Estadísticas SOLO admin también */
 const veUsuarios = esAdmin;
 const veEstadisticas = esAdmin;
+
+/* ✅ Nuevo: todos pueden ver “Mis estadísticas” (filtra por el técnico logueado) */
+const veMisEstadisticas = true;
 ---
 
 {!mobile ? (
@@ -46,6 +49,12 @@ const veEstadisticas = esAdmin;
       {veEstadisticas && (
         <a class="nav-link text-white d-flex align-items-center gap-2" href="/estadisticas">
           <i class="bi bi-bar-chart-line"></i> Estadísticas
+        </a>
+      )}
+
+      {veMisEstadisticas && (
+        <a class="nav-link text-white d-flex align-items-center gap-2" href="/estadisticas-tecnico">
+          <i class="bi bi-person-lines-fill"></i> Mis estadísticas
         </a>
       )}
     </nav>
@@ -76,6 +85,12 @@ const veEstadisticas = esAdmin;
       {veEstadisticas && (
         <a class="nav-link text-white mb-2 d-flex align-items-center gap-2" href="/estadisticas">
           <i class="bi bi-bar-chart-line"></i> Estadísticas
+        </a>
+      )}
+
+      {veMisEstadisticas && (
+        <a class="nav-link text-white mb-2 d-flex align-items-center gap-2" href="/estadisticas-tecnico">
+          <i class="bi bi-person-lines-fill"></i> Mis estadísticas
         </a>
       )}
     </div>

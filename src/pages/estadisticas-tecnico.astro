@@ -1,0 +1,134 @@
+---
+import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
+
+// ⚠️ Requiere sesión
+const perfil = (Astro.locals as any)?.perfil || {};
+const email: string | undefined = perfil?.email || (Astro.locals as any)?.user?.email;
+if (!email) {
+  return Astro.redirect('/no-autorizado');
+}
+const tecnicoLocal = String(email).split('@')[0].toLowerCase();
+
+// El selector de mes queda visible, aunque el fetch usa all=true
+const now = new Date();
+const yyyy = now.getFullYear();
+const mm = String(now.getMonth() + 1).padStart(2, '0');
+const defaultMonth = `${yyyy}-${mm}`;
+---
+
+<BasePrivateLayout>
+  <div class="container mt-4" style="max-width: 980px;">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+      <h1 class="h5 m-0">Mis estadísticas (técnico)</h1>
+
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <label for="mes" class="form-label m-0">Mes</label>
+        <input id="mes" type="month" class="form-control" style="min-width: 180px;" value={defaultMonth} />
+        <button id="btn-actualizar" class="btn btn-primary">Actualizar</button>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between">
+          <h2 class="h6 text-muted mb-3">Técnico: <code>{tecnicoLocal}</code></h2>
+          <div id="badge-reparadas" class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:.9rem;">
+            Cargando…
+          </div>
+        </div>
+
+        <div id="sin-datos" class="alert alert-warning d-none">
+          No hay datos para mostrar.
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Modelo</th>
+                <th>Estado</th>
+                <th>Fecha</th>
+                <th class="text-center">¿Reparada?</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Pie de página con total de impresoras reparadas -->
+        <footer id="footer" class="mt-3 pt-3 border-top small">
+          <strong>Pie de página:</strong>
+          &nbsp;Total de <em>impresoras</em> reparadas por <code>{tecnicoLocal}</code>:
+          <strong id="total-reparadas"> 0</strong>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <style is:inline>
+    code { background:#f6f8fa; padding:.1rem .35rem; border-radius:.25rem; }
+    .badge { padding:.4rem .6rem; }
+  </style>
+
+  <!-- Pasamos el técnico mediante data-atributo para evitar problemas de TS dentro del script -->
+  <script
+    is:inline
+    data-tecnico={tecnicoLocal}
+  >
+    (function () {
+      // Obtenemos el valor enviado por Astro desde el data-atributo
+      const tecnico = (document.currentScript?.dataset?.tecnico || '').toString();
+
+      async function cargar() {
+        try {
+          // Histórico completo (ya validaste que así devuelve datos)
+          const url = `/api/estadisticas-tecnico?tecnico=${encodeURIComponent(tecnico)}&all=true`;
+          const res = await fetch(url);
+          if (!res.ok) throw new Error('Error consultando estadísticas del técnico');
+          const data = await res.json();
+
+          const $tbody = document.getElementById('tbody');
+          const $sin = document.getElementById('sin-datos');
+          const $badge = document.getElementById('badge-reparadas');
+          const $totalFooter = document.getElementById('total-reparadas');
+
+          $tbody.innerHTML = '';
+
+          if (!data.items || !data.items.length) {
+            $sin.classList.remove('d-none');
+            $badge.textContent = '0 reparadas';
+            $totalFooter.textContent = ' 0';
+            return;
+          } else {
+            $sin.classList.add('d-none');
+          }
+
+          data.items.forEach((r) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td><a href="/detalle/${r.id}" title="Ver ticket ${r.id}">${r.id}</a></td>
+              <td>${r.modelo}</td>
+              <td>${r.estado}</td>
+              <td>${r.fecha || '—'}</td>
+              <td class="text-center">${r.reparada ? '✅' : '—'}</td>
+            `;
+            $tbody.appendChild(tr);
+          });
+
+          const totalRep = data.totalImpresorasReparadas || 0;
+          $badge.textContent = totalRep + ' reparada' + (totalRep === 1 ? '' : 's');
+          $totalFooter.textContent = ' ' + totalRep;
+        } catch (e) {
+          console.error(e);
+          document.getElementById('sin-datos').classList.remove('d-none');
+        }
+      }
+
+      // Botón/selector siguen funcionando como "refrescar"
+      document.getElementById('btn-actualizar')?.addEventListener('click', cargar);
+      document.getElementById('mes')?.addEventListener('change', cargar);
+      window.addEventListener('DOMContentLoaded', cargar);
+    })();
+  </script>
+</BasePrivateLayout>
