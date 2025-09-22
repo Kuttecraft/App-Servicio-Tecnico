@@ -42,6 +42,19 @@ export async function POST(context: { request: Request }) {
     if (typeof value === 'string') fields[key] = value.trim();
   });
 
+  // Resolver "medio_de_entrega" desde el select + (opcional) texto "otro".
+  // También mantenemos compatibilidad con el campo legacy "medio_de_entrega" si llega.
+  function resolverMedioEntrega(f: Record<string, string>): string | null {
+    const sel = f.medio_de_entrega_select || '';
+    const otro = f.medio_de_entrega_otro || '';
+    if (sel === 'Otro') {
+      return otro ? otro : null;
+    }
+    if (sel) return sel;
+    // fallback legacy:
+    return f.medio_de_entrega ? f.medio_de_entrega : null;
+  }
+
   // delivery NO tiene direccion/localidad en el schema
   const baseDelivery: Record<string, any> = {
     cotizar_delivery:
@@ -49,7 +62,7 @@ export async function POST(context: { request: Request }) {
         ? (normalizarMontoTexto(fields.cotizar_delivery) ?? null)
         : null,
     informacion_adicional_delivery: fields.informacion_adicional_delivery || null,
-    medio_de_entrega: fields.medio_de_entrega || null,
+    medio_de_entrega: resolverMedioEntrega(fields),
     forma_de_pago: fields.forma_de_pago || null,
     pagado: fields.pagado || null, // "true" | "false" | null
     ticket_id: parseInt(ticketId, 10),
@@ -107,7 +120,7 @@ export async function POST(context: { request: Request }) {
   }
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error as any).message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

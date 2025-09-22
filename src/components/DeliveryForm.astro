@@ -21,6 +21,13 @@ function formatARS(v?: string | number | null): string {
     maximumFractionDigits: 2
   }).format(n);
 }
+
+// ------ Preparar "Medio de entrega" (select + otro) ------
+const medioActual = (equipo?.medio_de_entrega ?? '').trim();
+const opciones = ['Delivery', 'Taller'];
+const esOtro = !!(medioActual && !opciones.includes(medioActual));
+const seleccionado = esOtro ? 'Otro' : (medioActual || '');
+const valorOtro = esOtro ? medioActual : '';
 ---
 
 <form method="POST" action={`/api/actualizarDelivery?id=${equipo.ticketId}`} class="row g-3">
@@ -37,13 +44,25 @@ function formatARS(v?: string | number | null): string {
 
   <div class="col-md-6">
     <label class="form-label">Medio de entrega</label>
-    <input
-      type="text"
-      class="form-control"
-      name="medio_de_entrega"
-      value={equipo?.medio_de_entrega ?? ''}
-      placeholder="Moto, correo, etc."
-    />
+    <select name="medio_de_entrega_select" id="medioSelect" class="form-select">
+      <option value="" selected={!seleccionado}>Seleccionar</option>
+      <option value="Delivery" selected={seleccionado === 'Delivery'}>Delivery</option>
+      <option value="Taller" selected={seleccionado === 'Taller'}>Taller</option>
+      <option value="Otro" selected={seleccionado === 'Otro'}>Otro</option>
+    </select>
+
+    <div id="medioOtroWrapper" class={esOtro ? 'mt-2' : 'mt-2 d-none'}>
+      <label class="form-label">Especificar otro medio</label>
+      <input
+        type="text"
+        class="form-control"
+        name="medio_de_entrega_otro"
+        id="medioOtro"
+        value={valorOtro}
+        placeholder="Moto, correo, mensajería, etc."
+      />
+      <div class="form-text">Si elegís “Otro”, se guardará este valor.</div>
+    </div>
   </div>
 
   <div class="col-md-6">
@@ -111,8 +130,10 @@ function formatARS(v?: string | number | null): string {
   </div>
 </form>
 
+<!-- JS puro con guards por tipo en tiempo de ejecución -->
 <script>
 (function(){
+  // --- moneda ARS ---
   function parseNumber(s){
     if(!s) return 0;
     s = s.replace(/[^\d,-]/g,'').replace(',', '.');
@@ -125,15 +146,41 @@ function formatARS(v?: string | number | null): string {
     }).format(n);
   }
   function onBlur(e){
-    const n = parseNumber(e.target.value);
-    e.target.value = n ? formatARS(n) : '';
+    const target = e.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const n = parseNumber(target.value);
+    target.value = n ? formatARS(n) : '';
   }
   function onInput(e){
-    e.target.value = e.target.value.replace(/[^\d,.-]/g,'');
+    const target = e.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    target.value = target.value.replace(/[^\d,.-]/g,'');
   }
-  document.querySelectorAll('.currency-ars').forEach(el=>{
-    el.addEventListener('blur', onBlur);
-    el.addEventListener('input', onInput);
+  document.querySelectorAll('.currency-ars').forEach((el)=>{
+    if (el instanceof HTMLInputElement) {
+      el.addEventListener('blur', onBlur);
+      el.addEventListener('input', onInput);
+    }
   });
+
+  // --- toggle "Otro" ---
+  const sel  = document.getElementById('medioSelect');
+  const wrap = document.getElementById('medioOtroWrapper');
+  const otro = document.getElementById('medioOtro');
+
+  function toggleOtro(){
+    if(!(sel instanceof HTMLSelectElement) || !(wrap instanceof HTMLElement)) return;
+    if(sel.value === 'Otro'){
+      wrap.classList.remove('d-none');
+      if(otro instanceof HTMLInputElement){ setTimeout(()=>otro.focus(), 0); }
+    }else{
+      wrap.classList.add('d-none');
+      if(otro instanceof HTMLInputElement){ otro.value = ''; }
+    }
+  }
+
+  if (sel) {
+    sel.addEventListener('change', toggleOtro);
+  }
 })();
 </script>
