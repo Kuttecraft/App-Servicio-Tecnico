@@ -53,8 +53,13 @@ export async function POST({ request }: { request: Request }) {
     const correo      = String(form.get('correo') ?? '').trim();
     const whatsapp    = String(form.get('whatsapp') ?? '').trim();
 
+    // -------- Impresora (selector + "Otra (especificar)") --------
     // Campo visual “Maquina” → name="modelo"
-    const modeloForm  = String(form.get('modelo') ?? '').trim();
+    // Si eligieron "Otra (especificar)", viene también name="modeloOtro"
+    const modeloElegido = String(form.get('modelo') ?? '').trim();
+    const modeloOtro    = String(form.get('modeloOtro') ?? '').trim();
+    const modeloForm    = (modeloElegido === 'OTRA__ESPECIFICAR' ? modeloOtro : modeloElegido).trim();
+
     const numeroSerie = String(form.get('numeroSerie') ?? '').trim();
 
     // Validación suave de boquilla: solo opciones conocidas (o vacío)
@@ -199,7 +204,7 @@ export async function POST({ request }: { request: Request }) {
     }
 
     /* ========== IMPRESORA: usa 'modelo' y setea 'maquina = modelo' ========== */
-    const MODELO = modeloForm || 'Generico';
+    const MODELO  = modeloForm || 'Generico';
     const MAQUINA = modeloForm || 'Desconocida';
 
     let impresoraId: number | null = null;

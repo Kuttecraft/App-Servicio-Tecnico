@@ -10,6 +10,7 @@ const dniCuit = ok ? '' : (url.searchParams.get('dniCuit') || '');
 const correo = ok ? '' : (url.searchParams.get('correo') || '');
 const whatsapp = ok ? '' : (url.searchParams.get('whatsapp') || '');
 const modelo = ok ? '' : (url.searchParams.get('modelo') || '');
+const modeloOtro = ok ? '' : (url.searchParams.get('modeloOtro') || '');
 const numeroSerie = ok ? '' : (url.searchParams.get('numeroSerie') || '');
 const boquilla = ok ? '' : (url.searchParams.get('boquilla') || '');
 const tecnico = ok ? '' : (url.searchParams.get('tecnico') || '');
@@ -22,8 +23,23 @@ const estados = [
 ];
 const estado = ok ? estados[0] : (url.searchParams.get('estado') || estados[0]);
 
-// Lista de boquillas (según la imagen)
+// Lista de boquillas
 const boquillas = ["0.2mm","0.3mm","0.4mm","0.5mm","0.6mm","0.8mm","1mm"];
+
+// Lista de impresoras (más "Otra (especificar)" al final)
+const impresoras = [
+  "PK3 MK8",
+  "PK3++ MK8",
+  "PK3++ EXT MK8",
+  "PK3 BMG",
+  "PK3++ BMG",
+  "PK3++ EXT BMG",
+  "Artillery",
+  "Bambulab",
+  "Creality",
+  "Hellbot",
+  "OTRA__ESPECIFICAR" // marcador interno
+];
 
 let ticketSugerido = 1;
 try {
@@ -37,7 +53,7 @@ try {
   ticketSugerido = 1;
 }
 
-// ⚠️ clave: si venimos de ok=1, ignoramos cualquier ?ticket= de la URL
+// ⚠️ si venimos de ok=1, ignoramos cualquier ?ticket=
 const ticket = ok ? ticketSugerido : (url.searchParams.get('ticket') || ticketSugerido);
 
 const cobrado = "No";
@@ -99,9 +115,30 @@ const cobrado = "No";
         <input type="text" class="form-control" name="whatsapp" value={whatsapp} />
       </div>
 
+      <!-- Selector de impresora + "Otra (especificar)" -->
       <div class="col-md-6">
-        <label class="form-label">Maquina</label>
-        <input type="text" class="form-control" name="modelo" value={modelo} />
+        <label class="form-label">Impresora / Máquina</label>
+        <select class="form-select" name="modelo" id="select-impresora">
+          <option value="" selected={!modelo}>Seleccionar…</option>
+          {impresoras.map((m) => (
+            <option value={m} selected={m === modelo}>
+              {m === 'OTRA__ESPECIFICAR' ? 'Otra (especificar)' : m}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          name="modeloOtro"
+          id="input-modelo-otro"
+          value={modeloOtro}
+          placeholder='Escribe el modelo (p. ej. "Ender 3 V3 KE")'
+          autocomplete="off"
+          class:list={{
+            'form-control': true,
+            'mt-2': true,
+            'd-none': modelo !== 'OTRA__ESPECIFICAR'
+          }}
+        />
       </div>
 
       <!-- Datos impresora -->
@@ -190,31 +227,51 @@ const cobrado = "No";
     (function() {
       const usp = new URLSearchParams(location.search);
       if (usp.get('ok') === '1') {
-        document.getElementById('previewPrincipal')?.classList.add('d-none');
-        document.getElementById('previewTicket')?.classList.add('d-none');
-        document.getElementById('previewExtra')?.classList.add('d-none');
+        const p1 = document.getElementById('previewPrincipal');
+        const p2 = document.getElementById('previewTicket');
+        const p3 = document.getElementById('previewExtra');
+        if (p1) p1.classList.add('d-none');
+        if (p2) p2.classList.add('d-none');
+        if (p3) p3.classList.add('d-none');
         const first = document.querySelector('input[name="cliente"]');
         if (first) first.focus();
       }
     })();
   </script>
 
-  <!-- Autoformato DNI/CUIT en el cliente (solo visual; el servidor normaliza de todos modos) -->
+  <!-- Toggle del campo "Otra (especificar)" (JS puro, sin TS) -->
   <script is:inline>
     (function(){
-      const el = document.getElementById('dniCuit');
-      if (!(el instanceof HTMLInputElement)) return;
+      var sel = document.getElementById('select-impresora');
+      var otro = document.getElementById('input-modelo-otro');
+      if (!sel || !otro) return;
+
+      function sync(){
+        var isOther = sel.value === 'OTRA__ESPECIFICAR';
+        otro.classList.toggle('d-none', !isOther);
+        otro.required = isOther;
+        if (isOther && !otro.value) otro.focus();
+      }
+      sel.addEventListener('change', sync);
+      sync(); // estado inicial
+    })();
+  </script>
+
+  <!-- Autoformato DNI/CUIT en el cliente (JS puro) -->
+  <script is:inline>
+    (function(){
+      var el = document.getElementById('dniCuit');
+      if (!el) return;
 
       function formatDniCuit(value){
-        const digits = String(value||'').replace(/\D+/g,'');
-        if (digits.length === 7) return `${digits[0]}.${digits.slice(1,4)}.${digits.slice(4)}`;
-        if (digits.length === 8) return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5)}`;
-        if (digits.length === 11) return `${digits.slice(0,2)}-${digits.slice(2,10)}-${digits.slice(10)}`;
+        var digits = String(value||'').replace(/\D+/g,'');
+        if (digits.length === 7) return digits[0] + '.' + digits.slice(1,4) + '.' + digits.slice(4);
+        if (digits.length === 8) return digits.slice(0,2) + '.' + digits.slice(2,5) + '.' + digits.slice(5);
+        if (digits.length === 11) return digits.slice(0,2) + '-' + digits.slice(2,10) + '-' + digits.slice(10);
         return value;
       }
-      el.addEventListener('blur', () => { el.value = formatDniCuit(el.value); });
-      // opcional: permitir solo dígitos, puntos y guiones al escribir
-      el.addEventListener('input', () => {
+      el.addEventListener('blur', function(){ el.value = formatDniCuit(el.value); });
+      el.addEventListener('input', function(){
         el.value = el.value.replace(/[^\d.\-]/g,'').replace(/\.{2,}/g,'.').replace(/\-{2,}/g,'-');
       });
     })();
