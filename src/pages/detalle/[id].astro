@@ -10,7 +10,7 @@ const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
 
-// Normalizador de fecha a YYYY-MM-DD (tolerante)
+/* ===== Normalizadores ===== */
 function normDateLite(value?: string | null): string | null {
   if (!value) return null;
   const s = String(value).trim();
@@ -39,32 +39,17 @@ function normDateLite(value?: string | null): string | null {
   return null;
 }
 
-// 🔹 Normalizador de DNI/CUIT
 function formatDniCuit(raw?: string | null): string {
   if (raw == null) return '—';
   const digits = String(raw).replace(/\D+/g, '');
   if (!digits) return '—';
-
-  // CUIT/CUIL: 11 dígitos → XX-XXXXXXXX-X
-  if (digits.length === 11) {
-    return `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}`;
-  }
-
-  // DNI: 8 dígitos → XX.XXX.XXX
-  if (digits.length === 8) {
-    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
-  }
-
-  // DNI antiguo: 7 dígitos → X.XXX.XXX
-  if (digits.length === 7) {
-    return `${digits.slice(0, 1)}.${digits.slice(1, 4)}.${digits.slice(4)}`;
-  }
-
-  // Genérico: separador de miles con puntos
+  if (digits.length === 11) return `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}`;
+  if (digits.length === 8)  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length === 7)  return `${digits.slice(0, 1)}.${digits.slice(1, 4)}.${digits.slice(4)}`;
   return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
-// Ticket + joins (el * ya trae solicitar_presupuesto)
+/* ===== Datos principales (el * ya trae solicitar_presupuesto) ===== */
 const { data } = await supabase
   .from('tickets_mian')
   .select(`
@@ -79,12 +64,21 @@ const { data } = await supabase
 
 const equipo = data;
 
-// Normalizar impresora
+/* ===== Presupuesto (último registro) ===== */
+const { data: presuRows } = await supabase
+  .from('presupuestos')
+  .select('*')
+  .eq('ticket_id', id)
+  .order('id', { ascending: false })
+  .limit(1);
+
+const presupuesto = Array.isArray(presuRows) ? (presuRows[0] ?? null) : null;
+
+/* ===== Normalizaciones de joins ===== */
 const impresora = Array.isArray((equipo as any)?.impresoras)
   ? (equipo as any).impresoras?.[0]
   : (equipo as any)?.impresoras;
 
-// Normalizar delivery
 const deliveryRaw = (equipo as any)?.delivery;
 const delivery = Array.isArray(deliveryRaw) ? (deliveryRaw[0] ?? null) : (deliveryRaw ?? null);
 
@@ -100,15 +94,8 @@ const imagenes: string[] = Array.from(new Set(
   [equipo?.imagen_ticket, equipo?.imagen, equipo?.imagen_extra].filter(Boolean) as string[]
 ));
 
-// ¿Existe presupuesto?
-const { data: presupuestoExistente } = await supabase
-  .from('presupuestos')
-  .select('id')
-  .eq('ticket_id', id)
-  .maybeSingle();
-const hasPresupuesto = Boolean(presupuestoExistente?.id);
-
-// ¿Existe delivery?
+/* ===== Flags para botones ===== */
+const hasPresupuesto = Boolean(presupuesto?.id);
 const { data: deliveryExistente } = await supabase
   .from('delivery')
   .select('id')
@@ -116,17 +103,17 @@ const { data: deliveryExistente } = await supabase
   .maybeSingle();
 const hasDelivery = Boolean(deliveryExistente?.id);
 
-// Fechas normalizadas
+/* ===== Fechas ===== */
 const fechaFormularioNorm = normDateLite(equipo?.marca_temporal);
 const fechaListoNorm      = normDateLite(equipo?.fecha_de_reparacion);
 
-// Comentarios
+/* ===== Comentarios (contador) ===== */
 const { count: comentariosCount } = await supabase
   .from('ticket_comentarios')
   .select('id', { count: 'exact', head: true })
   .eq('ticket_id', id);
 
-// Etiqueta tri-estado para “quiere presupuesto”
+/* ===== Tri-estado “quiere presupuesto” ===== */
 const quierePresupuesto =
   equipo?.solicitar_presupuesto === 'Si' ? 'Sí' :
   equipo?.solicitar_presupuesto === 'No' ? 'No' :
@@ -142,30 +129,14 @@ const quierePresupuesto =
     .thumb:focus-visible { outline: 2px solid #0d6efd; outline-offset: 2px; }
     .thumb.active { border-color: #0d6efd; }
 
-    /* Overlay imagen grande */
-    .zoom-overlay{
-      position:fixed; inset:0; display:none; z-index:2000;
-      background:rgba(0,0,0,.9); align-items:center; justify-content:center;
-      padding:24px;
-    }
-    .zoom-overlay.open{ display:flex; }
-    .zoom-overlay__img{
-      max-width:95vw; max-height:95vh; border-radius:12px;
-      box-shadow:0 10px 30px rgba(0,0,0,.6);
-    }
-    .zoom-overlay__close{
-      position:absolute; top:16px; right:16px; cursor:pointer;
-      background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35);
-      padding:8px 12px; border-radius:8px;
-    }
-    .zoom-overlay__close:hover{ background:rgba(255,255,255,.25); }
+    .section-title { font-weight:700; color:#0d6efd; margin:.25rem 0 .5rem; display:flex; align-items:center; gap:.5rem; }
+    .divider { border-top:1px solid rgba(0,0,0,.08); margin:1rem 0; }
   </style>
 
   <div class="container mt-4 position-relative">
-    <div class="card mx-auto shadow" style="max-width: 650px;">
+    <div class="card mx-auto shadow" style="max-width: 720px;">
       <div class="card-header bg-white d-flex align-items-center justify-content-between">
         <h3 class="h5 mb-0 fw-bold text-primary">Detalle del equipo</h3>
-
         {isAdmin && (
           <button class="btn btn-sm btn-outline-danger d-flex align-items-center"
             onclick={`eliminarTicket('${equipo?.id}')`} title="Eliminar ticket">
@@ -175,6 +146,7 @@ const quierePresupuesto =
       </div>
 
       <div class="card-body">
+        <!-- Imagen principal + thumbs -->
         <div class="text-center mb-3">
           <img id="imagen-equipo" src={`${imagenPrincipal}?t=${Date.now()}`} alt="Imagen impresora"
             class="rounded img-fluid shadow-sm"
@@ -190,78 +162,94 @@ const quierePresupuesto =
           </div>
         )}
 
-        <div class="text-center mb-4">
+        <!-- Encabezado -->
+        <div class="text-center mb-3">
           <h4 class="fw-bold text-dark mb-1">{equipo?.cliente?.cliente ?? '—'}</h4>
           <div class="text-muted small">{modeloMostrado}</div>
-
-          <div class="row row-cols-1 row-cols-md-2 g-4 justify-content-center mt-3">
-            <div class="col"><strong>Ticket:</strong> {equipo?.ticket ?? '—'}</div>
-            <div class="col"><strong>Estado:</strong> {equipo?.estado ?? '—'}</div>
-
-            <div class="col">
-              <strong>¿Cobrado?:</strong> {delivery?.pagado == null ? '—' : booleanATexto(delivery.pagado === 'true')}
-            </div>
-            <div class="col">
-              <strong>Medio de entrega:</strong> {delivery?.medio_de_entrega ?? '—'}
-            </div>
-
-            {delivery?.fecha_de_entrega && (
-              <div class="col"><strong>Fecha de entrega:</strong> {formatearFecha(delivery.fecha_de_entrega)}</div>
-            )}
-            {delivery?.forma_de_pago && (
-              <div class="col"><strong>Forma de pago:</strong> {delivery.forma_de_pago}</div>
-            )}
-            {delivery?.informacion_adicional_delivery && (
-              <div class="col"><strong>Info adicional:</strong> {delivery.informacion_adicional_delivery}</div>
-            )}
-
-            <div class="col">
-              <strong>Costo delivery:</strong> {delivery?.cotizar_delivery ? formatARS(delivery.cotizar_delivery) : '—'}
-            </div>
-
-            <div class="col"><strong>Técnico:</strong> {equipo?.tecnico ? `${equipo.tecnico.nombre} ${equipo.tecnico.apellido}` : '—'}</div>
-
-            <!-- DNI/CUIT normalizado -->
-            <div class="col"><strong>DNI/CUIT:</strong> {formatDniCuit(equipo?.cliente?.dni_cuit)}</div>
-
-            <div class="col"><strong>Correo:</strong> {equipo?.cliente?.correo_electronico ?? '—'}</div>
-            <div class="col"><strong>WhatsApp:</strong> {equipo?.cliente?.whatsapp ?? '—'}</div>
-
-            <div class="col">
-              <strong>Fecha formulario:</strong> {fechaFormularioNorm ? formatearFecha(fechaFormularioNorm) : '—'}
-            </div>
-            <div class="col">
-              <strong>Fecha listo:</strong> {fechaListoNorm ? formatearFecha(fechaListoNorm) : '—'}
-            </div>
-
-            <!-- NUEVO: tri-estado visible en detalle -->
-            <div class="col">
-              <strong>¿Quiere saber presupuesto?</strong> {quierePresupuesto}
-            </div>
-          </div>
         </div>
 
+        <!-- ===== Sección Ticket ===== -->
+        <div class="section-title"><i class="bi bi-ticket-perforated"></i> Ticket</div>
+        <div class="row row-cols-1 row-cols-md-2 g-3">
+          <div class="col"><strong>N° Ticket:</strong> {equipo?.ticket ?? '—'}</div>
+          <div class="col"><strong>Estado:</strong> {equipo?.estado ?? '—'}</div>
+          <div class="col"><strong>Técnico:</strong> {equipo?.tecnico ? `${equipo.tecnico.nombre} ${equipo.tecnico.apellido}` : '—'}</div>
+          <div class="col"><strong>Fecha formulario:</strong> {fechaFormularioNorm ? formatearFecha(fechaFormularioNorm) : '—'}</div>
+          <div class="col"><strong>Fecha listo:</strong> {fechaListoNorm ? formatearFecha(fechaListoNorm) : '—'}</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- ===== Sección Cliente ===== -->
+        <div class="section-title"><i class="bi bi-person-badge"></i> Cliente</div>
+        <div class="row row-cols-1 row-cols-md-2 g-3">
+          <div class="col"><strong>DNI/CUIT:</strong> {formatDniCuit(equipo?.cliente?.dni_cuit)}</div>
+          <div class="col"><strong>WhatsApp:</strong> {equipo?.cliente?.whatsapp ?? '—'}</div>
+          <div class="col"><strong>Correo:</strong> {equipo?.cliente?.correo_electronico ?? '—'}</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- ===== Sección Presupuesto ===== -->
+        <div class="section-title"><i class="bi bi-receipt"></i> Presupuesto</div>
+        <div class="row row-cols-1 row-cols-md-2 g-3">
+          <div class="col">
+            <strong>Monto:</strong> {presupuesto?.monto ? formatARS(presupuesto.monto) : '—'}
+          </div>
+          <div class="col">
+            <strong>¿Quiere saber presupuesto?</strong> {quierePresupuesto}
+          </div>
+          <div class="col">
+            <strong>Link:</strong> {presupuesto?.link_presupuesto ? (
+              <a href={presupuesto.link_presupuesto} target="_blank" rel="noopener">Abrir</a>
+            ) : '—'}
+          </div>
+          <div class="col">
+            <strong>Garantía activa:</strong> {presupuesto?.garantia_activa ?? '—'}
+          </div>
+          {presupuesto?.presupuesto_aprobado && (
+            <div class="col">
+              <strong>Aprobación:</strong> {presupuesto.presupuesto_aprobado}
+            </div>
+          )}
+          {presupuesto?.fecha_presupuesto && (
+            <div class="col">
+              <strong>Fecha presupuesto:</strong> {formatearFecha(presupuesto.fecha_presupuesto)}
+            </div>
+          )}
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- ===== Sección Delivery ===== -->
+        <div class="section-title"><i class="bi bi-truck"></i> Delivery</div>
+        <div class="row row-cols-1 row-cols-md-2 g-3">
+          <div class="col">
+            <strong>¿Cobrado?:</strong> {delivery?.pagado == null ? '—' : booleanATexto(delivery.pagado === 'true')}
+          </div>
+          <div class="col"><strong>Medio de entrega:</strong> {delivery?.medio_de_entrega ?? '—'}</div>
+          <div class="col"><strong>Costo delivery:</strong> {delivery?.cotizar_delivery ? formatARS(delivery.cotizar_delivery) : '—'}</div>
+          {delivery?.forma_de_pago && <div class="col"><strong>Forma de pago:</strong> {delivery.forma_de_pago}</div>}
+          {delivery?.fecha_de_entrega && <div class="col"><strong>Fecha de entrega:</strong> {formatearFecha(delivery.fecha_de_entrega)}</div>}
+          {delivery?.informacion_adicional_delivery && <div class="col"><strong>Info adicional:</strong> {delivery.informacion_adicional_delivery}</div>}
+        </div>
+
+        <!-- ===== Acciones ===== -->
         {(isAdmin || isTecnico) && (
           <>
-            <div class="row mt-4 g-2">
+            <div class="divider"></div>
+            <div class="row mt-1 g-2">
               <div class={`d-flex ${isAdmin ? 'col-6' : 'col-12'}`}>
-                {hasPresupuesto ? (
-                  <a href={`/presupuesto/${equipo?.id}`} class="btn btn-outline-primary btn-sm w-100">
-                    <i class="bi bi-shield-check"></i> Verificar presupuesto
-                  </a>
-                ) : (
-                  <a href={`/presupuesto/${equipo?.id}`} class="btn btn-outline-primary btn-sm w-100">
-                    <i class="bi bi-receipt"></i> Añadir presupuesto
-                  </a>
-                )}
+                <a href={`/presupuesto/${equipo?.id}`} class="btn btn-outline-primary btn-sm w-100">
+                  <i class={`bi ${hasPresupuesto ? 'bi-shield-check' : 'bi-receipt'}`}></i>
+                  {' '}{hasPresupuesto ? 'Verificar presupuesto' : 'Añadir presupuesto'}
+                </a>
               </div>
-
               {isAdmin && (
                 <div class="col-6 d-flex">
                   <a href={`/delivery/${equipo?.id}`} class="btn btn-outline-success btn-sm w-100">
                     <i class={`bi ${hasDelivery ? 'bi-shield-check' : 'bi-receipt'}`}></i>
-                    {' '}
-                    {hasDelivery ? 'Verificar delivery' : 'Añadir delivery'}
+                    {' '}{hasDelivery ? 'Verificar delivery' : 'Añadir delivery'}
                   </a>
                 </div>
               )}
@@ -304,35 +292,29 @@ const quierePresupuesto =
     </script>
   )}
 
+  <!-- Acciones Máquina Lista -->
   <script>
     (window as any).maquinaLista = async function(id) {
       if (!confirm("¿Marcar este equipo como LISTA? Esto actualizará el estado y la fecha de listo.")) return;
 
       const elements = document.querySelectorAll('button, a.btn');
       elements.forEach((el) => {
-        if (el instanceof HTMLButtonElement) {
-          el.disabled = true;
-        } else if (el instanceof HTMLAnchorElement) {
-          el.classList.add('disabled'); el.setAttribute('aria-disabled', 'true'); el.style.pointerEvents = 'none';
-        }
+        if (el instanceof HTMLButtonElement) el.disabled = true;
+        else if (el instanceof HTMLAnchorElement) { el.classList.add('disabled'); el.setAttribute('aria-disabled', 'true'); el.style.pointerEvents = 'none'; }
       });
 
       try {
         const res = await fetch(`/api/maquinaLista?id=${encodeURIComponent(id)}`, { method: 'POST' });
         if (res.redirected) { window.location.href = res.url; return; }
         if (res.ok) { window.location.reload(); return; }
-
         const data = await res.json().catch(() => ({}));
         alert("No se pudo marcar como Lista: " + (data.error || res.statusText));
       } catch (e) {
         alert("Error de red: " + (e && (e as any).message ? (e as any).message : String(e)));
       } finally {
         elements.forEach((el) => {
-          if (el instanceof HTMLButtonElement) {
-            el.disabled = false;
-          } else if (el instanceof HTMLAnchorElement) {
-            el.classList.remove('disabled'); el.removeAttribute('aria-disabled'); el.style.pointerEvents = '';
-          }
+          if (el instanceof HTMLButtonElement) el.disabled = false;
+          else if (el instanceof HTMLAnchorElement) { el.classList.remove('disabled'); el.removeAttribute('aria-disabled'); el.style.pointerEvents = ''; }
         });
       }
     }
@@ -342,7 +324,6 @@ const quierePresupuesto =
   <script>
     const thumbs = document.querySelectorAll('#thumbs .thumb');
     const mainImg = document.getElementById('imagen-equipo');
-
     if (thumbs && mainImg) {
       thumbs.forEach((t) => {
         t.addEventListener('click', () => {
@@ -354,102 +335,46 @@ const quierePresupuesto =
           }
         });
         t.addEventListener('keydown', (ev) => {
-          if (ev instanceof KeyboardEvent) {
-            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); if (t instanceof HTMLElement) t.click(); }
+          if (ev instanceof KeyboardEvent && (ev.key === 'Enter' || ev.key === ' ')) {
+            ev.preventDefault(); (t as HTMLElement).click();
           }
         });
       });
     }
   </script>
 
-<!-- ===== Overlay de imagen grande con zoom por doble click ===== -->
-<style>
-  .zoom-overlay{
-    position:fixed; inset:0; display:none; z-index:2000;
-    background:rgba(0,0,0,.9); align-items:center; justify-content:center;
-    padding:24px;
-  }
-  .zoom-overlay.open{ display:flex; }
-  .zoom-overlay__img{
-    max-width:95vw; max-height:95vh; border-radius:12px;
-    box-shadow:0 10px 30px rgba(0,0,0,.6);
-    user-select:none;
-    transition:transform .2s ease;
-    transform-origin:center center;
-    cursor: zoom-in;
-  }
-  .zoom-overlay__close{
-    position:absolute; top:16px; right:16px; cursor:pointer;
-    background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35);
-    padding:8px 12px; border-radius:8px;
-  }
-  .zoom-overlay__close:hover{ background:rgba(255,255,255,.25); }
-</style>
+  <!-- Overlay zoom (igual que tenías) -->
+  <style>
+    .zoom-overlay{ position:fixed; inset:0; display:none; z-index:2000; background:rgba(0,0,0,.9); align-items:center; justify-content:center; padding:24px; }
+    .zoom-overlay.open{ display:flex; }
+    .zoom-overlay__img{ max-width:95vw; max-height:95vh; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.6); user-select:none; transition:transform .2s ease; transform-origin:center center; cursor: zoom-in; }
+    .zoom-overlay__close{ position:absolute; top:16px; right:16px; cursor:pointer; background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35); padding:8px 12px; border-radius:8px; }
+    .zoom-overlay__close:hover{ background:rgba(255,255,255,.25); }
+  </style>
 
-<div id="zoomOverlay" class="zoom-overlay" role="dialog" aria-modal="true" aria-label="Imagen ampliada">
-  <img id="zoomImg" class="zoom-overlay__img" alt="Vista ampliada" />
-  <button id="zoomClose" class="zoom-overlay__close" type="button">✕ Cerrar</button>
-</div>
+  <div id="zoomOverlay" class="zoom-overlay" role="dialog" aria-modal="true" aria-label="Imagen ampliada">
+    <img id="zoomImg" class="zoom-overlay__img" alt="Vista ampliada" />
+    <button id="zoomClose" class="zoom-overlay__close" type="button">✕ Cerrar</button>
+  </div>
 
-<script>
-  const mainImgZoom  = document.getElementById('imagen-equipo');
-  const overlayZoom  = document.getElementById('zoomOverlay');
-  const overlayImg   = document.getElementById('zoomImg');
-  const btnCloseZoom = document.getElementById('zoomClose');
+  <script>
+    const mainImgZoom  = document.getElementById('imagen-equipo');
+    const overlayZoom  = document.getElementById('zoomOverlay');
+    const overlayImg   = document.getElementById('zoomImg');
+    const btnCloseZoom = document.getElementById('zoomClose');
 
-  if (
-    mainImgZoom  instanceof HTMLImageElement &&
-    overlayZoom  instanceof HTMLElement &&
-    overlayImg   instanceof HTMLImageElement &&
-    btnCloseZoom instanceof HTMLElement
-  ) {
-    let escala = 1;
-
-    function aplicar() {
-      overlayImg.style.transform = `scale(${escala})`;
-      overlayImg.style.cursor = escala > 1 ? 'zoom-out' : 'zoom-in';
+    if (mainImgZoom instanceof HTMLImageElement && overlayZoom instanceof HTMLElement && overlayImg instanceof HTMLImageElement && btnCloseZoom instanceof HTMLElement) {
+      let escala = 1;
+      function aplicar(){ overlayImg.style.transform = `scale(${escala})`; overlayImg.style.cursor = escala > 1 ? 'zoom-out' : 'zoom-in'; }
+      mainImgZoom.addEventListener('click', () => { overlayImg.src = mainImgZoom.currentSrc || mainImgZoom.src; overlayZoom.classList.add('open'); document.body.style.overflow = 'hidden'; escala = 1; aplicar(); });
+      function cerrarOverlay(){ overlayZoom.classList.remove('open'); document.body.style.overflow = ''; escala = 1; aplicar(); }
+      btnCloseZoom.addEventListener('click', cerrarOverlay);
+      overlayZoom.addEventListener('click', (e) => { if (e.target === overlayZoom) cerrarOverlay(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && overlayZoom.classList.contains('open')) cerrarOverlay(); });
+      function toggleZoom(){ escala = (escala === 1) ? 2 : 1; aplicar(); }
+      overlayImg.addEventListener('dblclick', (e) => { e.preventDefault(); toggleZoom(); });
+      let lastTap = 0;
+      overlayImg.addEventListener('click', () => { const now = Date.now(); if (now - lastTap < 300) toggleZoom(); lastTap = now; });
     }
-
-    // Abrir overlay al click en la imagen principal
-    mainImgZoom.addEventListener('click', () => {
-      overlayImg.src = mainImgZoom.currentSrc || mainImgZoom.src;
-      overlayZoom.classList.add('open');
-      document.body.style.overflow = 'hidden';
-      escala = 1; aplicar();
-    });
-
-    function cerrarOverlay(){
-      overlayZoom.classList.remove('open');
-      document.body.style.overflow = '';
-      escala = 1; aplicar();
-    }
-
-    btnCloseZoom.addEventListener('click', cerrarOverlay);
-    overlayZoom.addEventListener('click', (e) => {
-      if (e.target === overlayZoom) cerrarOverlay();
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && overlayZoom.classList.contains('open')) cerrarOverlay();
-    });
-
-    function toggleZoom() {
-      escala = (escala === 1) ? 2 : 1;
-      aplicar();
-    }
-
-    overlayImg.addEventListener('dblclick', (e) => {
-      e.preventDefault();
-      toggleZoom();
-    });
-
-    let lastTap = 0;
-    overlayImg.addEventListener('click', () => {
-      const now = Date.now();
-      if (now - lastTap < 300) { toggleZoom(); }
-      lastTap = now;
-    });
-  }
-</script>
-<!-- ===== fin overlay ===== -->
-
+  </script>
 </BasePrivateLayout>
