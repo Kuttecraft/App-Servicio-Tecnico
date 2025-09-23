@@ -39,6 +39,31 @@ function normDateLite(value?: string | null): string | null {
   return null;
 }
 
+// 🔹 Normalizador de DNI/CUIT
+function formatDniCuit(raw?: string | null): string {
+  if (raw == null) return '—';
+  const digits = String(raw).replace(/\D+/g, '');
+  if (!digits) return '—';
+
+  // CUIT/CUIL: 11 dígitos → XX-XXXXXXXX-X
+  if (digits.length === 11) {
+    return `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}`;
+  }
+
+  // DNI: 8 dígitos → XX.XXX.XXX
+  if (digits.length === 8) {
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  }
+
+  // DNI antiguo: 7 dígitos → X.XXX.XXX
+  if (digits.length === 7) {
+    return `${digits.slice(0, 1)}.${digits.slice(1, 4)}.${digits.slice(4)}`;
+  }
+
+  // Genérico: separador de miles con puntos
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
 // Ticket + joins (el * ya trae solicitar_presupuesto)
 const { data } = await supabase
   .from('tickets_mian')
@@ -195,7 +220,10 @@ const quierePresupuesto =
             </div>
 
             <div class="col"><strong>Técnico:</strong> {equipo?.tecnico ? `${equipo.tecnico.nombre} ${equipo.tecnico.apellido}` : '—'}</div>
-            <div class="col"><strong>DNI/CUIT:</strong> {equipo?.cliente?.dni_cuit ?? '—'}</div>
+
+            <!-- DNI/CUIT normalizado -->
+            <div class="col"><strong>DNI/CUIT:</strong> {formatDniCuit(equipo?.cliente?.dni_cuit)}</div>
+
             <div class="col"><strong>Correo:</strong> {equipo?.cliente?.correo_electronico ?? '—'}</div>
             <div class="col"><strong>WhatsApp:</strong> {equipo?.cliente?.whatsapp ?? '—'}</div>
 
@@ -310,7 +338,7 @@ const quierePresupuesto =
     }
   </script>
 
-  <!-- Miniaturas -> imagen principal (sin errores TS) -->
+  <!-- Miniaturas -> imagen principal -->
   <script>
     const thumbs = document.querySelectorAll('#thumbs .thumb');
     const mainImg = document.getElementById('imagen-equipo');
@@ -387,26 +415,25 @@ const quierePresupuesto =
       overlayImg.src = mainImgZoom.currentSrc || mainImgZoom.src;
       overlayZoom.classList.add('open');
       document.body.style.overflow = 'hidden';
-      escala = 1; aplicar(); // arranca centrada sin zoom
+      escala = 1; aplicar();
     });
 
     function cerrarOverlay(){
       overlayZoom.classList.remove('open');
       document.body.style.overflow = '';
-      escala = 1; aplicar(); // reset al cerrar
+      escala = 1; aplicar();
     }
 
     btnCloseZoom.addEventListener('click', cerrarOverlay);
     overlayZoom.addEventListener('click', (e) => {
-      if (e.target === overlayZoom) cerrarOverlay(); // clic en fondo
+      if (e.target === overlayZoom) cerrarOverlay();
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && overlayZoom.classList.contains('open')) cerrarOverlay();
     });
 
-    // ===== Zoom por doble click / doble toque =====
     function toggleZoom() {
-      escala = (escala === 1) ? 2 : 1; // 1x <-> 2x
+      escala = (escala === 1) ? 2 : 1;
       aplicar();
     }
 
@@ -418,9 +445,7 @@ const quierePresupuesto =
     let lastTap = 0;
     overlayImg.addEventListener('click', () => {
       const now = Date.now();
-      if (now - lastTap < 300) { // doble toque
-        toggleZoom();
-      }
+      if (now - lastTap < 300) { toggleZoom(); }
       lastTap = now;
     });
   }
