@@ -15,7 +15,7 @@ function formatARS(v?: string | number | null): string {
 }
 ---
 
-<form method="POST" action={`/api/actualizarPresupuesto?id=${equipo.ticketId}`} class="card shadow-sm">
+<form id="presupuesto-form" method="POST" action={`/api/actualizarPresupuesto?id=${equipo.ticketId}`} class="card shadow-sm">
   <div class="card-body">
     <div class="row g-3">
       <div class="col-md-6">
@@ -46,6 +46,16 @@ function formatARS(v?: string | number | null): string {
           <option value="">Seleccionar</option>
           <option value="Sí" selected={equipo?.garantia_activa === 'Sí'}>Sí</option>
           <option value="No" selected={equipo?.garantia_activa === 'No'}>No</option>
+        </select>
+      </div>
+
+      <!-- Tri-estado: Sin seleccionar / Sí / No -->
+      <div class="col-md-6">
+        <label class="form-label">¿Quiere saber presupuesto?</label>
+        <select name="solicitar_presupuesto" class="form-select">
+          <option value="" selected={!(equipo?.solicitar_presupuesto === 'Si' || equipo?.solicitar_presupuesto === 'No')}>Sin seleccionar</option>
+          <option value="Si" selected={equipo?.solicitar_presupuesto === 'Si'}>Sí</option>
+          <option value="No" selected={equipo?.solicitar_presupuesto === 'No'}>No</option>
         </select>
       </div>
 
