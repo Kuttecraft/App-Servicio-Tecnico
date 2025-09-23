@@ -83,13 +83,20 @@ function formatARS(v?: string | number | null): string {
 function prettifyDniCuit(s?: string | null): string {
   if (!s) return '';
   const digits = String(s).replace(/\D+/g, '');
-  if (digits.length === 8) {
-    return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5,8)}`; // DNI
-  }
+  if (!digits) return '';
+
+  // CUIT/CUIL: 11 dígitos → XX-XXXXXXXX-X
   if (digits.length === 11) {
-    return `${digits.slice(0,2)}-${digits.slice(2,10)}-${digits.slice(10,11)}`; // CUIT
+    return `${digits.slice(0,2)}-${digits.slice(2,10)}-${digits.slice(10)}`;
   }
-  return String(s);
+
+  // DNI: 7 u 8 dígitos → agrupado con puntos (X.XXX.XXX | XX.XXX.XXX)
+  if (digits.length === 7 || digits.length === 8) {
+    return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+
+  // Otros largos → dejar solo dígitos, mostrando miles con puntos como fallback
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
 const { id } = Astro.params as { id: string };
@@ -491,41 +498,72 @@ const currentTecLabel: string = (() => {
   </script>
 
   <!-- Formateo ARS al escribir -->
-  <script>
-    (function(){
-      function parseToNumberLike(s){ if(!s) return ''; let t=String(s).trim(); t=t.replace(/[^\d.,-]/g,'');
-        const lastDot=t.lastIndexOf('.'), lastCom=t.lastIndexOf(',');
-        if(lastDot!==-1&&lastCom!==-1){ const dec=lastDot>lastCom?'.':','; const mil=dec==='.'?',':'.'; t=t.split(mil).join(''); if(dec===',') t=t.replace(',', '.'); }
-        else if(lastCom!==-1&&lastDot===-1){ t=t.replace(',', '.'); } return t; }
-      function formatARSFromStr(s){ const n=Number(parseToNumberLike(s)); if(!isFinite(n)) return s||'';
-        const dec=(String(s).split('.')[1]||'').length; const d=dec?Math.min(2,dec):0;
-        return '$'+n.toLocaleString('es-AR',{minimumFractionDigits:d, maximumFractionDigits:d}); }
-      function onBlurFormat(e){ const el = e.target as HTMLInputElement; el.value = formatARSFromStr(el.value); }
-      function onInputClean(e){ const el = e.target as HTMLInputElement; el.value = el.value.replace(/[^\d.,$-]/g,''); }
-      document.querySelectorAll('.currency-ars').forEach((el)=>{ el.addEventListener('blur', onBlurFormat as any); el.addEventListener('input', onInputClean as any); });
-    })();
-  </script>
+    <script>
+      (function(){
+        function parseToNumberLike(s){
+          if(!s) return '';
+          let t=String(s).trim().replace(/[^\d.,-]/g,'');
+          const lastDot=t.lastIndexOf('.'), lastCom=t.lastIndexOf(',');
+          if(lastDot!==-1&&lastCom!==-1){
+            const dec=lastDot>lastCom?'.':','; const mil=dec==='.'?',':'.';
+            t=t.split(mil).join(''); if(dec===',') t=t.replace(',', '.');
+          } else if(lastCom!==-1&&lastDot===-1){
+            t=t.replace(',', '.');
+          }
+          return t;
+        }
+        function formatARSFromStr(s){
+          const n=Number(parseToNumberLike(s));
+          if(!isFinite(n)) return s||'';
+          const dec=(String(s).split('.')[1]||'').length;
+          const d=dec?Math.min(2,dec):0;
+          return '$'+n.toLocaleString('es-AR',{minimumFractionDigits:d, maximumFractionDigits:d});
+        }
+        function onBlurFormat(e){
+          const el = e.target;
+          if (!(el instanceof HTMLInputElement)) return;
+          el.value = formatARSFromStr(el.value);
+        }
+        function onInputClean(e){
+          const el = e.target;
+          if (!(el instanceof HTMLInputElement)) return;
+          el.value = el.value.replace(/[^\d.,$-]/g,'');
+        }
+        document.querySelectorAll('.currency-ars').forEach((node)=>{
+          const input = node instanceof HTMLInputElement ? node : null;
+          if (!input) return;
+          input.addEventListener('blur',  onBlurFormat);
+          input.addEventListener('input', onInputClean);
+        });
+      })();
+    </script>
+
 
   <!-- Formateo DNI/CUIT en vivo: 8 dígitos -> XX.XXX.XXX | 11 dígitos -> XX-XXXXXXXX-X -->
   <script>
     (function(){
-      function formatDniCuit(raw){
+      function formatDniCuitLive(raw){
         const digits = String(raw||'').replace(/\D+/g, '');
-        if (digits.length === 8) {
-          return digits.slice(0,2)+'.'+digits.slice(2,5)+'.'+digits.slice(5,8);
-        }
+        if (!digits) return '';
+        // CUIT/CUIL (11)
         if (digits.length === 11) {
           return digits.slice(0,2)+'-'+digits.slice(2,10)+'-'+digits.slice(10);
         }
-        // si no matchea largo, permitimos puntos/guiones existentes y quitamos lo demás
+        // DNI (7 u 8) -> miles con puntos
+        if (digits.length === 7 || digits.length === 8) {
+          return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        }
+        // Otros -> permitir puntos/guiones ya escritos y limpiar lo demás
         return String(raw||'').replace(/[^\d\.\-]/g,'');
       }
+
       const input = document.getElementById('input-dni-cuit');
       if (input instanceof HTMLInputElement) {
         input.addEventListener('input', (e) => {
-          const el = e.target as HTMLInputElement;
+          const el = e.target;
+          if (!(el instanceof HTMLInputElement)) return;
           const before = el.value;
-          const after = formatDniCuit(before);
+          const after  = formatDniCuitLive(before);
           if (before !== after) {
             const atEnd = el.selectionStart === before.length;
             el.value = after;
@@ -533,12 +571,15 @@ const currentTecLabel: string = (() => {
           }
         });
         input.addEventListener('blur', (e) => {
-          const el = e.target as HTMLInputElement;
-          el.value = formatDniCuit(el.value);
+          const el = e.target;
+          if (!(el instanceof HTMLInputElement)) return;
+          el.value = formatDniCuitLive(el.value);
         });
       }
     })();
   </script>
+
+
 
   <!-- Normalizador de “Tamaño de boquilla” a `X mm` (solo en editar) -->
   <script>
@@ -550,7 +591,7 @@ const currentTecLabel: string = (() => {
         const m = s.match(/(\d+\.?\d*|\.\d+)/);
         if (!m) return '';
         let num = m[0];
-        if (num.startsWith('.')) num = '0' + num;     // .4 -> 0.4
+        if (num.startsWith('.')) num = '0' + num;   // .4 -> 0.4
         if (num.endsWith('.'))  num = num.slice(0,-1); // 1. -> 1
         const n = Number(num);
         if (!isFinite(n)) return '';
@@ -563,8 +604,8 @@ const currentTecLabel: string = (() => {
         return num ? (num + ' mm') : '';
       }
 
-      const input = document.querySelector<HTMLInputElement>('input[name="boquilla"]');
-      if (!input) return;
+      const input = document.querySelector('input[name="boquilla"]');
+      if (!(input instanceof HTMLInputElement)) return;
 
       // Normaliza al cargar si ya hay valor
       if (input.value && input.value.trim()) {
@@ -573,7 +614,8 @@ const currentTecLabel: string = (() => {
 
       // Limpiar caracteres raros mientras escribe
       input.addEventListener('input', (e) => {
-        const el = e.target as HTMLInputElement;
+        const el = e.target;
+        if (!(el instanceof HTMLInputElement)) return;
         const before = el.value;
         const cleaned = before.replace(/[^0-9.,a-zA-Z\s]/g, '');
         if (before !== cleaned) el.value = cleaned;
@@ -581,7 +623,8 @@ const currentTecLabel: string = (() => {
 
       // Normaliza al salir del campo
       input.addEventListener('blur', (e) => {
-        const el = e.target as HTMLInputElement;
+        const el = e.target;
+        if (!(el instanceof HTMLInputElement)) return;
         el.value = normalizeToMm(el.value);
       });
     })();
