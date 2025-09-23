@@ -1,10 +1,8 @@
 ---
 import { UserButton } from '@clerk/astro/components';
 
-// Prop para decidir si mostramos los filtros
 const { showFilters = false } = Astro.props;
 
-// Lista fija de estados (solo se usa si showFilters = true)
 const ESTADOS = [
   "Nuevo",
   "Retirar",
@@ -19,7 +17,21 @@ const ESTADOS = [
   "No realizada"
 ];
 
-// Leemos los parámetros actuales para hidratar el formulario
+const COLOR_POR_ESTADO: Record<string, string> = {
+  "Nuevo": "#E2FFF6",
+  "Retirar": "#FFE9CC",
+  "Presupuestar": "#FFD9D9",
+  "Enviar presupuesto": "#E9FCEC",
+  "P. Enviado": "#D9EBFF",
+  "Reparación": "#FFFDE1",
+  "Prueba": "#E3DBFF",
+  "Lista": "#FFE3DC",
+  "Entregada": "#E6F6FF",
+  "Feedback Enviado": "#FAE4F6",
+  "Archivada": "#EDEDED",
+  "No realizada": "#FFF1D9"
+};
+
 const by = Astro.url.searchParams.get('by') || 'id';
 const rawQ = Astro.url.searchParams.get('q') || '';
 const q = rawQ.trim();
@@ -27,7 +39,7 @@ const q = rawQ.trim();
 
 <nav class="navbar bg-white border-bottom px-3 py-2 shadow-sm sticky-top">
   <div class="d-flex w-100 align-items-center justify-content-between">
-    <!-- Botón hamburguesa (móvil) -->
+    <!-- Hamburguesa -->
     <button
       class="btn d-md-none me-2"
       type="button"
@@ -40,26 +52,75 @@ const q = rawQ.trim();
     </button>
 
     {showFilters ? (
-      /* ===== Topbar CON filtros (solo en Dashboard) ===== */
       <form
         id="filterForm"
         class="row g-2 justify-content-center w-100 mx-2"
         method="get"
         action="/dashboard"
       >
-        <!-- Campo dinámico (input o select de estado) -->
+        <!-- Campo dinámico -->
         <div
           id="q-container"
           class="col-12 col-md-6"
           data-estados={encodeURIComponent(JSON.stringify(ESTADOS))}
+          data-colores={encodeURIComponent(JSON.stringify(COLOR_POR_ESTADO))}
         >
           {by === 'estado' ? (
-            <select name="q" class="form-select w-100">
-              <option value="">Seleccioná estado…</option>
-              {ESTADOS.map((e) => (
-                <option value={e} selected={q === e}>{e}</option>
-              ))}
-            </select>
+            <!-- Dropdown SSR con puntitos -->
+            <div class="dropdown w-100" id="estado-dropdown">
+              <input type="hidden" name="q" value={q} id="estado-hidden" />
+
+              <button
+                class="btn btn-outline-secondary w-100 d-flex justify-content-between align-items-center"
+                type="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+                id="estado-toggle"
+              >
+                <span id="estado-label">{q || 'Seleccioná estado…'}</span>
+                <span
+                  class="estado-dot ms-2"
+                  style={`--dot-color: ${COLOR_POR_ESTADO[q] || '#ccc'}`}
+                />
+              </button>
+
+              <ul class="dropdown-menu w-100 shadow-sm">
+                <li>
+                  <button
+                    type="button"
+                    class="dropdown-item d-flex justify-content-between align-items-center"
+                    data-value=""
+                  >
+                    <span>(Sin filtro)</span>
+                    <span class="estado-dot" style="--dot-color:#ccc;"></span>
+                  </button>
+                </li>
+                {ESTADOS.map((e) => (
+                  <li>
+                    <button
+                      type="button"
+                      class="dropdown-item d-flex justify-content-between align-items-center"
+                      data-value={e}
+                    >
+                      <span>{e}</span>
+                      <span
+                        class="estado-dot"
+                        style={`--dot-color: ${COLOR_POR_ESTADO[e] || '#007bff'}`}
+                      />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <noscript>
+                <select name="q" class="form-select w-100 mt-2">
+                  <option value="">Seleccioná estado…</option>
+                  {ESTADOS.map((e) => (
+                    <option value={e} selected={q === e}>{e}</option>
+                  ))}
+                </select>
+              </noscript>
+            </div>
           ) : (
             <input
               type="text"
@@ -82,7 +143,7 @@ const q = rawQ.trim();
           </select>
         </div>
 
-        <!-- Botones siempre juntos en una fila; en desktop más chicos -->
+        <!-- Botones -->
         <div class="col-12">
           <div class="row g-2 justify-content-center">
             <div class="col-6 col-md-3">
@@ -94,15 +155,12 @@ const q = rawQ.trim();
           </div>
         </div>
 
-        <!-- Paginación: al filtrar, siempre arrancamos en 1 -->
         <input type="hidden" name="page" value="1" />
       </form>
     ) : (
-      /* ===== Topbar SIMPLE (todas las otras páginas, ej. Crear Ticket) ===== */
       <div class="flex-grow-1"></div>
     )}
 
-    <!-- User (Clerk) -->
     <div class="ms-auto">
       <UserButton />
     </div>
@@ -110,10 +168,27 @@ const q = rawQ.trim();
 
   {showFilters && (
     <>
-      <!-- Pasamos ESTADOS del servidor al cliente como JSON seguro (para el JS) -->
+      <!-- También por si lo querés leer desde JS -->
       <script type="application/json" id="estados-data">{JSON.stringify(ESTADOS)}</script>
-      <!-- Cargamos JS externo SOLO cuando hay filtros -->
+      <script type="application/json" id="colores-data">{JSON.stringify(COLOR_POR_ESTADO)}</script>
       <script defer src="/scripts/form-actualizar-filtro.js"></script>
     </>
   )}
 </nav>
+
+<style>
+  .estado-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--dot-color, #007bff);
+    border: 1px solid rgba(0,0,0,.15);
+    display: inline-block;
+    flex: 0 0 auto;
+  }
+  .dropdown-menu .dropdown-item.active,
+  .dropdown-menu .dropdown-item:active {
+    background-color: rgba(0,0,0,.05);
+    color: inherit;
+  }
+</style>

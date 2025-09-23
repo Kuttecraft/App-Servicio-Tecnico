@@ -182,3 +182,36 @@ a.btn-editar-card {
     margin-top: 1rem !important;
   }
 }
+
+.estado-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--dot-color, #007bff);
+  border: 1px solid rgba(0,0,0,.15);
+  display: inline-block;
+  flex: 0 0 auto;
+
+  /* Pastel → apenas más fuerte */
+  filter: brightness(0.85) saturate(1.6);
+}
+
+.dropdown-menu .dropdown-item.active,
+.dropdown-menu .dropdown-item:active {
+  background-color: rgba(0,0,0,.05);
+  color: inherit;
+}
+
+/* Intensificar solo los circulitos del dropdown */
+.estado-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--dot-color, #007bff);
+  border: 1px solid rgba(0,0,0,.15);
+  display: inline-block;
+  flex: 0 0 auto;
+
+  /* hace el color un poquito más intenso sin perder tono */
+  filter: brightness(0.9) saturate(1.4);
+}
