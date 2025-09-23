@@ -51,23 +51,38 @@ function toMDY(v?: string | null): string {
   return '';
 }
 
-/** ========= Helpers de moneda ARS ========= */
+/** ========= Helpers de moneda ARS (FIX miles con punto) ========= */
 function parseToNumberLike(s?: string | null): string {
   if (!s) return '';
-  let t = String(s).trim();
-  t = t.replace(/[^\d.,-]/g, '');
-  const lastDot = t.lastIndexOf('.');
-  const lastCom = t.lastIndexOf(',');
-  if (lastDot !== -1 && lastCom !== -1) {
-    const decimalSep = lastDot > lastCom ? '.' : ',';
+  let t = String(s).trim().replace(/[^\d.,-]/g, '');
+
+  const hasDot = t.includes('.');
+  const hasCom = t.includes(',');
+
+  // Punto y coma: el ÚLTIMO símbolo actúa como decimal
+  if (hasDot && hasCom) {
+    const lastDot = t.lastIndexOf('.');
+    const lastCom = t.lastIndexOf(',');
+    const decimalSep   = lastDot > lastCom ? '.' : ',';
     const thousandsSep = decimalSep === '.' ? ',' : '.';
     t = t.split(thousandsSep).join('');
     if (decimalSep === ',') t = t.replace(',', '.');
-  } else if (lastCom !== -1 && lastDot === -1) {
-    t = t.replace(',', '.');
+    return t;
   }
-  return t;
+
+  // Solo coma -> decimal
+  if (hasCom && !hasDot) return t.replace(',', '.');
+
+  // Solo punto -> si parece miles (X.XXX[.XXX]...) quitar puntos
+  if (hasDot && !hasCom) {
+    const parts = t.split('.');
+    const looksLikeThousands = parts.length > 1 && parts.slice(1).every(p => p.length === 3);
+    return looksLikeThousands ? parts.join('') : t; // miles o decimal real
+  }
+
+  return t; // solo dígitos
 }
+
 function formatARS(v?: string | number | null): string {
   if (v == null || v === '') return '';
   const asStr = typeof v === 'number' ? String(v) : String(v);
