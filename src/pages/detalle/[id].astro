@@ -39,7 +39,7 @@ function normDateLite(value?: string | null): string | null {
   return null;
 }
 
-// Ticket + joins
+// Ticket + joins (el * ya trae solicitar_presupuesto)
 const { data } = await supabase
   .from('tickets_mian')
   .select(`
@@ -100,6 +100,12 @@ const { count: comentariosCount } = await supabase
   .from('ticket_comentarios')
   .select('id', { count: 'exact', head: true })
   .eq('ticket_id', id);
+
+// Etiqueta tri-estado para “quiere presupuesto”
+const quierePresupuesto =
+  equipo?.solicitar_presupuesto === 'Si' ? 'Sí' :
+  equipo?.solicitar_presupuesto === 'No' ? 'No' :
+  'Sin seleccionar';
 ---
 
 <BasePrivateLayout>
@@ -198,6 +204,11 @@ const { count: comentariosCount } = await supabase
             </div>
             <div class="col">
               <strong>Fecha listo:</strong> {fechaListoNorm ? formatearFecha(fechaListoNorm) : '—'}
+            </div>
+
+            <!-- NUEVO: tri-estado visible en detalle -->
+            <div class="col">
+              <strong>¿Quiere saber presupuesto?</strong> {quierePresupuesto}
             </div>
           </div>
         </div>
@@ -336,7 +347,7 @@ const { count: comentariosCount } = await supabase
     box-shadow:0 10px 30px rgba(0,0,0,.6);
     user-select:none;
     transition:transform .2s ease;
-    transform-origin:center center; /* clave para mantener centro */
+    transform-origin:center center;
     cursor: zoom-in;
   }
   .zoom-overlay__close{
@@ -393,10 +404,10 @@ const { count: comentariosCount } = await supabase
       if (e.key === 'Escape' && overlayZoom.classList.contains('open')) cerrarOverlay();
     });
 
-    // ===== Zoom por doble click (desktop) / doble toque (mobile) =====
+    // ===== Zoom por doble click / doble toque =====
     function toggleZoom() {
       escala = (escala === 1) ? 2 : 1; // 1x <-> 2x
-      aplicar(); // queda centrada por flex + transform-origin:center
+      aplicar();
     }
 
     overlayImg.addEventListener('dblclick', (e) => {
