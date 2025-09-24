@@ -215,3 +215,10 @@ a.btn-editar-card {
   /* hace el color un poquito más intenso sin perder tono */
   filter: brightness(0.9) saturate(1.4);
 }
+
+.comentario { white-space: pre-line; }
+
+/* por si el componente usa .card-text o .list-group-item p */
+.card-text, .comment-message, .list-group-item p {
+  white-space: pre-line;
+}

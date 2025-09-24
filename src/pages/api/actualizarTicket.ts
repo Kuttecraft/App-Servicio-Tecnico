@@ -1,5 +1,7 @@
+// src/pages/api/actualizarTicket.ts
 import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
+import { resolverAutor, nombreAutor } from '../../lib/resolverAutor';
 
 /** Normaliza a YYYY-MM-DD desde ISO, YYYY/MM/DD, MM/DD/YYYY o DD/MM/YYYY. */
 function normDate(value?: string | null): string | null {
@@ -120,6 +122,23 @@ function jsonError(message: string, status = 500) {
   });
 }
 
+/* ====== Helpers de "display" para mostrar en comentario ====== */
+const show = (v: any) => (v === null || v === undefined || v === '') ? '—' : String(v);
+function formatARSForShow(v?: string | null) {
+  if (v == null || v === '') return '—';
+  const n = Number(v);
+  if (!isFinite(n)) return show(v);
+  const dec = (String(v).split('.')[1]?.length || 0);
+  const d = dec ? Math.min(2, dec) : 0;
+  return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+const boolShow = (v: string | boolean | null | undefined) =>
+  v === true || v === 'true'
+    ? 'Sí'
+    : v === false || v === 'false'
+    ? 'No'
+    : '—';
+
 export const POST: APIRoute = async ({ request, params, locals }) => {
   try {
     const perfil = (locals as any)?.perfil as { rol?: string; admin?: boolean } | undefined;
@@ -163,13 +182,58 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     const fields: Record<string, string> = {};
     formData.forEach((val, key) => { if (typeof val === 'string') fields[key] = val.trim(); });
 
-    // ---------- Leer fila actual ----------
+    // ---------- Leer fila actual + valores para comparar ----------
     const { data: tRow, error: tErr } = await supabase
       .from('tickets_mian')
-      .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion, estado, maquina_reparada, tecnico_id')
+      .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion, estado, maquina_reparada, tecnico_id, notas_del_tecnico, notas_del_cliente')
       .eq('id', idNum)
       .single();
     if (tErr || !tRow) return jsonError(`No se pudo obtener el ticket (id=${String(id)})`, 500);
+
+    // Cargar valores actuales de tablas relacionadas (si vamos a tocar esos campos)
+    let clienteOld: any = null;
+    if (tRow.cliente_id) {
+      const { data } = await supabase
+        .from('cliente')
+        .select('dni_cuit, correo_electronico, whatsapp, comentarios')
+        .eq('id', tRow.cliente_id)
+        .maybeSingle();
+      clienteOld = data || null;
+    }
+
+    let impresoraOld: any = null;
+    if (tRow.impresora_id) {
+      const { data } = await supabase
+        .from('impresoras')
+        .select('modelo, maquina, numero_de_serie, tamano_de_boquilla')
+        .eq('id', tRow.impresora_id)
+        .maybeSingle();
+      impresoraOld = data || null;
+    }
+
+    const { data: deliveryOld } = await supabase
+      .from('delivery')
+      .select('pagado, medio_de_entrega, cotizar_delivery, informacion_adicional_delivery')
+      .eq('ticket_id', idNum)
+      .maybeSingle();
+
+    const { data: presOld } = await supabase
+      .from('presupuestos')
+      .select('monto, link_presupuesto, cubre_garantia, fecha_presupuesto')
+      .eq('ticket_id', idNum)
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // ====== acumulador de cambios para comentario ======
+    const cambios: string[] = [];
+    const pushCambio = (label: string, before: any, after: any, formatter?: (v:any)=>string) => {
+      const f = formatter ?? show;
+      const b = f(before);
+      const a = f(after);
+      if (b === a) return;
+      cambios.push(`- <strong>${label}</strong>: de "${b}" a "${a}"`);
+    };
 
     // ========== Ticket principal ==========
     const fechaFormularioMDY = toMDYFromAny(fields.fechaFormulario); // ← siempre M/D/YYYY
@@ -179,87 +243,107 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
     const datosTicketsMian: Record<string, any> = {
       estado: estadoForm || tRow.estado || null,
-      // 👇 guardamos siempre en M/D/YYYY para que estadísticas lo tome seguro
       marca_temporal: (fechaFormularioMDY ?? tRow.marca_temporal) || null,
       fecha_de_reparacion: (fechaListoNorm ?? tRow.fecha_de_reparacion) || null,
       notas_del_tecnico: fields.notaTecnico || null,
-      // “maquina” (UI) representa el modelo
       maquina_reparada: fields.maquina || fields.modelo || tRow.maquina_reparada || null,
     };
 
-    // guardamos “Detalle del problema” como notas_del_cliente del ticket
+    // Comparar cambios de ticket
+    pushCambio('estado', tRow.estado, datosTicketsMian.estado);
+    pushCambio('fecha formulario', tRow.marca_temporal, datosTicketsMian.marca_temporal);
+    pushCambio('fecha listo', tRow.fecha_de_reparacion, datosTicketsMian.fecha_de_reparacion);
+    pushCambio('nota técnico', tRow.notas_del_tecnico, datosTicketsMian.notas_del_tecnico);
+    pushCambio('modelo/máquina', tRow.maquina_reparada, datosTicketsMian.maquina_reparada);
+
     if (typeof fields.detalleCliente === 'string') {
+      // guardamos “Detalle del problema” como notas_del_cliente del ticket
+      pushCambio('detalle del problema', tRow.notas_del_cliente, fields.detalleCliente);
       datosTicketsMian.notas_del_cliente = fields.detalleCliente;
     }
 
     // ========== Técnico ==========
-    // 1) Prioridad al select <select name="tecnico_id"> desde editar.astro
     if ('tecnico_id' in fields) {
+      const prevTecId = tRow.tecnico_id ?? null;
+
+      // calcular nuevo id según el form
+      let newTecId: number | null = null;
       const raw = fields.tecnico_id;
       if (raw === '') {
-        datosTicketsMian.tecnico_id = null; // “— Sin asignar —”
+        datosTicketsMian.tecnico_id = null;        // “— Sin asignar —”
+        newTecId = null;
       } else {
         const tid = Number(raw);
         if (Number.isFinite(tid) && tid > 0) {
           datosTicketsMian.tecnico_id = tid;
+          newTecId = tid;
+        } else {
+          datosTicketsMian.tecnico_id = null;
+          newTecId = null;
         }
+      }
+
+      // Si no cambió el ID, no mostramos nada
+      const changed = (prevTecId ?? null) !== (newTecId ?? null);
+
+      if (changed) {
+        // Traer en un solo query ambos técnicos (si existen)
+        const ids: number[] = [];
+        if (prevTecId != null) ids.push(prevTecId);
+        if (newTecId  != null && newTecId !== prevTecId) ids.push(newTecId);
+
+        let prevLabel = '—';
+        let newLabel  = '—';
+
+        if (ids.length > 0) {
+          const { data: tecs } = await supabase
+            .from('tecnicos')
+            .select('id, nombre, apellido, email')
+            .in('id', ids);
+
+          const byId = new Map<number, any>();
+          (tecs ?? []).forEach(t => byId.set(Number(t.id), t));
+
+          const labelFrom = (t: any): string => {
+            if (!t) return '—';
+            const email = (t.email ?? '').toString().trim();
+            if (email && email.includes('@')) return email.split('@')[0]; // local-part
+            const nom = (t.nombre ?? '').toString().trim();
+            const ape = (t.apellido ?? '').toString().trim();
+            const full = `${nom} ${ape}`.trim();
+            return full || `#${t.id}`;
+          };
+
+          if (prevTecId != null) prevLabel = labelFrom(byId.get(prevTecId));
+          if (newTecId  != null) newLabel  = labelFrom(byId.get(newTecId));
+        }
+
+        cambios.push(`- <strong>técnico asignado</strong>: de "${prevLabel}" a "${newLabel}"`);
       }
     } else if (typeof fields.tecnico === 'string') {
-      // 2) Fallback legacy: texto “Nombre Apellido”
-      const tecnicoFull = fields.tecnico.trim();
-      if (tecnicoFull === '') {
-        datosTicketsMian.tecnico_id = null; // vaciar si lo dejan vacío
-      } else {
-        const parts = tecnicoFull.split(/\s+/).filter(Boolean);
-        const nombre = parts.shift() ?? '';
-        const apellido = parts.join(' ') || '';
-
-        let tecnicoId: number | null = null;
-
-        if (nombre && apellido) {
-          const { data: tecExact } = await supabase
-            .from('tecnicos')
-            .select('id')
-            .eq('nombre', nombre)
-            .eq('apellido', apellido)
-            .maybeSingle();
-          if (tecExact?.id) {
-            tecnicoId = tecExact.id;
-          } else {
-            const { data: tecLike } = await supabase
-              .from('tecnicos')
-              .select('id, nombre, apellido')
-              .ilike('nombre', `%${nombre}%`)
-              .ilike('apellido', `%${apellido}%`)
-              .order('id', { ascending: true })
-              .limit(1);
-            if (Array.isArray(tecLike) && tecLike[0]?.id) tecnicoId = tecLike[0].id;
-          }
-        } else if (nombre) {
-          const { data: tecByName } = await supabase
-            .from('tecnicos')
-            .select('id, nombre, apellido')
-            .ilike('nombre', `%${nombre}%`)
-            .order('id', { ascending: true })
-            .limit(1);
-          if (Array.isArray(tecByName) && tecByName[0]?.id) tecnicoId = tecByName[0].id;
-        }
-
-        if (tecnicoId !== null) datosTicketsMian.tecnico_id = tecnicoId;
-      }
+      // legacy "Nombre Apellido": no confiable para ID → omitimos del diff
     }
 
     // ========== Cliente (merge: solo lo que venga no vacío) ==========
     if (tRow.cliente_id) {
       const updateCliente: Record<string, any> = {};
       if (typeof fields.dniCuit === 'string' && fields.dniCuit !== '') {
-        updateCliente.dni_cuit = normalizarDniCuit(fields.dniCuit);
+        const nuevo = normalizarDniCuit(fields.dniCuit);
+        pushCambio('DNI/CUIT', clienteOld?.dni_cuit, nuevo);
+        updateCliente.dni_cuit = nuevo;
       }
-      if (typeof fields.whatsapp === 'string' && fields.whatsapp !== '') updateCliente.whatsapp = fields.whatsapp;
-      if (typeof fields.correo === 'string' && fields.correo !== '') updateCliente.correo_electronico = fields.correo;
-
-      // Sincronizamos el "Detalle del problema" también con la ficha del cliente (comentarios)
-      if (typeof fields.detalleCliente === 'string') updateCliente.comentarios = fields.detalleCliente;
+      if (typeof fields.whatsapp === 'string' && fields.whatsapp !== '') {
+        pushCambio('WhatsApp', clienteOld?.whatsapp, fields.whatsapp);
+        updateCliente.whatsapp = fields.whatsapp;
+      }
+      if (typeof fields.correo === 'string' && fields.correo !== '') {
+        pushCambio('correo del cliente', clienteOld?.correo_electronico, fields.correo);
+        updateCliente.correo_electronico = fields.correo;
+      }
+      if (typeof fields.detalleCliente === 'string') {
+        pushCambio('comentarios del cliente', clienteOld?.comentarios, fields.detalleCliente);
+        updateCliente.comentarios = fields.detalleCliente;
+      }
 
       if (Object.keys(updateCliente).length > 0) {
         const { error } = await supabase.from('cliente').update(updateCliente).eq('id', tRow.cliente_id);
@@ -278,16 +362,26 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
         if (maquina) {
           payloadImpresora.modelo  = maquina;
           payloadImpresora.maquina = maquina;
+          const oldModelo = impresoraOld?.modelo ?? impresoraOld?.maquina ?? null;
+          pushCambio('máquina (modelo)', oldModelo, maquina);
         }
-        if (numeroSerie) payloadImpresora.numero_de_serie = numeroSerie;
-        payloadImpresora.tamano_de_boquilla = boquilla || null;
+        if (numeroSerie) {
+          pushCambio('n° de serie', impresoraOld?.numero_de_serie, numeroSerie);
+          payloadImpresora.numero_de_serie = numeroSerie;
+        }
+        if ('boquilla' in fields) {
+          pushCambio('tamaño de boquilla', impresoraOld?.tamano_de_boquilla, boquilla);
+          payloadImpresora.tamano_de_boquilla = boquilla || null;
+        }
 
-        const { error } = await supabase
-          .from('impresoras')
-          .update(payloadImpresora)
-          .eq('id', tRow.impresora_id);
-        if (error) return jsonError('Error al actualizar impresora: ' + error.message, 500);
-      } else {
+        if (Object.keys(payloadImpresora).length > 0) {
+          const { error } = await supabase
+            .from('impresoras')
+            .update(payloadImpresora)
+            .eq('id', tRow.impresora_id);
+          if (error) return jsonError('Error al actualizar impresora: ' + error.message, 500);
+        }
+      } else if (maquina || numeroSerie || boquilla) {
         // crear y vincular
         let impresoraId: number | null = null;
 
@@ -326,6 +420,10 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
             if (impErr) return jsonError('No se pudo crear la impresora: ' + impErr.message, 500);
             impresoraId = impNew!.id;
           }
+          // cambios semánticos (creación)
+          pushCambio('máquina (modelo)', null, maquina || 'Desconocida');
+          if (numeroSerie) pushCambio('n° de serie', null, numeroSerie);
+          if (boquilla) pushCambio('tamaño de boquilla', null, boquilla);
         }
 
         if (impresoraId) {
@@ -341,15 +439,24 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     // ========== Delivery ==========
     const deliveryUpd: any = {};
     if (typeof fields.cobrado === 'string') {
-      deliveryUpd.pagado =
-        fields.cobrado === 'true' ? 'true' :
-        fields.cobrado === 'false' ? 'false' :
-        null;
+      const nuevo = fields.cobrado === 'true' ? 'true' : fields.cobrado === 'false' ? 'false' : null;
+      pushCambio('cobrado', deliveryOld?.pagado, nuevo, boolShow);
+      deliveryUpd.pagado = nuevo;
     }
     if (isAdmin) {
-      if (typeof fields.medioEntrega === 'string') deliveryUpd.medio_de_entrega = fields.medioEntrega || null;
-      if (typeof fields.costoDelivery === 'string') deliveryUpd.cotizar_delivery = fields.costoDelivery || null;
-      if (typeof fields.infoDelivery === 'string')  deliveryUpd.informacion_adicional_delivery = fields.infoDelivery || null;
+      if (typeof fields.medioEntrega === 'string') {
+        pushCambio('modo de entrega', deliveryOld?.medio_de_entrega, fields.medioEntrega);
+        deliveryUpd.medio_de_entrega = fields.medioEntrega || null;
+      }
+      if (typeof fields.costoDelivery === 'string') {
+        const normNew = normalizarMontoTexto(fields.costoDelivery);
+        pushCambio('costo delivery', deliveryOld?.cotizar_delivery, normNew, formatARSForShow);
+        deliveryUpd.cotizar_delivery = normNew;
+      }
+      if (typeof fields.infoDelivery === 'string') {
+        pushCambio('info delivery', deliveryOld?.informacion_adicional_delivery, fields.infoDelivery);
+        deliveryUpd.informacion_adicional_delivery = fields.infoDelivery || null;
+      }
     }
 
     if (Object.keys(deliveryUpd).length > 0) {
@@ -378,10 +485,24 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     };
     if (fechaPresuNorm) presUpdate.fecha_presupuesto = fechaPresuNorm;
 
-    // Upsert y flag de guardado
     let presGuardado = false;
 
     if (Object.values(presUpdate).some(v => v !== undefined)) {
+      // diffs visibles (solo para los que vienen en form)
+      if ('monto' in fields) {
+        pushCambio('monto', presOld?.monto, normalizarMontoTexto(fields.monto), formatARSForShow);
+      }
+      if ('linkPresupuesto' in fields) {
+        pushCambio('link presupuesto', presOld?.link_presupuesto, fields.linkPresupuesto || null);
+      }
+      if ('cubreGarantia' in fields || 'cubre_garantia' in fields) {
+        const newBool = (fields.cubre_garantia ?? fields.cubreGarantia) === 'true' ? 'true' : 'false';
+        pushCambio('cubre garantía', presOld?.cubre_garantia, newBool, boolShow);
+      }
+      if (fechaPresuNorm) {
+        pushCambio('fecha presupuesto', presOld?.fecha_presupuesto, fechaPresuNorm);
+      }
+
       const { data: updRows, error: updErr } = await supabase
         .from('presupuestos')
         .update(presUpdate)
@@ -447,6 +568,33 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     {
       const { error } = await supabase.from('tickets_mian').update(datosTicketsMian).eq('id', idNum);
       if (error) return jsonError('Error al actualizar ticket: ' + error.message, 500);
+    }
+
+    // ====== Comentario automático con el diff ======
+    if (cambios.length > 0) {
+      // autor / local-part
+      const autor = await resolverAutor(locals);
+      if (!autor || autor.activo === false) {
+        return jsonError('No se pudo determinar el autor para comentar cambios', 401);
+      }
+      const userEmail: string | null =
+        (locals as any)?.user?.email ||
+        (locals as any)?.perfil?.email ||
+        (locals as any)?.usuario?.email ||
+        null;
+      const localPart = (typeof userEmail === 'string' && userEmail.includes('@'))
+        ? userEmail.split('@')[0]
+        : nombreAutor(autor);
+
+      const encabezado = `${localPart} cambió los siguientes datos:`;
+      const cuerpo = cambios.join('\n'); // una línea por cambio, con viñeta y <strong>
+      const mensaje = `${encabezado}\n${cuerpo}`.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+      const { error: cErr } = await supabase
+        .from('ticket_comentarios')
+        .insert({ ticket_id: idNum, autor_id: autor.id, mensaje });
+
+      if (cErr) return jsonError('No se pudo crear el comentario de cambios: ' + cErr.message, 500);
     }
 
     return new Response(null, { status: 303, headers: { Location: `/detalle/${idNum}` } });

@@ -104,7 +104,8 @@ const getClienteNombre = (cli: any): string | null => {
                 <strong>{getAutorNombre(c.autor)}</strong>
                 · {fechaHoraAR(c.creado_en)}
               </div>
-              <div>{c.mensaje}</div>
+              <!-- 🔹 Aplicamos la clase que respeta \n -->
+              <div class="comentario" set:html={c.mensaje}></div>
             </li>
           ))}
         </ul>
@@ -167,7 +168,8 @@ const getClienteNombre = (cli: any): string | null => {
               <div class="small text-muted">
                 <strong></strong> · <span class="fecha"></span>
               </div>
-              <div class="mensaje"></div>
+              <!-- 🔹 Aca también la clase para respetar saltos -->
+              <div class="mensaje comentario"></div>
             `;
             (li.querySelector('strong') as HTMLElement).textContent = autor;
             (li.querySelector('.fecha') as HTMLElement).textContent = fechaHumana;
