@@ -1,10 +1,11 @@
+// Convierte el filtro "q" en input de texto o dropdown de estados con color.
 (function () {
   document.addEventListener('DOMContentLoaded', function () {
-    var bySelect = document.getElementById('by-select');
-    var qContainer = document.getElementById('q-container');
+    var bySelect = document.getElementById('by-select');      // <select> que elige "texto" | "estado"
+    var qContainer = document.getElementById('q-container');  // contenedor donde se renderiza el campo q
     if (!bySelect || !qContainer) return;
 
-    // === Estados ===
+    // === Estados disponibles (vienen del servidor en data-estados, URL-encoded JSON) ===
     var estados = [];
     try {
       var rawFromData = qContainer.dataset && qContainer.dataset.estados;
@@ -12,7 +13,7 @@
     } catch (e) {}
     if (!Array.isArray(estados)) estados = [];
 
-    // === Colores por estado ===
+    // === Mapa de colores por estado (data-colores, URL-encoded JSON) ===
     var colores = {};
     try {
       var rawColors = qContainer.dataset && qContainer.dataset.colores;
@@ -20,24 +21,29 @@
     } catch (e) {}
     if (typeof colores !== 'object' || colores === null) colores = {};
 
+    // Memoria del último valor usado en cada modo (para no perder lo tipeado)
     var lastTextValue = '';
     var lastEstadoValue = '';
 
+    // Color para el puntito del estado (fallback azul)
     function getColor(estado) {
       return colores[estado] || '#007bff';
     }
 
+    // Renderiza el dropdown de estados (con input hidden[name="q"])
     function renderEstadoDropdown(selected) {
       var wrapper = document.createElement('div');
       wrapper.className = 'dropdown w-100';
       wrapper.id = 'estado-dropdown';
 
+      // Campo real que viaja en el form: q = "<estado>"
       var hidden = document.createElement('input');
       hidden.type = 'hidden';
       hidden.name = 'q';
       hidden.value = selected || '';
       hidden.id = 'estado-hidden';
 
+      // Botón que abre el menú y muestra estado + puntito
       var toggle = document.createElement('button');
       toggle.className = 'btn btn-outline-secondary w-100 d-flex justify-content-between align-items-center';
       toggle.type = 'button';
@@ -56,10 +62,11 @@
       toggle.appendChild(label);
       toggle.appendChild(dot);
 
+      // Menú con opciones + “(Sin filtro)”
       var ul = document.createElement('ul');
       ul.className = 'dropdown-menu w-100 shadow-sm';
 
-      // (Sin filtro)
+      // Opción: sin filtro
       var liEmpty = document.createElement('li');
       var btnEmpty = document.createElement('button');
       btnEmpty.type = 'button';
@@ -69,7 +76,7 @@
       liEmpty.appendChild(btnEmpty);
       ul.appendChild(liEmpty);
 
-      // Items con color correcto
+      // Opciones por cada estado (con color)
       estados.forEach(function (e) {
         var li = document.createElement('li');
         var btn = document.createElement('button');
@@ -83,6 +90,7 @@
         ul.appendChild(li);
       });
 
+      // Montaje
       wrapper.appendChild(hidden);
       wrapper.appendChild(toggle);
       wrapper.appendChild(ul);
@@ -90,7 +98,7 @@
       qContainer.innerHTML = '';
       qContainer.appendChild(wrapper);
 
-      // Interacción
+      // Interacción: click en ítem → actualiza hidden, label y puntito
       ul.querySelectorAll('.dropdown-item').forEach(btn => {
         btn.addEventListener('click', () => {
           const val = btn.dataset.value || '';
@@ -103,6 +111,7 @@
       });
     }
 
+    // Renderiza input de texto simple para q
     function renderTextInput(value) {
       var input = document.createElement('input');
       input.type = 'text';
@@ -115,31 +124,30 @@
       qContainer.appendChild(input);
     }
 
-    // Recordar valor inicial renderizado por el servidor
+    // Bootstrap: detecta qué hay renderizado por el servidor y guarda su valor
     (function bootstrapMemory() {
       var currentField = qContainer.querySelector('[name="q"]');
       if (!currentField) return;
 
-      // Si ya está el dropdown SSR, no lo tocamos (y ya trae los colores correctos)
+      // Si el servidor ya puso el dropdown (hidden), tomamos ese valor y ajustamos color inicial
       if (currentField.tagName === 'INPUT' && currentField.type === 'hidden') {
         lastEstadoValue = currentField.value || '';
-        // Asegurar que el puntito del botón muestre el color correcto al cargar
         var toggleDot = qContainer.querySelector('#estado-toggle .estado-dot');
         if (toggleDot) toggleDot.style.setProperty('--dot-color', lastEstadoValue ? getColor(lastEstadoValue) : '#ccc');
         return;
       }
 
-      // Si es input de texto
+      // Si es un input de texto, recordamos lo tipeado
       if (currentField.tagName === 'INPUT') {
         lastTextValue = currentField.value || '';
       }
     })();
 
-    // Cambio tipo de campo
+    // Cambio en el <select> (texto ↔ estado)
     bySelect.addEventListener('change', function () {
       var v = bySelect.value;
 
-      // Guardar el valor actual antes de reemplazar
+      // Guardar el valor actual antes de reemplazar el control
       var currentField = qContainer.querySelector('[name="q"]');
       if (currentField) {
         if (currentField.tagName === 'INPUT' && currentField.type === 'hidden') {
@@ -149,6 +157,7 @@
         }
       }
 
+      // Render según selección
       if (v === 'estado') {
         renderEstadoDropdown(lastEstadoValue);
       } else {

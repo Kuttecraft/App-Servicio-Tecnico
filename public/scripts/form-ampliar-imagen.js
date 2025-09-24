@@ -1,11 +1,7 @@
-// Visor a pantalla completa para la imagen principal (#imagen-equipo)
-// Click en la imagen -> abre visor
-// Doble click / doble toque -> zoom 2x o vuelve a 1x
-// Esc, botón o clic afuera -> cerrar
-
+// Visor fullscreen para #imagen-equipo con zoom (dblclick/tap), y cierre por botón/Esc/click afuera.
 (function () {
   document.addEventListener('DOMContentLoaded', () => {
-    // Estilos inyectados
+    // ===== Inyecta CSS del visor (overlay + botón) =====
     const css = `
       .visor-imagen__overlay {
         position: fixed; inset: 0;
@@ -41,7 +37,7 @@
     style.textContent = css;
     document.head.appendChild(style);
 
-    // Overlay
+    // ===== Crea overlay del visor y lo agrega al body =====
     const overlay = document.createElement('div');
     overlay.className = 'visor-imagen__overlay';
     overlay.innerHTML = `
@@ -52,49 +48,56 @@
     `;
     document.body.appendChild(overlay);
 
+    // Elementos clave
     const imgZoom = overlay.querySelector('.visor-imagen__img');
     const btnCerrar = overlay.querySelector('.visor-imagen__close');
     const mainImg = document.getElementById('imagen-equipo');
 
-    if (!mainImg) return;
+    // Si no hay imagen principal o no renderizó el visor, salimos
+    if (!mainImg || !imgZoom || !btnCerrar) return;
 
+    // ===== Estado de zoom =====
     let escala = 1;
     function aplicar() {
       imgZoom.style.transform = `scale(${escala})`;
       imgZoom.style.cursor = escala > 1 ? 'zoom-out' : 'zoom-in';
     }
 
-    // Abrir visor desde la imagen principal
+    // ===== Abrir visor desde la imagen principal =====
     function abrir() {
+      // currentSrc cubre <img srcset> en navegadores modernos
       imgZoom.src = mainImg.currentSrc || mainImg.src;
       overlay.classList.add('is-open');
-      document.body.style.overflow = 'hidden';
-      escala = 1; aplicar();
+      document.body.style.overflow = 'hidden'; // evita scroll del fondo
+      escala = 1; aplicar();                   // reset zoom al abrir
     }
 
-    // Cerrar visor
+    // ===== Cerrar visor =====
     function cerrar() {
       overlay.classList.remove('is-open');
       document.body.style.overflow = '';
     }
 
+    // Abrir/cerrar (clicks y teclado)
     mainImg.addEventListener('click', abrir);
     btnCerrar.addEventListener('click', cerrar);
     overlay.addEventListener('click', (e) => {
       const inner = overlay.querySelector('.visor-imagen__inner');
-      if (!inner.contains(e.target) || e.target === overlay) cerrar();
+      // Cierra si se clickea fuera del contenido
+      if (!inner || !inner.contains(e.target) || e.target === overlay) cerrar();
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && overlay.classList.contains('is-open')) cerrar();
     });
 
-    // Doble click o doble toque para zoom
+    // ===== Zoom: doble click / doble toque =====
     function toggleZoom() {
       escala = (escala === 1 ? 2 : 1);
       aplicar();
     }
     imgZoom.addEventListener('dblclick', (e) => { e.preventDefault(); toggleZoom(); });
 
+    // Doble tap “manual” para móviles (dos clicks en < 300ms)
     let lastTap = 0;
     imgZoom.addEventListener('click', () => {
       const now = Date.now();
@@ -102,7 +105,7 @@
       lastTap = now;
     });
 
-    // Evitar scroll de fondo
+    // Evitar scroll/zoom de fondo sobre el overlay
     overlay.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
   });
 })();

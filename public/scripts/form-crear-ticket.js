@@ -1,18 +1,19 @@
+// Comprime la imagen al crear un ticket (convierte a WebP antes de enviar).
 document.addEventListener('DOMContentLoaded', () => {
-  const input = document.querySelector('input[name="imagenArchivo"]');
-  const preview = document.getElementById('previewImagen');
+  const input = document.querySelector('input[name="imagenArchivo"]'); // input de archivo
+  const preview = document.getElementById('previewImagen');            // imagen de preview
   if (!input || !preview) return;
 
   input.addEventListener('change', async (event) => {
     const file = event.target.files && event.target.files[0];
     if (!file) {
-      // Limpia preview si se canceló
+      // Si se canceló, limpia la vista previa
       preview.classList.add('d-none');
       preview.removeAttribute('src');
       return;
     }
 
-    // Aceptar solo imágenes
+    // Solo aceptar imágenes
     if (!file.type.startsWith('image/')) {
       console.warn('Archivo no es imagen, se ignora.');
       input.value = '';
@@ -21,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Opciones de compresión/conversión
+    // Configuración para compresión y conversión a WebP
     const options = {
       maxSizeMB: 2,
       maxWidthOrHeight: 500,
@@ -30,24 +31,24 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     try {
-      // Fallback si la librería no está disponible
+      // Usa la librería imageCompression si está disponible, si no deja el archivo como está
       const compressor = window.imageCompression;
       const processed = compressor ? await compressor(file, options) : file;
 
-      // Renombrar a .webp solo si no lo es ya
+      // Renombrar a .webp si no lo era ya
       const alreadyWebp = processed.type === 'image/webp' || /\.webp$/i.test(file.name);
       const finalName = alreadyWebp
         ? file.name
-        : file.name.replace(/\.[^.\s]+$/i, '.webp'); // reemplaza última extensión
+        : file.name.replace(/\.[^.\s]+$/i, '.webp');
 
       const renamedFile = new File([processed], finalName, { type: 'image/webp' });
 
-      // Reemplazar archivo en el input (para que el form envíe el WebP)
+      // Reemplazar el archivo en el input (el form enviará este WebP)
       const dt = new DataTransfer();
       dt.items.add(renamedFile);
       input.files = dt.files;
 
-      // Preview
+      // Mostrar preview de la imagen comprimida
       const reader = new FileReader();
       reader.onload = (e) => {
         preview.src = e.target.result;
@@ -58,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log('Imagen lista para enviar:', input.files[0]);
     } catch (error) {
       console.error('Error al comprimir/convertir imagen:', error);
-      // Fallback: mostrar preview del archivo original
+      // Si falla, muestra preview del archivo original
       const reader = new FileReader();
       reader.onload = (e) => {
         preview.src = e.target.result;

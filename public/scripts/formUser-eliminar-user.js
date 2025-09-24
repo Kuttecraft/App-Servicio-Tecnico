@@ -1,13 +1,12 @@
-// formUser-eliminar-user.js
-
+// Gestiona la alerta y flujo de eliminación de usuarios en la gestión de permisos.
 document.addEventListener("DOMContentLoaded", function() {
-  const form = document.getElementById('form-permisos');
-  const btnEliminar = document.getElementById('btn-eliminar');
-  const btnGuardar = form.querySelector('button[type="submit"]');
+  const form = document.getElementById('form-permisos');                   // formulario de permisos
+  const btnEliminar = document.getElementById('btn-eliminar');             // botón "Eliminar seleccionados"
+  const btnGuardar = form.querySelector('button[type="submit"]');          // botón "Guardar cambios"
 
-  let puedeEliminar = false; // Variable de control
+  let puedeEliminar = false; // flag para confirmar que se pasó por el flujo de eliminar
 
-  // Por defecto, deshabilitar el botón "Guardar cambios" si hay alguna casilla "eliminar" marcada
+  // Si hay checkboxes "eliminar" marcados pero no está autorizado → desactiva botón guardar
   function revisarEliminarMarcados() {
     const eliminarMarcados = form.querySelectorAll('.eliminar-checkbox:checked');
     if (eliminarMarcados.length > 0 && !puedeEliminar) {
@@ -17,16 +16,16 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
-  // Detecta cuando marcan/desmarcan eliminar (para controlar el botón guardar)
+  // Detecta cambios en checkboxes de eliminar
   form.addEventListener('change', function(e) {
-    // Si cambió alguna casilla "eliminar", revisar estado
     if (e.target.classList.contains('eliminar-checkbox')) {
-      puedeEliminar = false; // Se resetea la autorización al cambiar la selección
+      // Siempre resetea la autorización al cambiar selección
+      puedeEliminar = false;
       revisarEliminarMarcados();
     }
   });
 
-  // Botón "Eliminar seleccionados"
+  // Botón "Eliminar seleccionados": pide confirmación
   btnEliminar.addEventListener('click', function() {
     const eliminarMarcados = form.querySelectorAll('.eliminar-checkbox:checked');
     if (eliminarMarcados.length === 0) {
@@ -34,26 +33,25 @@ document.addEventListener("DOMContentLoaded", function() {
       return;
     }
     if (confirm('¿Estás seguro que querés eliminar los usuarios seleccionados? Esta acción no se puede deshacer. Para confirmar, hacé clic en "Guardar cambios".')) {
-      puedeEliminar = true;
+      puedeEliminar = true;       // autoriza la eliminación
       btnGuardar.disabled = false;
       btnGuardar.focus();
     }
   });
 
-  // Al intentar guardar cambios
+  // Validación al enviar formulario
   form.addEventListener('submit', function(e) {
     const eliminarMarcados = form.querySelectorAll('.eliminar-checkbox:checked');
-    // Si hay eliminados pero no pasó por el botón eliminar
     if (eliminarMarcados.length > 0 && !puedeEliminar) {
+      // Si hay usuarios para eliminar pero no confirmaron, bloquea submit
       e.preventDefault();
       alert('Si querés eliminar usuarios, primero presioná "Eliminar seleccionados" y confirmá la alerta.');
       return false;
     }
-    // Si no hay problema, deja continuar
-    // Luego del submit, resetea el flag (en caso de reload)
+    // Si todo ok, resetea flag (por consistencia en reload)
     puedeEliminar = false;
   });
 
-  // Al iniciar, revisar por si quedan marcados de antes
+  // Al iniciar: revisa si había checkboxes marcados de antes
   revisarEliminarMarcados();
 });
