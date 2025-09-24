@@ -1,4 +1,12 @@
 ---
+/**
+ * Sidebar.astro
+ * Barra lateral (desktop + mobile).
+ * - Muestra links según permisos/rol del perfil.
+ * - Admin ve Tickets, Usuarios y Estadísticas.
+ * - Todos ven “Mis estadísticas”.
+ */
+
 type Perfil = {
   rol?: string;
   admin?: boolean | string | 0 | 1;
@@ -9,27 +17,31 @@ type Perfil = {
 
 const { mobile = false, perfil = {} as Perfil } = Astro.props;
 
+// Normaliza valores truthy de distintos tipos (boolean, string, número)
 const isTrue = (val: any) =>
   val === true || val === 'true' || val === 1 || val === '1';
 
+// Admin si el perfil lo marca o el rol es 'admin'
 const esAdmin = isTrue((perfil as any)?.admin) || perfil?.rol === 'admin';
 
-/* ❗ Tickets ahora es SOLO para admins */
+// ❗ Tickets ahora solo visibles para admin
 const veTickets = esAdmin;
 
-/* Usuarios / Estadísticas SOLO admin también */
+// Usuarios y Estadísticas también solo admin
 const veUsuarios = esAdmin;
 const veEstadisticas = esAdmin;
 
-/* ✅ Nuevo: todos pueden ver “Mis estadísticas” (filtra por el técnico logueado) */
+// ✅ Todos los perfiles pueden ver “Mis estadísticas”
 const veMisEstadisticas = true;
 ---
 
 {!mobile ? (
+  <!-- Sidebar fijo para escritorio -->
   <aside class="d-none d-md-flex flex-column bg-dark text-white p-3"
     style="position: fixed; top: 0; left: 0; height: 100vh; width: 240px; z-index: 1030;">
     <h4 class="text-center mb-4">Servicio Técnico</h4>
     <nav class="nav nav-pills flex-column gap-2">
+      <!-- Inicio siempre visible -->
       <a class="nav-link text-white d-flex align-items-center gap-2" href="/dashboard">
         <i class="bi bi-house"></i> Inicio
       </a>
@@ -60,6 +72,7 @@ const veMisEstadisticas = true;
     </nav>
   </aside>
 ) : (
+  <!-- Offcanvas (menú deslizable) para mobile -->
   <div class="offcanvas offcanvas-start bg-dark text-white" tabindex="-1" id="mobileSidebar" aria-labelledby="mobileSidebarLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="mobileSidebarLabel">Menú</h5>

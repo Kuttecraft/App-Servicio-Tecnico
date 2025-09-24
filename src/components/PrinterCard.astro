@@ -1,26 +1,26 @@
 ---
 /**
  * PrinterCard.astro
- * Muestra una tarjeta de ticket/impresora
- * - Label "Máquina" pero leyendo el valor desde `modelo`
- * - Prioridad de imágenes: imagen_ticket > imagen > imagen_extra > /logo.webp
+ * Muestra una tarjeta de ticket/impresora.
+ * - Label "Máquina" pero leyendo el valor desde `modelo` (fallback: `maquina`).
+ * - Prioridad de imágenes: imagen_ticket > imagen > imagen_extra > /logo.webp.
  */
 
 export interface Props {
   id?: number | string;
   ticket?: number | string;
   cliente?: string;
-  modelo?: string | null;       // 👈 real source
+  modelo?: string | null;       // 👈 fuente real para “Máquina”
   maquina?: string | null;      // fallback por compatibilidad
   estado?: string;
   whatsapp?: string | null;
 
-  onClickUrl?: string;
-  onClickUrlEditar?: string;
+  onClickUrl?: string;          // link al detalle
+  onClickUrlEditar?: string;    // link a editar
 
-  imagen?: string | null;
-  imagen_ticket?: string | null;
-  imagen_extra?: string | null;
+  imagen?: string | null;       // urls posibles (prioridad más baja que imagen_ticket)
+  imagen_ticket?: string | null; // prioridad más alta
+  imagen_extra?: string | null; // última opción antes del logo
 }
 
 const {
@@ -44,24 +44,21 @@ const {
   imagen_extra = null,
 } = Astro.props as Props;
 
-// 👉 Modelo mostrado: 1) modelo 2) maquina 3) "Desconocido"
+// 👉 Texto mostrado para "Máquina": 1) modelo 2) maquina 3) "Desconocido"
 const modelo =
   (modeloProp && String(modeloProp).trim()) ||
   (maquinaProp && String(maquinaProp).trim()) ||
   "Desconocido";
 
-// Lógica de prioridad de imágenes:
-// 1. imagen_ticket
-// 2. imagen
-// 3. imagen_extra
-// 4. logo por defecto
+// Prioridad de imágenes para cubrir casos faltantes
+// 1) imagen_ticket  2) imagen  3) imagen_extra  4) logo por defecto
 const imagenFinal =
   (imagen_ticket && String(imagen_ticket)) ||
   (imagen && String(imagen)) ||
   (imagen_extra && String(imagen_extra)) ||
   "/logo.webp";
 
-// 🎨 Colores por estado (pastel)
+// 🎨 Paleta pastel por estado (solo fondo de card)
 const estadoColores: Record<string, string> = {
   "Nuevo": "#E2FFF6",
   "Retirar": "#FFE9CC",
@@ -77,15 +74,15 @@ const estadoColores: Record<string, string> = {
   "No realizada": "#FFF1D9"
 };
 
-// Color actual o blanco si no está en el mapa
+// Color de fondo según estado; por defecto blanco si no hay match
 const colorEstado = estadoColores[estado] || "#FFFFFF";
 
-// Accesible: alt armado
+// Texto alternativo accesible para la imagen
 const altImagen = `Imagen del equipo de ${cliente}`;
 ---
 
 <style>
-  /* Card de altura uniforme */
+  /* Card de altura uniforme / layout base */
   .pcard {
     display: flex;
     flex-direction: column;
@@ -97,30 +94,30 @@ const altImagen = `Imagen del equipo de ${cliente}`;
 
   .pcard:hover { transform: translateY(-3px); }
 
-  /* Contenedor cuadrado para la imagen */
+  /* Contenedor cuadrado para la imagen (mantiene relación 1:1) */
   .pcard__imgwrap {
-    width: 200px;              /* controla el tamaño final */
-    aspect-ratio: 1 / 1;       /* siempre cuadrado */
+    width: 200px;
+    aspect-ratio: 1 / 1;
     border-radius: 15px;
     overflow: hidden;
     margin: .25rem auto .5rem auto; /* centrado */
     box-shadow: 0 2px 8px rgba(0,0,0,.08);
     border: 1px solid rgba(0,0,0,.06);
-    background: #f5f6f8;       /* placeholder si tarda en cargar */
+    background: #f5f6f8; /* placeholder mientras carga */
   }
 
   .pcard__img {
     width: 100%;
     height: 100%;
-    object-fit: cover;         /* recorta para llenar sin deformar */
+    object-fit: cover;   /* recorta sin deformar */
     display: block;
   }
 
-  .pcard__body {               /* espacio para el contenido */
+  .pcard__body {         /* zona de contenidos */
     padding: .25rem .5rem 0 .5rem;
   }
 
-  .pcard__footer {             /* fija los botones abajo */
+  .pcard__footer {       /* fija los botones abajo */
     margin-top: auto;
     padding-top: .5rem;
   }
@@ -132,7 +129,7 @@ const altImagen = `Imagen del equipo de ${cliente}`;
     font-size: .9rem;
   }
 
-  /* Texto acotado si es muy largo */
+  /* Evita que textos larguísimos rompan el layout */
   .truncate {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -140,23 +137,24 @@ const altImagen = `Imagen del equipo de ${cliente}`;
   }
 </style>
 
-<!-- Fondo de la tarjeta dinámico según el estado -->
+<!-- Card con fondo dependiente del estado -->
 <div class="card shadow-sm p-3 mb-4 text-center pcard h-100"
      style={`background-color: ${colorEstado}`}>
   <div class="pcard__imgwrap">
     <img
       class="pcard__img"
-      src={`${imagenFinal}?t=${Date.now()}`}
-      alt={altImagen}
+      src={`${imagenFinal}?t=${Date.now()}`}  
       loading="lazy"
     />
   </div>
 
   <div class="pcard__body">
+    <!-- Cliente como título (truncado si es largo) -->
     <h6 class="fw-bold text-dark mt-1 mb-1 truncate" title={cliente} style="font-size:1.12rem;">
       {cliente}
     </h6>
 
+    <!-- Lista de atributos clave -->
     <ul class="list-unstyled mb-2 small text-secondary">
       <li><strong>ID:</strong> {id}</li>
       <li><strong>Ticket:</strong> {ticket}</li>
@@ -167,6 +165,7 @@ const altImagen = `Imagen del equipo de ${cliente}`;
     </ul>
   </div>
 
+  <!-- Acciones principales -->
   <div class="pcard__footer d-flex gap-2 justify-content-center">
     <a href={onClickUrl} class="btn-ver-card px-3 py-1">Ver</a>
     <a href={onClickUrlEditar} class="btn-editar-card px-3 py-1">Editar</a>

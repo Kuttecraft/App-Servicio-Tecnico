@@ -1,15 +1,16 @@
 ---
 const { equipo } = Astro.props as { equipo: any };
 
-// Utilidad fecha dd/mm/yyyy
+// Utilidad: convierte "YYYY-MM-DD" a "DD/MM/YYYY" para mostrar en input readonly
 function ddmmyyyy(ymd: string) {
   if (!ymd) return '';
   const y = ymd.slice(0, 4), m = ymd.slice(5, 7), d = ymd.slice(8, 10);
   return (y && m && d) ? `${d}/${m}/${y}` : '';
 }
-const hoyYMD = new Date().toISOString().slice(0, 10);
-const fechaMostrar = ddmmyyyy((equipo?.fecha_de_entrega as string) || hoyYMD);
+const hoyYMD = new Date().toISOString().slice(0, 10);          // fecha actual en Y-M-D
+const fechaMostrar = ddmmyyyy((equipo?.fecha_de_entrega as string) || hoyYMD); // fallback: hoy
 
+// Formato ARS defensivo (acepta string o number)
 function formatARS(v?: string | number | null): string {
   if (v == null || v === '') return '';
   const n = Number(String(v).replace(/[^\d,-]/g, '').replace(',', '.'));
@@ -22,7 +23,8 @@ function formatARS(v?: string | number | null): string {
   }).format(n);
 }
 
-// ------ Preparar "Medio de entrega" (select + otro) ------
+// ------ Preparar "Medio de entrega" (select + input "Otro") ------
+// Si el valor actual no está entre las opciones, se selecciona "Otro" y se muestra el input
 const medioActual = (equipo?.medio_de_entrega ?? '').trim();
 const opciones = ['Delivery', 'Taller'];
 const esOtro = !!(medioActual && !opciones.includes(medioActual));
@@ -30,6 +32,7 @@ const seleccionado = esOtro ? 'Otro' : (medioActual || '');
 const valorOtro = esOtro ? medioActual : '';
 ---
 
+<!-- Formulario de Delivery: postea a /api/actualizarDelivery con el id del ticket -->
 <form method="POST" action={`/api/actualizarDelivery?id=${equipo.ticketId}`} class="row g-3">
   <div class="col-md-6">
     <label class="form-label">Costo delivery</label>
@@ -44,6 +47,7 @@ const valorOtro = esOtro ? medioActual : '';
 
   <div class="col-md-6">
     <label class="form-label">Medio de entrega</label>
+    <!-- Select con opciones fijas + "Otro" -->
     <select name="medio_de_entrega_select" id="medioSelect" class="form-select">
       <option value="" selected={!seleccionado}>Seleccionar</option>
       <option value="Delivery" selected={seleccionado === 'Delivery'}>Delivery</option>
@@ -51,6 +55,7 @@ const valorOtro = esOtro ? medioActual : '';
       <option value="Otro" selected={seleccionado === 'Otro'}>Otro</option>
     </select>
 
+    <!-- Campo visible solo si eligen "Otro" -->
     <div id="medioOtroWrapper" class={esOtro ? 'mt-2' : 'mt-2 d-none'}>
       <label class="form-label">Especificar otro medio</label>
       <input
@@ -89,6 +94,7 @@ const valorOtro = esOtro ? medioActual : '';
 
   <div class="col-md-6">
     <label class="form-label">Fecha de entrega</label>
+    <!-- Solo lectura: se completa automáticamente al guardar en backend -->
     <input type="text" class="form-control" value={fechaMostrar} readonly />
     <div class="form-text">Se completa automáticamente al guardar.</div>
   </div>
@@ -116,6 +122,7 @@ const valorOtro = esOtro ? medioActual : '';
 
   <div class="col-12">
     <label class="form-label">¿Pagado?</label>
+    <!-- Tri-estado: vacío / true / false -->
     <select name="pagado" class="form-select">
       <option value="" selected={!equipo?.pagado}>Seleccionar</option>
       <option value="true" selected={equipo?.pagado === 'true'}>Sí</option>
@@ -130,13 +137,13 @@ const valorOtro = esOtro ? medioActual : '';
   </div>
 </form>
 
-<!-- JS puro con guards por tipo en tiempo de ejecución -->
+<!-- JS: formatea ARS en vivo y muestra/oculta campo "Otro" según selección -->
 <script>
 (function(){
-  // --- moneda ARS ---
+  // --- Helpers de moneda ARS (input limpio y formato al blur) ---
   function parseNumber(s){
     if(!s) return 0;
-    s = s.replace(/[^\d,-]/g,'').replace(',', '.');
+    s = s.replace(/[^\d,-]/g,'').replace(',', '.');     // deja dígitos y decimal como punto
     return Number(s) || 0;
   }
   function formatARS(n){
@@ -154,8 +161,9 @@ const valorOtro = esOtro ? medioActual : '';
   function onInput(e){
     const target = e.target;
     if (!(target instanceof HTMLInputElement)) return;
-    target.value = target.value.replace(/[^\d,.-]/g,'');
+    target.value = target.value.replace(/[^\d,.-]/g,''); // deja solo números y separadores
   }
+  // Aplica a todos los inputs con clase .currency-ars
   document.querySelectorAll('.currency-ars').forEach((el)=>{
     if (el instanceof HTMLInputElement) {
       el.addEventListener('blur', onBlur);
@@ -163,24 +171,24 @@ const valorOtro = esOtro ? medioActual : '';
     }
   });
 
-  // --- toggle "Otro" ---
-  const sel  = document.getElementById('medioSelect');
-  const wrap = document.getElementById('medioOtroWrapper');
-  const otro = document.getElementById('medioOtro');
+  // --- Toggle del input "Otro" para el medio de entrega ---
+  const sel  = document.getElementById('medioSelect');       // <select>
+  const wrap = document.getElementById('medioOtroWrapper');  // wrapper del input "Otro"
+  const otro = document.getElementById('medioOtro');         // <input> "Otro"
 
   function toggleOtro(){
     if(!(sel instanceof HTMLSelectElement) || !(wrap instanceof HTMLElement)) return;
     if(sel.value === 'Otro'){
       wrap.classList.remove('d-none');
-      if(otro instanceof HTMLInputElement){ setTimeout(()=>otro.focus(), 0); }
+      if(otro instanceof HTMLInputElement){ setTimeout(()=>otro.focus(), 0); } // foco al input
     }else{
       wrap.classList.add('d-none');
-      if(otro instanceof HTMLInputElement){ otro.value = ''; }
+      if(otro instanceof HTMLInputElement){ otro.value = ''; }                // limpia si no es "Otro"
     }
   }
 
   if (sel) {
-    sel.addEventListener('change', toggleOtro);
+    sel.addEventListener('change', toggleOtro); // reacciona a cambios en el select
   }
 })();
 </script>

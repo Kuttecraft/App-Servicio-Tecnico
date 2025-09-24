@@ -1,8 +1,9 @@
 ---
 import { UserButton } from '@clerk/astro/components';
 
-const { showFilters = false } = Astro.props;
+const { showFilters = false } = Astro.props; // muestra/oculta el formulario de filtros en el topbar
 
+// Lista de estados disponibles para filtrar
 const ESTADOS = [
   "Nuevo",
   "Retirar",
@@ -17,6 +18,7 @@ const ESTADOS = [
   "No realizada"
 ];
 
+// Mapa estado → color pastel (para puntito indicador y fondo en algunos casos)
 const COLOR_POR_ESTADO: Record<string, string> = {
   "Nuevo": "#E2FFF6",
   "Retirar": "#FFE9CC",
@@ -32,14 +34,16 @@ const COLOR_POR_ESTADO: Record<string, string> = {
   "No realizada": "#FFF1D9"
 };
 
+// Parámetros actuales del querystring (para SSR del filtro)
 const by = Astro.url.searchParams.get('by') || 'id';
 const rawQ = Astro.url.searchParams.get('q') || '';
 const q = rawQ.trim();
 ---
 
+<!-- Navbar fija superior -->
 <nav class="navbar bg-white border-bottom px-3 py-2 shadow-sm sticky-top">
   <div class="d-flex w-100 align-items-center justify-content-between">
-    <!-- Hamburguesa -->
+    <!-- Botón hamburguesa (abre offcanvas en mobile) -->
     <button
       class="btn d-md-none me-2"
       type="button"
@@ -52,22 +56,26 @@ const q = rawQ.trim();
     </button>
 
     {showFilters ? (
+      <!-- Form de filtros (SSR) con cambio dinámico de campo (texto/estado) -->
       <form
         id="filterForm"
         class="row g-2 justify-content-center w-100 mx-2"
         method="get"
         action="/dashboard"
       >
-        <!-- Campo dinámico -->
+        <!-- Campo de búsqueda dinámico:
+             - Si by=estado → dropdown con puntito de color
+             - Si no → input text -->
         <div
           id="q-container"
           class="col-12 col-md-6"
-          data-estados={encodeURIComponent(JSON.stringify(ESTADOS))}
-          data-colores={encodeURIComponent(JSON.stringify(COLOR_POR_ESTADO))}
+          data-estados={encodeURIComponent(JSON.stringify(ESTADOS))}          
+          data-colores={encodeURIComponent(JSON.stringify(COLOR_POR_ESTADO))} 
         >
           {by === 'estado' ? (
-            <!-- Dropdown SSR con puntitos -->
+            <!-- Dropdown SSR con puntitos de color -->
             <div class="dropdown w-100" id="estado-dropdown">
+              <!-- El valor real va en un hidden para enviar con el form -->
               <input type="hidden" name="q" value={q} id="estado-hidden" />
 
               <button
@@ -84,6 +92,7 @@ const q = rawQ.trim();
                 />
               </button>
 
+              <!-- Lista de estados + opción “(Sin filtro)” -->
               <ul class="dropdown-menu w-100 shadow-sm">
                 <li>
                   <button
@@ -112,6 +121,7 @@ const q = rawQ.trim();
                 ))}
               </ul>
 
+              <!-- Fallback si no hay JS -->
               <noscript>
                 <select name="q" class="form-select w-100 mt-2">
                   <option value="">Seleccioná estado…</option>
@@ -122,6 +132,7 @@ const q = rawQ.trim();
               </noscript>
             </div>
           ) : (
+            <!-- Input de texto (cuando el filtro no es por estado) -->
             <input
               type="text"
               name="q"
@@ -132,7 +143,7 @@ const q = rawQ.trim();
           )}
         </div>
 
-        <!-- Selector de columna -->
+        <!-- Selector de columna por la que se filtra -->
         <div class="col-12 col-md-3">
           <select name="by" class="form-select w-100" id="by-select">
             <option value="id" selected={by === 'id'}>ID</option>
@@ -143,7 +154,7 @@ const q = rawQ.trim();
           </select>
         </div>
 
-        <!-- Botones -->
+        <!-- Botones de acción del filtro -->
         <div class="col-12">
           <div class="row g-2 justify-content-center">
             <div class="col-6 col-md-3">
@@ -155,12 +166,15 @@ const q = rawQ.trim();
           </div>
         </div>
 
+        <!-- Reinicia a página 1 al aplicar filtros -->
         <input type="hidden" name="page" value="1" />
       </form>
     ) : (
+      <!-- Si no hay filtros, empujo el UserButton a la derecha -->
       <div class="flex-grow-1"></div>
     )}
 
+    <!-- Área de usuario (Clerk) -->
     <div class="ms-auto">
       <UserButton />
     </div>
@@ -168,15 +182,17 @@ const q = rawQ.trim();
 
   {showFilters && (
     <>
-      <!-- También por si lo querés leer desde JS -->
+      <!-- Datos embebidos para posibles lecturas desde JS -->
       <script type="application/json" id="estados-data">{JSON.stringify(ESTADOS)}</script>
       <script type="application/json" id="colores-data">{JSON.stringify(COLOR_POR_ESTADO)}</script>
+      <!-- Script que transforma el campo según “by” y pinta los puntitos -->
       <script defer src="/scripts/form-actualizar-filtro.js"></script>
     </>
   )}
 </nav>
 
 <style>
+  /* Puntito de color reutilizable */
   .estado-dot {
     width: 12px;
     height: 12px;
@@ -186,6 +202,7 @@ const q = rawQ.trim();
     display: inline-block;
     flex: 0 0 auto;
   }
+  /* Activo en dropdown (Bootstrap override leve) */
   .dropdown-menu .dropdown-item.active,
   .dropdown-menu .dropdown-item:active {
     background-color: rgba(0,0,0,.05);
