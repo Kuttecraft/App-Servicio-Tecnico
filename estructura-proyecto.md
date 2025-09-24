@@ -14,87 +14,94 @@ Este proyecto fue creado con Astro y utiliza tecnologías complementarias como:
 
 /src
 │
-├── /components
-│   ├── DeliveryForm.astro        # Sección delivery del ticket
-│   ├── PresupuestoForm.astro     # Sección presupuesto del ticket
-│   ├── PrinterCard.astro         # Componente visual para mostrar un equipo
-│   ├── Sidebar.astro             # Barra lateral de navegación
-│   └── Topbar.astro              # Barra superior con sesión, etc.
+├─ /components
+│  ├─ DeliveryForm.astro                    # Subformulario de Delivery (cobrado, medio, costo, info)
+│  ├─ PresupuestoForm.astro                 # Subformulario de Presupuesto (monto, link, garantía, notas)
+│  ├─ PrinterCard.astro                     # Card para listar/mostrar una impresora/equipo
+│  ├─ Sidebar.astro                         # Sidebar de navegación (privada)
+│  └─ Topbar.astro                          # Barra superior (perfil/sesión)
 │
-├──/data
-│   └── impresoras.json
+├─ /data
+│  └─ impresoras.json                       # Semillas/listado estático de modelos (si aplica)
 │
-├── /layouts
-│   └── BasePrivateLayout.astro   # Layout base para vistas privadas (con Clerk + estilos)
+├─ /layouts
+│  └─ BasePrivateLayout.astro               # Layout base para vistas privadas (incluye estilos, navbar, etc.)
 │
-├── /lib
-│   ├── clerk.ts                  # Configuración visual y de idioma de Clerk
-│   ├── supabase.ts               # Cliente global de Supabase (PostgreSQL)
-│   └── utils.ts                  # Funciones útiles (formato, fechas, monedas)
+├─ /lib
+│  ├─ clerk.ts                              # Configuración de Clerk (i18n, apariencia)
+│  ├─ resolverAutor.ts                      # 🔑 Resuelve/crea el técnico actual y da nombre para comentarios
+│  ├─ supabase.ts                           # Cliente compartido de Supabase
+│  └─ utils.ts                              # Utilidades (fechas, formato moneda, etc.)
 │
-├── /pages
-│   ├── index.astro               # Redirección a /signin
-│   ├── dashboard.astro           # Panel principal del usuario
-│   ├── addTicket.astro           # Formulario para crear nuevos tickets
-│   ├── signin.astro              # Página de ingreso (Clerk)
-│   ├── signup.astro              # Registro de usuarios
-│   ├── usuarios.astro            # Panel para agregar o quitar usuarios y permisos 
-│   ├── estadisticas.astro        # Panel con métricas
-│   ├── no-autorizado.astro       # Página de acceso denegado (usuarios sin permisos)
-│   │
-│   ├── /comentarios/
-│   │   └── [id].astro            # Sección para comentar tickets
-│   │
-│   ├── /delivery/
-│   │   └── [id].astro            # Vista dinámica con información del delivery asociado a un ticket
-│   │
-│   ├── /detalle/
-│   │   └── [id].astro            # Vista dinámica de detalle del ticket (con opción de eliminar)
-│   │
-│   ├── /editar/
-│   │   └── [id].astro            # Vista dinámica para editar un ticket
-│   │
-│   ├── /presupuesto/
-│   │   └── [id].astro            # Vista dinámica para ver/gestionar presupuestos de un ticket
-│   │
-│   │  
-│   └── /api/
-│       ├── crearTicket.ts               # Endpoint POST para crear un ticket
-│       ├── actualizarTicket.ts          # Endpoint POST para editar un ticket
-│       ├── eliminarTicket.ts            # Endpoint POST para eliminar un ticket
-│       ├── proximoTicket.ts             # Endpoint GET para sugerir el próximo número de ticket
-│       ├── actualizarDelivery.ts        # Endpoint POST para actualizar los datos de un delivery (por id)
-│       ├── actualizarPermisosUsuarios.ts# Endpoint POST para actualizar los permisos de un usuario (en 'usuarios_perfil')
-│       ├── actualizarPresupuesto.ts     # Endpoint POST para actualizar datos de presupuesto (por id, en 'TestImpresoras')
-│       ├── agregarComentario.ts         # Endpoint POST para crear un comentario 
-│       ├── estadisticas.ts              # Endpoint POST para ver estadisticas  
-│        └── maquinaLista.ts             # Endpoint POST para que marque como estado lista
+├─ /pages
+│  ├─ addTicket.astro                       # Alta de ticket (form)
+│  ├─ dashboard.astro                       # Panel de inicio (widgets/atajos)
+│  ├─ estadisticas-tecnico.astro            # Métricas filtradas por técnico
+│  ├─ estadisticas.astro                    # Métricas generales
+│  ├─ index.astro                           # Redirección / landing (normalmente a /signin)
+│  ├─ no-autorizado.astro                   # Acceso denegado
+│  ├─ signin.astro                          # Login (Clerk)
+│  ├─ signup.astro                          # Registro (Clerk)
+│  ├─ usuarios.astro                        # ABM de usuarios/permisos
+│  │
+│  ├─ /comentarios
+│  │  └─ [id].astro                         # Vista del historial de comentarios del ticket
+│  │
+│  ├─ /delivery
+│  │  └─ [id].astro                         # Vista/info del delivery asociado a un ticket
+│  │
+│  ├─ /detalle
+│  │  └─ [id].astro                         # Detalle del ticket (con acciones)
+│  │
+│  ├─ /editar
+│  │  └─ [id].astro                         # Edición del ticket (form grande)
+│  │
+│  ├─ /presupuesto
+│  │  └─ [id].astro                         # Gestión/visualización del presupuesto del ticket
+│  │
+│  └─ /api                         
+│     ├─ agregarComentario.ts               # POST: agrega comentario (uso en vista y en automatizaciones)
+│     ├─ actualizarDelivery.ts              # POST: upsert de delivery
+│     ├─ actualizarPermisosUsuarios.ts      # POST: permisos en usuarios_perfil
+│     ├─ actualizarPresupuesto.ts           # POST: upsert de presupuesto + estado "P. Enviado"
+│     ├─ actualizarTicket.ts                # POST: edita ticket + diffs → comentario automático
+│     ├─ crearTicket.ts                     # POST: crea ticket (y relaciones iniciales)
+│     ├─ eliminarTicket.ts                  # POST: elimina ticket
+│     ├─ estadisticas-tecnico.ts            # GET/POST: datos/series por técnico
+│     ├─ estadisticas.ts                    # GET/POST: datos/series globales
+│     ├─ listarTecnicos.ts                  # GET: lista técnica derivada de usuarios_perfil (crea faltantes)
+│     ├─ maquinaLista.ts                    # POST: marca estado “Lista” (y lo que corresponda)
+│     └─ proximoTicket.ts                   # GET: sugiere próximo número
 │
-├── /data
-│   └── impresoras.json           # Datos de ejemplo para pruebas (mock)
+├─ /styles
+│  └─ custom.css                            # Estilos personalizados (incluye .comentario { white-space: pre-line })
 │
-├── /styles
-│   └── custom.css                # Estilos personalizados (Bootstrap + overrides)
-│
-├── /types
-│   ├── astro.d.ts                # Extensiones de tipos de Astro (ej: locals.user, email, authStatus, perfil)
-│   └── env.d.ts                  # Tipos para las variables de entorno (PUBLIC_SUPABASE_URL, etc)
-│
-├── middleware.ts                 # Middleware global para proteger rutas privadas
+└─ middleware.ts                            # Middleware de rutas (auth/roles, redirect, etc.)
 
+
+├─ /types
+│  ├─ astro.d.ts                            # Extensiones de tipos para Astro.locals (perfil, user, etc.)
+│  └─ env.d.ts                              # Tipado de variables de entorno (Supabase, Clerk, etc.)
 ```
 
 ## 📁 OTRAS CARPETAS IMPORTANTES
 ```batch 
 
 /public
-├── img/                          # Imágenes públicas accesibles por URL (fotos de impresoras, usuarios, etc.)
-├── logo.webp                     # Logo principal de la aplicación (formato webp, imagen optimizada)
+├── img/                                    # Imágenes públicas accesibles por URL (fotos de impresoras, usuarios, etc.)
+├── logo.webp                               # Logo principal de la aplicación (formato webp, imagen optimizada)
 |
-├── scripts/                      # Scripts JavaScript vanilla para formularios y lógica del frontend
-│   ├── formUser-eliminar-user.js   # Gestiona la alerta y flujo de eliminación de usuarios en la gestión de permisos.
-│   ├── form-crear-ticket.js        # Comprime la imagen al crear un ticket (convierte a WebP antes de enviar).
-│   └── form-editar-equipo.js       # Permite reemplazar, eliminar o comprimir la imagen de un ticket existente. Controla la UI/UX.
+├── scripts/                                # Scripts JavaScript vanilla para formularios y lógica del frontend
+│   ├── form-actualizar-filtro.js           # Convierte el filtro "q" en input de texto o dropdown de estados con color.
+│   ├── form-ampliar-imagen.js              # Visor fullscreen de la imagen principal con zoom, cierre y doble click/tap.
+│   ├── form-crar-ticket-multi.js           # Maneja carga múltiple de imágenes al crear ticket (principal, ticket, extra) con compresión WebP.
+│   ├── form-crear-ticket.js                # Comprime la imagen al crear un ticket (convierte a WebP antes de enviar).
+│   ├── form-detalle-galeia.js              # Cambia la imagen principal desde miniaturas en detalle (click o teclado, con cache-buster).
+│   ├── form-editar-equipo.js               # Permite reemplazar, eliminar o comprimir la imagen de un ticket existente. Controla la UI/UX.
+│   ├── form-galeria.js                     # Galería pública: miniaturas → imagen principal, con activo y cache-buster.
+│   ├── form-mas-imagenes.js                # En edición: reemplaza, elimina o previsualiza imágenes (principal, ticket, extra).
+│   └── formUser-eliminar-user.js   # Gestiona la alerta y flujo de eliminación de usuarios en la gestión de permisos.  
+|
 |
 /database
 ├── schema_supabase_kuttercraft.sql  # Esquema SQL **activo**: estructura actual y oficial de la base (Supabase/PostgreSQL, normalizada).
