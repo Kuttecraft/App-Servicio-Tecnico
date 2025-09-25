@@ -1,9 +1,16 @@
+// src/pages/api/crearTicket.ts
 import { supabase } from '../../lib/supabase';
 
+/** Respuesta 303 (See Other) para redirigir a otra ruta. */
 function redirect303(location: string) {
   return new Response(null, { status: 303, headers: { Location: location } });
 }
 
+/**
+ * Separa un nombre completo en { nombre, apellido }.
+ * - Normaliza espacios múltiples.
+ * - Si solo hay una palabra, la toma como nombre y deja apellido “(sin apellido)”.
+ */
 function partirNombreApellido(completo: string): { nombre: string; apellido: string } {
   const limpio = (completo || '').trim().replace(/\s+/g, ' ');
   if (!limpio) return { nombre: 'Sin nombre', apellido: '(sin apellido)' };
@@ -14,9 +21,16 @@ function partirNombreApellido(completo: string): { nombre: string; apellido: str
   return { nombre, apellido };
 }
 
+/** Devuelve un mime “estable” para imágenes subidas (forzamos webp). */
 function normalizarMime(file: File | null): string | null { return file ? 'image/webp' : null; }
 
-/** Normaliza DNI/CUIT */
+/**
+ * Normaliza DNI/CUIT:
+ * - 7 dígitos → X.XXX.XXX
+ * - 8 dígitos → XX.XXX.XXX
+ * - 11 dígitos → XX-XXXXXXXX-X
+ * Si no matchea, devuelve el raw.
+ */
 function normalizarDniCuit(input?: string | null): string | null {
   if (input == null) return null;
   const raw = String(input).trim();
@@ -28,7 +42,13 @@ function normalizarDniCuit(input?: string | null): string | null {
   return raw;
 }
 
+/** Timezone de CABA para “marca temporal” del ticket. */
 const TZ_BA = 'America/Argentina/Buenos_Aires';
+
+/**
+ * Devuelve la fecha de “hoy” en CABA formateada como M/D/YYYY (sin ceros a la izquierda).
+ * Se usa para `marca_temporal`.
+ */
 function hoyBA_MMDDYYYY(): string {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: TZ_BA,
@@ -38,50 +58,64 @@ function hoyBA_MMDDYYYY(): string {
   }).format(new Date());
 }
 
+/**
+ * Handler POST para crear un ticket completo:
+ * - Upsert de cliente (por DNI/CUIT o por coincidencia del nombre).
+ * - Resolución/creación del técnico (si se especificó).
+ * - Upsert/búsqueda/creación de impresora (por serie o modelo+máquina).
+ * - Inserción del ticket y subida opcional de imágenes (principal/ticket/extra).
+ * - Redirige con 303 a /addTicket?ok=1 en caso de éxito.
+ */
 export async function POST({ request }: { request: Request }) {
   try {
+    // Leemos todos los campos del formulario (multipart/form-data)
     const form = await request.formData();
 
+    // -------- Datos del cliente --------
     const clienteNombreCompleto = String(form.get('cliente') ?? '').trim();
     const dniCuitRaw  = String(form.get('dniCuit') ?? '').trim();
     const dniCuit     = normalizarDniCuit(dniCuitRaw) || '';
     const correo      = String(form.get('correo') ?? '').trim();
     const whatsapp    = String(form.get('whatsapp') ?? '').trim();
 
-    // -------- Impresora (selector + "Otra (especificar)") --------
+    // -------- Impresora (selector + “Otra (especificar)”) --------
     const modeloElegido = String(form.get('modelo') ?? '').trim();      // valor del select
     const modeloOtroRaw = String(form.get('modeloOtro') ?? '').trim();  // texto libre
-    // ⚠️ Preferimos SIEMPRE el texto libre si viene con contenido:
+    // ⚠️ Preferimos SIEMPRE el texto libre si viene con contenido.
     const modeloForm    = (modeloOtroRaw && modeloOtroRaw.length > 0 ? modeloOtroRaw : modeloElegido).trim();
 
     const numeroSerie = String(form.get('numeroSerie') ?? '').trim();
 
-    // Boquilla conocida (o vacío)
+    // Boquilla (solo aceptamos valores de una lista blanca)
     const opcionesBoquilla = new Set(["0.2mm","0.3mm","0.4mm","0.5mm","0.6mm","0.8mm","1mm"]);
     const boquillaRaw = String(form.get('boquilla') ?? '').trim();
     const boquilla    = opcionesBoquilla.has(boquillaRaw) ? boquillaRaw : '';
 
+    // -------- Otros campos --------
     const tecnicoNombre = String(form.get('tecnico') ?? '').trim();
     const estado        = String(form.get('estado') ?? '').trim();
     const comentarios   = String(form.get('comentarios') ?? '').trim();
     const ticketRaw     = form.get('ticket');
     const ticketNumero  = ticketRaw ? Number(ticketRaw) : null;
 
+    // Archivos opcionales
     const archivoImagen       = (form.get('imagenArchivo') as File | null) ?? null;
     const archivoImagenTicket = (form.get('imagenTicketArchivo') as File | null) ?? null;
     const archivoImagenExtra  = (form.get('imagenExtraArchivo') as File | null) ?? null;
 
+    // -------- Validaciones mínimas --------
     if (!clienteNombreCompleto) return new Response('Falta el nombre del cliente', { status: 400 });
     if (!ticketNumero || Number.isNaN(ticketNumero) || ticketNumero < 1) {
       return new Response('Número de ticket inválido', { status: 400 });
     }
 
-    /* ========== CLIENTE ========== */
+    /* ========== CLIENTE (upsert por dni_cuit o nombre) ========== */
     let clienteId: number;
     {
       let found: { id: number } | null = null;
       let foundRow: any = null;
 
+      // 1) Buscamos por DNI/CUIT (si vino)
       if (dniCuit) {
         const { data } = await supabase
           .from('cliente')
@@ -92,6 +126,7 @@ export async function POST({ request }: { request: Request }) {
         if (data) { found = { id: data.id }; foundRow = data; }
       }
 
+      // 2) Si no, buscamos por coincidencia exacta (case-insensitive) de “cliente” (nombre completo)
       if (!found) {
         const { data } = await supabase
           .from('cliente')
@@ -103,6 +138,7 @@ export async function POST({ request }: { request: Request }) {
       }
 
       if (found?.id) {
+        // Actualizamos solo los campos que hayan cambiado (merge no destructivo)
         const updatePayload: Record<string, any> = {};
 
         if (clienteNombreCompleto && clienteNombreCompleto !== foundRow.cliente) {
@@ -121,6 +157,7 @@ export async function POST({ request }: { request: Request }) {
         }
         clienteId = found.id;
       } else {
+        // Creamos el cliente nuevo
         const { nombre, apellido } = partirNombreApellido(clienteNombreCompleto);
         const { data, error } = await supabase
           .from('cliente')
@@ -143,13 +180,14 @@ export async function POST({ request }: { request: Request }) {
       }
     }
 
-    /* ========== TÉCNICO ========== */
+    /* ========== TÉCNICO (resolver por nombre; crear placeholder si no existe) ========== */
     let tecnicoId: number | null = null;
     if (tecnicoNombre) {
       const { nombre: nTec, apellido: aTec } = partirNombreApellido(tecnicoNombre);
 
       let tecMatch: { id: number } | null = null;
       if (aTec && aTec !== '(sin apellido)') {
+        // Buscamos por nombre y apellido (ilike con comodines)
         const { data } = await supabase
           .from('tecnicos')
           .select('id')
@@ -159,6 +197,7 @@ export async function POST({ request }: { request: Request }) {
           .maybeSingle();
         if (data) tecMatch = data;
       } else {
+        // Si no hay apellido, buscamos solo por nombre
         const { data } = await supabase
           .from('tecnicos')
           .select('id')
@@ -171,6 +210,7 @@ export async function POST({ request }: { request: Request }) {
       if (tecMatch?.id) {
         tecnicoId = tecMatch.id;
       } else {
+        // Creamos técnico “placeholder” con email sintético y activo=true
         const emailPlaceholder = `no-email+${Date.now()}@local`;
         const { data: tecNuevo } = await supabase
           .from('tecnicos')
@@ -186,7 +226,8 @@ export async function POST({ request }: { request: Request }) {
       }
     }
 
-    /* ========== IMPRESORA ========== */
+    /* ========== IMPRESORA (buscar por serie o por modelo+máquina; si no, crear) ========== */
+    // NOTA: en tu modelo, 'modelo' y 'maquina' suelen duplicarse con el mismo valor.
     const MODELO  = modeloForm || 'Generico';
     const MAQUINA = modeloForm || 'Desconocida';
 
@@ -194,7 +235,7 @@ export async function POST({ request }: { request: Request }) {
     const hasSerie = !!numeroSerie;
     const hasModelo = !!modeloForm;
 
-    // 1) Por número de serie
+    // 1) Intento por número de serie
     if (hasSerie) {
       const { data: impFound } = await supabase
         .from('impresoras')
@@ -203,6 +244,7 @@ export async function POST({ request }: { request: Request }) {
         .maybeSingle();
       if (impFound?.id) {
         impresoraId = impFound.id;
+        // Si vino boquilla y cambió, la actualizamos
         if (boquilla && boquilla !== (impFound.tamano_de_boquilla || null)) {
           await supabase.from('impresoras')
             .update({ tamano_de_boquilla: boquilla })
@@ -211,7 +253,7 @@ export async function POST({ request }: { request: Request }) {
       }
     }
 
-    // 2) Por combinación modelo+maquina
+    // 2) Intento por combinación (modelo + maquina)
     if (!impresoraId && hasModelo) {
       const { data: byCombo } = await supabase
         .from('impresoras')
@@ -229,7 +271,7 @@ export async function POST({ request }: { request: Request }) {
       }
     }
 
-    // 3) Crear impresora si no existe
+    // 3) Si no existe, creamos una nueva impresora
     if (!impresoraId) {
       const tempSerie = numeroSerie || `TEMP-${Date.now()}-${Math.floor(Math.random()*900+100)}`;
       const { data: impNew, error: impErr } = await supabase
@@ -251,8 +293,8 @@ export async function POST({ request }: { request: Request }) {
       impresoraId = impNew!.id;
     }
 
-    /* ========== TICKET ========== */
-    const marcaTemporal = hoyBA_MMDDYYYY();
+    /* ========== TICKET (insert principal) ========== */
+    const marcaTemporal = hoyBA_MMDDYYYY(); // guardamos como M/D/YYYY
     const insertRow: Record<string, any> = {
       cliente_id: clienteId,
       tecnico_id: tecnicoId ?? null,
@@ -277,7 +319,13 @@ export async function POST({ request }: { request: Request }) {
 
     const nuevoId = tInsert!.id as number;
 
-    /* ========== IMÁGENES opcionales ========== */
+    /* ========== IMÁGENES opcionales (subir a Storage y vincular URLs) ========== */
+    /**
+     * Sube una imagen al bucket 'imagenes' (ruta `nombreArchivo`) y devuelve URL pública.
+     * - Valida tamaño máx 5MB.
+     * - Fuerza contentType webp (o derivado de normalizarMime).
+     * - Hace remove previo “por las dudas” para evitar duplicados obsoletos.
+     */
     const subirYObtenerUrl = async (file: File | null, nombreArchivo: string) => {
       if (!file || (file as any).size <= 0) return null;
       const MAX_BYTES = 5 * 1024 * 1024;
@@ -294,6 +342,7 @@ export async function POST({ request }: { request: Request }) {
       return publicUrl.publicUrl as string;
     };
 
+    // Subimos 3 variantes opcionales y colectamos sus URLs si están disponibles
     let imagenUrl: string | null = null;
     let imagenTicketUrl: string | null = null;
     let imagenExtraUrl: string | null = null;
@@ -302,6 +351,7 @@ export async function POST({ request }: { request: Request }) {
     try { imagenTicketUrl = await subirYObtenerUrl(archivoImagenTicket, `public/${nuevoId}_ticket.webp`); } catch {}
     try { imagenExtraUrl = await subirYObtenerUrl(archivoImagenExtra, `public/${nuevoId}_extra.webp`); } catch {}
 
+    // Si hay al menos una URL, actualizamos la fila del ticket con los campos correspondientes
     if (imagenUrl || imagenTicketUrl || imagenExtraUrl) {
       const updateImages: Record<string, any> = {};
       if (imagenUrl) updateImages.imagen = imagenUrl;
@@ -310,12 +360,15 @@ export async function POST({ request }: { request: Request }) {
       await supabase.from('tickets_mian').update(updateImages).eq('id', nuevoId);
     }
 
+    // Redundancia: si vino DNI/CUIT, nos aseguramos de persistirlo en el cliente
     if (dniCuit) {
       await supabase.from('cliente').update({ dni_cuit: dniCuit }).eq('id', clienteId);
     }
 
+    // Éxito → redirigimos al formulario con bandera ok=1
     return redirect303(`/addTicket?ok=1`);
   } catch (err: any) {
+    // Fallback genérico: devolvemos JSON con mensaje y exception
     return new Response(
       JSON.stringify({ error: 'Error inesperado al crear el ticket', exception: String(err?.message || err) }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }

@@ -3,7 +3,7 @@ import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
 
 export const GET: APIRoute = async ({ url, locals }) => {
-  // ✅ Solo admin
+  // ✅ Solo admin: validamos rol desde `locals` (inyectado por tu capa de auth/middleware)
   const perfil = (locals as any)?.perfil as { rol?: string; admin?: boolean } | undefined;
   const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
   if (!isAdmin) {
@@ -13,21 +13,26 @@ export const GET: APIRoute = async ({ url, locals }) => {
     });
   }
 
-  // Parámetros
-  let year = Number(url.searchParams.get('year'));
-  let month = Number(url.searchParams.get('month'));
-  const period = url.searchParams.get('period'); // opcional: 2025-08
+  // ───────────────── Parámetros de entrada ─────────────────
+  let year = Number(url.searchParams.get('year'));     // año numérico, ej: 2025
+  let month = Number(url.searchParams.get('month'));   // mes 1..12
+  const period = url.searchParams.get('period');       // alternativo: 'YYYY-MM'
   const groupParam = (url.searchParams.get('group') || 'modelo').toLowerCase();
+
+  // Normalizamos a uno de los 3 grupos válidos (default: 'modelo')
   const group: 'modelo' | 'estado' | 'tecnico' =
     groupParam === 'estado' ? 'estado' :
     groupParam === 'tecnico' ? 'tecnico' :
     'modelo';
 
+  // Permitir `period=YYYY-MM` como alternativa a year+month
   if ((!year || !month) && period && /^\d{4}-\d{2}$/.test(period)) {
     const [y, m] = period.split('-').map(Number);
     year = y;
     month = m;
   }
+
+  // Validaciones mínimas de fecha
   if (!year || !month || month < 1 || month > 12) {
     return new Response(JSON.stringify({ error: 'Parámetros inválidos. Use year+month o period=YYYY-MM.' }), {
       status: 400,
@@ -35,18 +40,26 @@ export const GET: APIRoute = async ({ url, locals }) => {
     });
   }
 
-  // Aceptar M/D/YYYY, MM/D/YYYY, YYYY-MM-DD y YYYY/MM/DD en marca_temporal
+  // ───────────────── Filtro por mes en `marca_temporal` ─────────────────
+  // Acepta varios formatos históricos: M/D/YYYY, MM/D/YYYY (con % al final por si tiene hora),
+  // y variantes ISO-like: YYYY-MM-DD o YYYY/MM/DD.
   const y = String(year);
-  const mNoPad = String(month);
-  const mPad   = String(month).padStart(2, '0');
+  const mNoPad = String(month);             // ej: '8'
+  const mPad   = String(month).padStart(2, '0'); // ej: '08'
   const patterns = [
-    `${mNoPad}/%/${y}%`,
-    ...(mNoPad !== mPad ? [`${mPad}/%/${y}%`] : []),
-    `${y}-${mPad}-%`,
-    `${y}/${mPad}/%`,
+    `${mNoPad}/%/${y}%`,                    // 8/%/2025%
+    ...(mNoPad !== mPad ? [`${mPad}/%/${y}%`] : []), // 08/%/2025% (si aplica)
+    `${y}-${mPad}-%`,                       // 2025-08-%
+    `${y}/${mPad}/%`,                       // 2025/08/%
   ];
+  // Supabase permite .or("campo.ilike.patron1,campo.ilike.patron2,...")
   const orExpr = patterns.map(p => `marca_temporal.ilike.${p}`).join(',');
 
+  // ───────────────── Query principal ─────────────────
+  // Traemos lo mínimo para agrupar:
+  // - id, marca_temporal, estado
+  // - join a impresoras → modelo
+  // - join a tecnicos → email (para agrupar por técnico por parte local del email)
   const { data, error } = await supabase
     .from('tickets_mian')
     .select(`
@@ -66,13 +79,15 @@ export const GET: APIRoute = async ({ url, locals }) => {
     });
   }
 
+  // Helper: obtiene el email del técnico (del join), tolerando array u objeto
   const getTecnicoEmail = (row: any): string | null => {
     const t = Array.isArray(row?.tecnicos) ? row.tecnicos[0] : row?.tecnicos;
     const email: string | undefined = t?.email || undefined;
     return email ? String(email) : null;
   };
 
-  // Agrupar (TOP 10 para el gráfico/tabla)
+  // ───────────────── Aggregation (TOP 10) ─────────────────
+  // Recorremos filas y vamos sumando por clave según `group`.
   const counts = new Map<string, number>();
   for (const row of (data ?? [])) {
     let key: string;
@@ -80,13 +95,16 @@ export const GET: APIRoute = async ({ url, locals }) => {
       key = (row as any)?.estado?.toString().trim() || 'Sin estado';
     } else if (group === 'tecnico') {
       const email = getTecnicoEmail(row);
+      // agrupamos por parte local (antes de @); si no hay, “Sin técnico”
       key = email ? (email.split('@')[0] || 'Sin técnico') : 'Sin técnico';
-    } else { // modelo
+    } else { // group === 'modelo'
+      // del join a impresoras, puede venir como objeto directo (gracias al alias)
       key = (row as any)?.impresoras?.modelo?.toString().trim() || 'Sin modelo';
     }
     counts.set(key, (counts.get(key) || 0) + 1);
   }
 
+  // Transformamos a arreglo, calculamos porcentajes y ordenamos desc
   const total = (data ?? []).length;
   const itemsAll = Array.from(counts.entries())
     .map(([label, count]) => ({
@@ -96,8 +114,11 @@ export const GET: APIRoute = async ({ url, locals }) => {
     }))
     .sort((a, b) => b.count - a.count);
 
+  // Limitamos a TOP 10 para UI (gráfico/tabla)
   const TOP_N = 10;
   const items = itemsAll.slice(0, TOP_N);
+
+  // ───────────────── IDs agrupados según tipo (útil para drill-down en UI) ─────────────────
 
   // IDs por estado (cuando group === 'estado')
   let idsByEstado: Record<string, number[]> | undefined;
@@ -108,6 +129,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
       if (!idsByEstado[estado]) idsByEstado[estado] = [];
       idsByEstado[estado].push((row as any).id as number);
     }
+    // normalizamos: sin duplicados y orden ascendente
     for (const k of Object.keys(idsByEstado)) {
       idsByEstado[k] = Array.from(new Set(idsByEstado[k])).sort((a, b) => a - b);
     }
@@ -142,6 +164,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
     }
   }
 
+  // ───────────────── Respuesta ─────────────────
   return new Response(JSON.stringify({ total, items, group, idsByEstado, idsByModelo, idsByTecnico }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },

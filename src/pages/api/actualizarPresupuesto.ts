@@ -3,6 +3,13 @@ import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
 import { resolverAutor, nombreAutor } from '../../lib/resolverAutor';
 
+/**
+ * Normaliza un texto de monto para almacenarlo en DB:
+ * - Elimina caracteres no numéricos (excepto coma, punto y signo).
+ * - Detecta el separador decimal (último entre coma o punto).
+ * - Convierte siempre a notación con punto decimal.
+ * - Devuelve el string limpio o null si estaba vacío.
+ */
 function normalizarMontoTexto(input?: string | null): string | null {
   if (input == null) return null;
   let s = String(input).trim();
@@ -23,6 +30,9 @@ function normalizarMontoTexto(input?: string | null): string | null {
   return s;
 }
 
+/**
+ * Helper para responder errores en formato JSON.
+ */
 function jsonError(message: string, status = 500) {
   return new Response(JSON.stringify({ error: message }), {
     status,
@@ -84,15 +94,18 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     let huboInsert = false;
 
     if (Array.isArray(rows) && rows.length > 0) {
+      // Si existe, actualizar la última fila (fuente de verdad)
       const last = rows[rows.length - 1];
       if (!last.fecha_presupuesto) (datos as any).fecha_presupuesto = nowIso;
       const { error } = await supabase.from('presupuestos').update(datos).eq('id', last.id);
       opErr = error;
+      // Limpieza de duplicados: si hay más de 1 fila, borrar las viejas
       if (!opErr && rows.length > 1) {
         const idsViejos = rows.slice(0, rows.length - 1).map(r => r.id);
         await supabase.from('presupuestos').delete().in('id', idsViejos);
       }
     } else {
+      // Si no hay filas, crear una nueva
       (datos as any).fecha_presupuesto = nowIso;
       const { error } = await supabase.from('presupuestos').insert([datos]);
       opErr = error;
@@ -118,7 +131,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     if (updEstadoErr) return jsonError('No se pudo marcar P. Enviado: ' + updEstadoErr.message, 500);
 
     // === 8) Comentario automático "<local-part> envió el presupuesto" ===
-    //     (obligatorio: si falla, devolvemos error)
+    // Obligatorio: si falla, devolvemos error
     const autor = await resolverAutor(locals);
     if (!autor || autor.activo === false) {
       return jsonError('No se pudo determinar el autor para comentar el presupuesto', 401);

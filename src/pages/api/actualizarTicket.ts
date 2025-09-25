@@ -3,30 +3,43 @@ import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
 import { resolverAutor, nombreAutor } from '../../lib/resolverAutor';
 
-/** Normaliza a YYYY-MM-DD desde ISO, YYYY/MM/DD, MM/DD/YYYY o DD/MM/YYYY. */
+/**
+ * Normaliza fechas a formato 'YYYY-MM-DD' a partir de varios posibles formatos de entrada:
+ * - ISO completo (corta a la fecha) / 'YYYY-MM-DD'
+ * - 'YYYY/MM/DD'
+ * - 'MM/DD/YYYY' o 'DD/MM/YYYY' (detecta por rango de mes/día)
+ * - Strings parseables por Date()
+ * Devuelve null si no se puede interpretar.
+ */
 function normDate(value?: string | null): string | null {
   if (!value) return null;
   const sRaw = value.trim();
   if (!sRaw || sRaw.toLowerCase() === 'null' || sRaw.toLowerCase() === 'undefined') return null;
 
+  // Quita hora si viene en ISO; también corta si trae espacios
   const s = sRaw.split('T')[0].split(' ')[0];
 
+  // Caso YYYY-MM-DD
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
 
+  // Caso YYYY/MM/DD
   m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
   if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
 
+  // Caso M/D/YYYY o D/M/YYYY (ambigua → heurística por rangos)
   m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
   if (m) {
     const a = parseInt(m[1],10), b = parseInt(m[2],10), yyyy = m[3];
     let dd:number, mm:number;
+    // Si uno de los campos > 12, deducimos rol por descarte
     if (b > 12 && a <= 12) { mm = a; dd = b; }
     else if (a > 12 && b <= 12) { dd = a; mm = b; }
-    else { mm = a; dd = b; }
+    else { mm = a; dd = b; } // Ambiguo → asumimos M/D
     return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
   }
 
+  // Fallback: Date nativo (acepta varios formatos)
   const d = new Date(sRaw);
   if (!isNaN(d.getTime())) {
     const yyyy = d.getFullYear();
@@ -37,28 +50,35 @@ function normDate(value?: string | null): string | null {
   return null;
 }
 
-/** Convierte lo que venga a 'M/D/YYYY' (sin ceros a la izquierda). */
+/**
+ * Convierte la fecha entrada a 'M/D/YYYY' (sin ceros a la izquierda).
+ * Acepta varios formatos y usa heurística M/D vs D/M cuando es ambiguo.
+ */
 function toMDYFromAny(value?: string | null): string | null {
   if (!value) return null;
   const sRaw = String(value).trim();
   if (!sRaw || sRaw.toLowerCase() === 'null' || sRaw.toLowerCase() === 'undefined') return null;
 
-  let m = sRaw.match(/^(\d{4})-(\d{2})-(\d{2})$/);        // YYYY-MM-DD
+  // YYYY-MM-DD
+  let m = sRaw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) return `${Number(m[2])}/${Number(m[3])}/${m[1]}`;
 
-  m = sRaw.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);      // YYYY/MM/DD
+  // YYYY/MM/DD
+  m = sRaw.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
   if (m) return `${Number(m[2])}/${Number(m[3])}/${m[1]}`;
 
-  m = sRaw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/); // M/D/YYYY o D/M/YYYY
+  // M/D/YYYY o D/M/YYYY (resuelve por rango)
+  m = sRaw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
   if (m) {
     const a = parseInt(m[1],10), b = parseInt(m[2],10), yyyy = m[3];
     let mm:number, dd:number;
-    if (b > 12 && a <= 12) { mm = a; dd = b; }          // asumimos M/D
-    else if (a > 12 && b <= 12) { dd = a; mm = b; }     // venía D/M
-    else { mm = a; dd = b; }                             // ambiguo → M/D
+    if (b > 12 && a <= 12) { mm = a; dd = b; }       // asumimos M/D
+    else if (a > 12 && b <= 12) { dd = a; mm = b; }  // venía D/M
+    else { mm = a; dd = b; }                         // ambiguo → M/D
     return `${mm}/${dd}/${yyyy}`;
   }
 
+  // Fallback: Date nativo
   const d = new Date(sRaw);
   if (!isNaN(d.getTime())) {
     return `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
@@ -66,7 +86,13 @@ function toMDYFromAny(value?: string | null): string | null {
   return null;
 }
 
-/** Normaliza montos escritos como “$10.000”, “10.000,50”, “10000.5”, etc. → string numérico estable (decimal con punto). */
+/**
+ * Normaliza montos escritos como “$10.000”, “10.000,50”, “10000.5”, etc.
+ * → devuelve string numérico estable usando punto como separador decimal.
+ * - Mantiene el signo.
+ * - Remueve símbolos no numéricos excepto '.' y ','.
+ * - Si hay ambos separadores, toma como decimal el último que aparece.
+ */
 function normalizarMontoTexto(input?: string | null): string | null {
   if (input == null) return null;
   let s = String(input).trim();
@@ -79,7 +105,7 @@ function normalizarMontoTexto(input?: string | null): string | null {
   const tieneComa = s.includes(',');
 
   if (tienePunto && tieneComa) {
-    // El separador decimal es el ÚLTIMO símbolo que aparezca (entre coma/punto)
+    // Regla: el separador decimal es el último símbolo entre coma/punto
     const lastP = s.lastIndexOf('.');
     const lastC = s.lastIndexOf(',');
     const decimalSep = lastP > lastC ? '.' : ',';
@@ -92,12 +118,19 @@ function normalizarMontoTexto(input?: string | null): string | null {
     s = s.replace(',', '.');
   } // Solo punto o solo dígitos → queda igual
 
+  // Si puede convertirse a número, devolver tal cual la cadena limpiada
   const n = Number(s);
   if (!isFinite(n)) return String(s || '');
   return s;
 }
 
-/** Normaliza DNI/CUIT (servidor, fuente de verdad). */
+/**
+ * Normaliza DNI/CUIT para almacenamiento (servidor = fuente de verdad).
+ * - 7 dígitos → X.XXX.XXX
+ * - 8 dígitos → XX.XXX.XXX
+ * - 11 dígitos → XX-XXXXXXXX-X (CUIT/CUIL)
+ * Si no coincide, devuelve el raw.
+ */
 function normalizarDniCuit(input?: string | null): string | null {
   if (input == null) return null;
   const raw = String(input).trim();
@@ -115,6 +148,7 @@ function normalizarDniCuit(input?: string | null): string | null {
   return raw;
 }
 
+/** Helper para responder JSON de error con status configurable. */
 function jsonError(message: string, status = 500) {
   return new Response(JSON.stringify({ error: message }), {
     status,
@@ -122,8 +156,11 @@ function jsonError(message: string, status = 500) {
   });
 }
 
-/* ====== Helpers de "display" para mostrar en comentario ====== */
+/* ====== Helpers de "display" para armar un comentario humano-legible con diffs ====== */
+/** Muestra '—' para null/undefined/vacío; si no, String(v). */
 const show = (v: any) => (v === null || v === undefined || v === '') ? '—' : String(v);
+
+/** Formatea números ARS en es-AR con hasta 2 decimales, o '—' si null/'' . */
 function formatARSForShow(v?: string | null) {
   if (v == null || v === '') return '—';
   const n = Number(v);
@@ -132,6 +169,8 @@ function formatARSForShow(v?: string | null) {
   const d = dec ? Math.min(2, dec) : 0;
   return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
+
+/** 'Sí'/'No'/'—' para booleanos o strings 'true'/'false'. */
 const boolShow = (v: string | boolean | null | undefined) =>
   v === true || v === 'true'
     ? 'Sí'
@@ -139,14 +178,27 @@ const boolShow = (v: string | boolean | null | undefined) =>
     ? 'No'
     : '—';
 
+/**
+ * Handler principal POST de Astro para actualizar un ticket.
+ * - Lee y valida el ID del ticket desde varios orígenes.
+ * - Carga estado actual (ticket + relaciones) para calcular diffs.
+ * - Aplica actualizaciones parciales según los campos enviados.
+ * - Maneja creación/actualización de delivery y presupuesto.
+ * - Sube/borra imágenes en Supabase Storage.
+ * - Escribe un comentario con los cambios realizados.
+ * - Redirige a /detalle/:id si todo OK.
+ */
 export const POST: APIRoute = async ({ request, params, locals }) => {
   try {
+    // Perfil/rol desde locals (puede venir de middleware de autenticación)
     const perfil = (locals as any)?.perfil as { rol?: string; admin?: boolean } | undefined;
     const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 
-    // ---------- Obtener ID robustamente ----------
+    // ---------- Obtener ID robustamente desde form/query/params/referer ----------
     const formData = await request.formData();
     let id: string | undefined;
+
+    // Priorizamos keys más comunes del form
     for (const k of ['ticketId', 'id', 'ticket', 'ticket_id']) {
       const v = formData.get(k);
       if (typeof v === 'string' && v.trim() && v.trim().toLowerCase() !== 'undefined') {
@@ -154,6 +206,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
         break;
       }
     }
+    // Fallback: params de la ruta, query string, o referer (/editar/:id)
     if (!id && params?.id) id = String(params.id).trim();
     if (!id) {
       const u = new URL(request.url);
@@ -167,10 +220,11 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     }
     if (!id) return jsonError('ID no proporcionado', 400);
 
+    // Validación numérica del ID
     const idNum = Number(id);
     if (!Number.isFinite(idNum) || idNum <= 0) return jsonError(`ID inválido: ${id}`, 400);
 
-    // ---------- Archivos y flags imagen ----------
+    // ---------- Manejo de archivos (imágenes) y flags de borrado ----------
     const imagenArchivo       = formData.get('imagenArchivo') as File | null;
     const borrarImagen        = (formData.get('borrarImagen') as string | null) || 'false';
     const imagenTicketArchivo = formData.get('imagenTicketArchivo') as File | null;
@@ -178,11 +232,11 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     const imagenExtraArchivo  = formData.get('imagenExtraArchivo') as File | null;
     const borrarImagenExtra   = (formData.get('borrarImagenExtra') as string | null) || 'false';
 
-    // ---------- Campos de texto ----------
+    // ---------- Campos de texto planos del form ----------
     const fields: Record<string, string> = {};
     formData.forEach((val, key) => { if (typeof val === 'string') fields[key] = val.trim(); });
 
-    // ---------- Leer fila actual + valores para comparar ----------
+    // ---------- Leer fila actual del ticket (datos base para comparar) ----------
     const { data: tRow, error: tErr } = await supabase
       .from('tickets_mian')
       .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion, estado, maquina_reparada, tecnico_id, notas_del_tecnico, notas_del_cliente')
@@ -190,7 +244,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       .single();
     if (tErr || !tRow) return jsonError(`No se pudo obtener el ticket (id=${String(id)})`, 500);
 
-    // Cargar valores actuales de tablas relacionadas (si vamos a tocar esos campos)
+    // Cargar datos actuales de tablas relacionadas (solo si las vamos a tocar)
     let clienteOld: any = null;
     if (tRow.cliente_id) {
       const { data } = await supabase
@@ -211,12 +265,14 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       impresoraOld = data || null;
     }
 
+    // Delivery actual vinculado al ticket
     const { data: deliveryOld } = await supabase
       .from('delivery')
       .select('pagado, medio_de_entrega, cotizar_delivery, informacion_adicional_delivery')
       .eq('ticket_id', idNum)
       .maybeSingle();
 
+    // Último presupuesto del ticket (o ninguno)
     const { data: presOld } = await supabase
       .from('presupuestos')
       .select('monto, link_presupuesto, cubre_garantia, fecha_presupuesto')
@@ -225,8 +281,12 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       .limit(1)
       .maybeSingle();
 
-    // ====== acumulador de cambios para comentario ======
+    // ====== Acumulador de cambios (para comentario automático) ======
     const cambios: string[] = [];
+    /**
+     * Agrega un cambio al listado si 'before' y 'after' difieren textualmente
+     * (con formateo opcional por campo).
+     */
     const pushCambio = (label: string, before: any, after: any, formatter?: (v:any)=>string) => {
       const f = formatter ?? show;
       const b = f(before);
@@ -236,37 +296,40 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     };
 
     // ========== Ticket principal ==========
-    const fechaFormularioMDY = toMDYFromAny(fields.fechaFormulario); // ← siempre M/D/YYYY
-    const fechaListoNorm     = normDate(fields.timestampListo);      // ISO para fecha listo
+    // Normalizaciones de fechas específicas del formulario
+    const fechaFormularioMDY = toMDYFromAny(fields.fechaFormulario); // guardamos en marca_temporal → M/D/YYYY
+    const fechaListoNorm     = normDate(fields.timestampListo);      // guardamos en fecha_de_reparacion → YYYY-MM-DD
 
     const estadoForm = (fields.estado ?? '').trim();
 
+    // Payload base a actualizar en tickets_mian (merge con valores actuales)
     const datosTicketsMian: Record<string, any> = {
       estado: estadoForm || tRow.estado || null,
       marca_temporal: (fechaFormularioMDY ?? tRow.marca_temporal) || null,
       fecha_de_reparacion: (fechaListoNorm ?? tRow.fecha_de_reparacion) || null,
       notas_del_tecnico: fields.notaTecnico || null,
+      // 'maquina' o 'modelo' pueden venir de la UI; si no, mantenemos el actual
       maquina_reparada: fields.maquina || fields.modelo || tRow.maquina_reparada || null,
     };
 
-    // Comparar cambios de ticket
+    // Registrar diffs visibles del ticket
     pushCambio('estado', tRow.estado, datosTicketsMian.estado);
     pushCambio('fecha formulario', tRow.marca_temporal, datosTicketsMian.marca_temporal);
     pushCambio('fecha listo', tRow.fecha_de_reparacion, datosTicketsMian.fecha_de_reparacion);
     pushCambio('nota técnico', tRow.notas_del_tecnico, datosTicketsMian.notas_del_tecnico);
     pushCambio('modelo/máquina', tRow.maquina_reparada, datosTicketsMian.maquina_reparada);
 
+    // Guardar “Detalle del problema” en notas_del_cliente del ticket, si viene
     if (typeof fields.detalleCliente === 'string') {
-      // guardamos “Detalle del problema” como notas_del_cliente del ticket
       pushCambio('detalle del problema', tRow.notas_del_cliente, fields.detalleCliente);
       datosTicketsMian.notas_del_cliente = fields.detalleCliente;
     }
 
-    // ========== Técnico ==========
+    // ========== Técnico asignado ==========
     if ('tecnico_id' in fields) {
       const prevTecId = tRow.tecnico_id ?? null;
 
-      // calcular nuevo id según el form
+      // Determinar nuevo técnico desde el form (string → number | null)
       let newTecId: number | null = null;
       const raw = fields.tecnico_id;
       if (raw === '') {
@@ -283,11 +346,11 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
         }
       }
 
-      // Si no cambió el ID, no mostramos nada
+      // Evitar trabajo si no hay cambio efectivo
       const changed = (prevTecId ?? null) !== (newTecId ?? null);
 
       if (changed) {
-        // Traer en un solo query ambos técnicos (si existen)
+        // Traer en un solo query ambos técnicos para armar etiquetas legibles
         const ids: number[] = [];
         if (prevTecId != null) ids.push(prevTecId);
         if (newTecId  != null && newTecId !== prevTecId) ids.push(newTecId);
@@ -304,10 +367,11 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
           const byId = new Map<number, any>();
           (tecs ?? []).forEach(t => byId.set(Number(t.id), t));
 
+          // Preferimos local-part del email; si no, nombre y apellido; si no, #id
           const labelFrom = (t: any): string => {
             if (!t) return '—';
             const email = (t.email ?? '').toString().trim();
-            if (email && email.includes('@')) return email.split('@')[0]; // local-part
+            if (email && email.includes('@')) return email.split('@')[0];
             const nom = (t.nombre ?? '').toString().trim();
             const ape = (t.apellido ?? '').toString().trim();
             const full = `${nom} ${ape}`.trim();
@@ -321,12 +385,13 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
         cambios.push(`- <strong>técnico asignado</strong>: de "${prevLabel}" a "${newLabel}"`);
       }
     } else if (typeof fields.tecnico === 'string') {
-      // legacy "Nombre Apellido": no confiable para ID → omitimos del diff
+      // Campo legacy con nombre libre; no es confiable para ID → no registramos diff
     }
 
-    // ========== Cliente (merge: solo lo que venga no vacío) ==========
+    // ========== Cliente (merge: solo actualizamos lo que venga no vacío) ==========
     if (tRow.cliente_id) {
       const updateCliente: Record<string, any> = {};
+
       if (typeof fields.dniCuit === 'string' && fields.dniCuit !== '') {
         const nuevo = normalizarDniCuit(fields.dniCuit);
         pushCambio('DNI/CUIT', clienteOld?.dni_cuit, nuevo);
@@ -345,19 +410,21 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
         updateCliente.comentarios = fields.detalleCliente;
       }
 
+      // Solo tocamos la fila si hay algo que actualizar
       if (Object.keys(updateCliente).length > 0) {
         const { error } = await supabase.from('cliente').update(updateCliente).eq('id', tRow.cliente_id);
         if (error) return jsonError('Error al actualizar cliente: ' + error.message, 500);
       }
     }
 
-    // ========== Impresora ==========
-    const maquina      = fields.maquina || ''; // ← modelo real desde UI
+    // ========== Impresora (actualiza existente o crea y vincula) ==========
+    const maquina      = fields.maquina || ''; // modelo real
     const numeroSerie  = fields.numeroSerie || '';
     const boquilla     = fields.boquilla || '';
 
     if (maquina || numeroSerie || boquilla) {
       if (tRow.impresora_id) {
+        // Actualización parcial de impresora ya vinculada
         const payloadImpresora: any = {};
         if (maquina) {
           payloadImpresora.modelo  = maquina;
@@ -382,9 +449,10 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
           if (error) return jsonError('Error al actualizar impresora: ' + error.message, 500);
         }
       } else if (maquina || numeroSerie || boquilla) {
-        // crear y vincular
+        // No hay impresora vinculada → buscar/crear y luego vincular
         let impresoraId: number | null = null;
 
+        // 1) Si vino número de serie, intentamos matchear
         if (numeroSerie) {
           const { data: impFound } = await supabase
             .from('impresoras')
@@ -394,6 +462,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
           if (impFound?.id) impresoraId = impFound.id;
         }
 
+        // 2) Si no hay por serie, probamos por modelo (modelo=maquina)
         if (!impresoraId && (maquina || numeroSerie || boquilla)) {
           const maquinaSafe = maquina || 'Desconocida';
           const serieSafe   = numeroSerie || `TEMP-${Date.now()}-${Math.floor(Math.random()*900+100)}`;
@@ -407,6 +476,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
           if (byCombo?.id) {
             impresoraId = byCombo.id;
           } else {
+            // 3) Crear impresora mínima
             const { data: impNew, error: impErr } = await supabase
               .from('impresoras')
               .insert({
@@ -420,12 +490,13 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
             if (impErr) return jsonError('No se pudo crear la impresora: ' + impErr.message, 500);
             impresoraId = impNew!.id;
           }
-          // cambios semánticos (creación)
+          // Registrar cambios semánticos de creación
           pushCambio('máquina (modelo)', null, maquina || 'Desconocida');
           if (numeroSerie) pushCambio('n° de serie', null, numeroSerie);
           if (boquilla) pushCambio('tamaño de boquilla', null, boquilla);
         }
 
+        // 4) Vincular impresora creada/encontrada al ticket
         if (impresoraId) {
           const { error: linkErr } = await supabase
             .from('tickets_mian')
@@ -436,9 +507,10 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       }
     }
 
-    // ========== Delivery ==========
+    // ========== Delivery (crea si no existe; respeta permisos admin para ciertos campos) ==========
     const deliveryUpd: any = {};
     if (typeof fields.cobrado === 'string') {
+      // Guardamos como 'true'/'false'/null (string) para homogeneidad con bd
       const nuevo = fields.cobrado === 'true' ? 'true' : fields.cobrado === 'false' ? 'false' : null;
       pushCambio('cobrado', deliveryOld?.pagado, nuevo, boolShow);
       deliveryUpd.pagado = nuevo;
@@ -459,6 +531,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       }
     }
 
+    // Upsert manual: intentamos update; si no afectó filas, hacemos insert
     if (Object.keys(deliveryUpd).length > 0) {
       const { data: updRows, error: updErr } = await supabase
         .from('delivery')
@@ -476,9 +549,10 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       }
     }
 
-    // ========== Presupuesto ==========
-    const fechaPresuNorm = normDate(fields.timestampPresupuesto); // puede venir vacío
+    // ========== Presupuesto (actualiza o crea; marca estado 'P. Enviado' si se guarda) ==========
+    const fechaPresuNorm = normDate(fields.timestampPresupuesto); // opcional
     const presUpdate: any = {
+      // Usamos 'undefined' para no tocar campos no enviados
       monto: ('monto' in fields) ? normalizarMontoTexto(fields.monto) : undefined,
       link_presupuesto: ('linkPresupuesto' in fields) ? (fields.linkPresupuesto || null) : undefined,
       cubre_garantia: (fields.cubre_garantia ?? fields.cubreGarantia) === 'true' ? 'true' : 'false',
@@ -487,8 +561,9 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
     let presGuardado = false;
 
+    // Solo realizamos operación si al menos un campo vino presente
     if (Object.values(presUpdate).some(v => v !== undefined)) {
-      // diffs visibles (solo para los que vienen en form)
+      // Diffs visibles: solo para los campos presentes en el form
       if ('monto' in fields) {
         pushCambio('monto', presOld?.monto, normalizarMontoTexto(fields.monto), formatARSForShow);
       }
@@ -503,6 +578,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
         pushCambio('fecha presupuesto', presOld?.fecha_presupuesto, fechaPresuNorm);
       }
 
+      // Intento de update
       const { data: updRows, error: updErr } = await supabase
         .from('presupuestos')
         .update(presUpdate)
@@ -514,6 +590,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       const afectadas = Array.isArray(updRows) ? updRows.length : (updRows ? 1 : 0);
 
       if (afectadas === 0) {
+        // No existía → insert
         const presInsert: any = { ticket_id: idNum, ...presUpdate };
         const { data: insRows, error: insErr } = await supabase
           .from('presupuestos')
@@ -527,7 +604,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       }
     }
 
-    // ✅ si se guardó/creó un presupuesto → marcar estado "P. Enviado"
+    // Si se guardó/creó un presupuesto, forzamos estado del ticket a "P. Enviado"
     if (presGuardado) {
       const { error: estadoErr } = await supabase
         .from('tickets_mian')
@@ -536,8 +613,10 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       if (estadoErr) return jsonError('No se pudo marcar el estado como P. Enviado: ' + estadoErr.message, 500);
     }
 
-    // ========== Imágenes ==========
+    // ========== Imágenes (subir/borrar en Supabase Storage) ==========
     const contentType = (f: File | null) => (f as any)?.type || 'image/webp';
+
+    // Sube una imagen al bucket 'imagenes' en 'public/...' (upsert) y setea la URL pública en el campo indicado del ticket
     const subirImagen = async (archivo: File, nombreArchivo: string, campo: 'imagen'|'imagen_ticket'|'imagen_extra') => {
       const { error: uploadError } = await supabase.storage
         .from('imagenes')
@@ -546,33 +625,40 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       const { data } = supabase.storage.from('imagenes').getPublicUrl(nombreArchivo);
       (datosTicketsMian as any)[campo] = data.publicUrl;
     };
+
+    // Borra un archivo del bucket y setea null en el campo del ticket
     const borrarImagenCampo = async (nombreArchivo: string, campo: 'imagen'|'imagen_ticket'|'imagen_extra') => {
       await supabase.storage.from('imagenes').remove([nombreArchivo]);
       (datosTicketsMian as any)[campo] = null;
     };
+
+    // Interpreta flags 'delete'/'true' para borrar
     const mustDelete = (v: string | null | undefined) => v === 'delete' || v === 'true';
 
+    // Imagen principal
     const nombreArchivo = `public/${idNum}.webp`;
     if (imagenArchivo && imagenArchivo.size > 0)      await subirImagen(imagenArchivo, nombreArchivo, 'imagen');
     else if (mustDelete(borrarImagen))                await borrarImagenCampo(nombreArchivo, 'imagen');
 
+    // Imagen del ticket (comprobante, etc.)
     const nombreArchivoTicket = `public/${idNum}_ticket.webp`;
     if (imagenTicketArchivo && imagenTicketArchivo.size > 0) await subirImagen(imagenTicketArchivo, nombreArchivoTicket, 'imagen_ticket');
     else if (mustDelete(borrarImagenTicket))                  await borrarImagenCampo(nombreArchivoTicket, 'imagen_ticket');
 
+    // Imagen extra (adicional)
     const nombreArchivoExtra = `public/${idNum}_extra.webp`;
     if (imagenExtraArchivo && imagenExtraArchivo.size > 0) await subirImagen(imagenExtraArchivo, nombreArchivoExtra, 'imagen_extra');
     else if (mustDelete(borrarImagenExtra))                 await borrarImagenCampo(nombreArchivoExtra, 'imagen_extra');
 
-    // Guardar los cambios acumulados del ticket
+    // Guardar los cambios acumulados del ticket (tickets_mian)
     {
       const { error } = await supabase.from('tickets_mian').update(datosTicketsMian).eq('id', idNum);
       if (error) return jsonError('Error al actualizar ticket: ' + error.message, 500);
     }
 
-    // ====== Comentario automático con el diff ======
+    // ====== Comentario automático con el diff (si hubo cambios) ======
     if (cambios.length > 0) {
-      // autor / local-part
+      // Determinar autor (usuario actual) para el comentario
       const autor = await resolverAutor(locals);
       if (!autor || autor.activo === false) {
         return jsonError('No se pudo determinar el autor para comentar cambios', 401);
@@ -590,6 +676,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       const cuerpo = cambios.join('\n'); // una línea por cambio, con viñeta y <strong>
       const mensaje = `${encabezado}\n${cuerpo}`.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
+      // Insertar comentario de cambios
       const { error: cErr } = await supabase
         .from('ticket_comentarios')
         .insert({ ticket_id: idNum, autor_id: autor.id, mensaje });
@@ -597,8 +684,10 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       if (cErr) return jsonError('No se pudo crear el comentario de cambios: ' + cErr.message, 500);
     }
 
+    // Redirección al detalle si todo salió bien
     return new Response(null, { status: 303, headers: { Location: `/detalle/${idNum}` } });
   } catch (err: any) {
+    // Fallback de error inesperado
     return jsonError('Error inesperado: ' + (err?.message || String(err)), 500);
   }
 };

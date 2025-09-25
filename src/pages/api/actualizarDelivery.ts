@@ -1,5 +1,12 @@
 import { supabase } from '../../lib/supabase';
 
+/**
+ * Normaliza un monto recibido como string:
+ * - Elimina caracteres no numéricos (excepto coma, punto y signo).
+ * - Detecta el separador decimal (último en aparecer entre coma y punto).
+ * - Convierte siempre el decimal a punto (`.`).
+ * - Devuelve null si no hay nada, o el string numérico listo para parsear.
+ */
 function normalizarMontoTexto(input?: string | null): string | null {
   if (input == null) return null;
   let s = String(input).trim();
@@ -42,8 +49,12 @@ export async function POST(context: { request: Request }) {
     if (typeof value === 'string') fields[key] = value.trim();
   });
 
-  // Resolver "medio_de_entrega" desde el select + (opcional) texto "otro".
-  // También mantenemos compatibilidad con el campo legacy "medio_de_entrega" si llega.
+  /**
+   * Determina el medio de entrega:
+   * 1) Si el select vale "Otro", devuelve el texto ingresado en "medio_de_entrega_otro".
+   * 2) Si el select tiene valor, devuelve ese valor.
+   * 3) Como fallback, usa el campo legacy "medio_de_entrega".
+   */
   function resolverMedioEntrega(f: Record<string, string>): string | null {
     const sel = f.medio_de_entrega_select || '';
     const otro = f.medio_de_entrega_otro || '';
