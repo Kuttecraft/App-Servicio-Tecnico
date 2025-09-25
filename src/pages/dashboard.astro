@@ -1,21 +1,31 @@
 ---
+/**
+ * Dashboard listado de tickets con filtros (controlados desde el Topbar).
+ * - Filtros por: id, ticket, estado, cliente, máquina (by + q).
+ * - Paginación simple (server-side) con rango from/to.
+ * - Joins “suaves” con cliente/impresoras y variantes con !inner según filtro.
+ * - Renderiza tarjetas con <PrinterCard />.
+ */
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 import PrinterCard from '../components/PrinterCard.astro';
 import { supabase } from '../lib/supabase';
 
-// Parámetros de filtro (la UI vive ahora en el Topbar)
-const by = Astro.url.searchParams.get('by') || 'id';
-const rawQ = Astro.url.searchParams.get('q') || '';
-const q = rawQ.trim();
+// =================== Filtros (provienen del Topbar via querystring) ===================
+const by = Astro.url.searchParams.get('by') || 'id';     // campo por el que se filtra
+const rawQ = Astro.url.searchParams.get('q') || '';      // valor crudo
+const q = rawQ.trim();                                    // valor saneado
 
-// Paginación
+// =================== Paginación ===================
+// Nota: itemsPerPage alto (500) para reducir cambios de página en catálogos medianos.
 const pageParam = Astro.url.searchParams.get('page') || '1';
 const currentPage = parseInt(pageParam);
 const itemsPerPage = 500;
 const from = (currentPage - 1) * itemsPerPage;
 const to = from + itemsPerPage - 1;
 
-// SELECT base (agregamos !inner SOLO cuando hace falta)
+// =================== SELECT base ===================
+// join “aliasado” para que el objeto sea { impresora: { modelo }, cliente: { cliente, whatsapp } }
+// Cuando el filtro exige presencia (by=cliente|maquina), se usa !inner en esa relación.
 let selectStr = `
   id,
   ticket,
@@ -25,6 +35,7 @@ let selectStr = `
   cliente:cliente (cliente, whatsapp)
 `;
 
+// Si filtramos por cliente: forzamos inner join con cliente
 if (by === 'cliente') {
   selectStr = `
     id,
@@ -35,6 +46,8 @@ if (by === 'cliente') {
     cliente:cliente!inner (cliente, whatsapp)
   `;
 }
+
+// Si filtramos por máquina: forzamos inner join con impresoras
 if (by === 'maquina') {
   selectStr = `
     id,
@@ -46,39 +59,55 @@ if (by === 'maquina') {
   `;
 }
 
+// Construcción de la query base
 let query = supabase.from('tickets_mian').select(selectStr);
 
-// Filtros
+// =================== Aplicación de filtros ===================
 if (q) {
+  // Si q es numérico, lo usamos como número; sino null para “no coincide”
   const qNum = Number.isFinite(Number(q)) ? Number(q) : null;
 
   switch (by) {
     case 'id':
+      // Búsqueda exacta por id (si no es numérico, forzamos un id imposible -1)
       query = qNum !== null ? query.eq('id', qNum) : query.eq('id', -1);
       break;
+
     case 'ticket':
+      // Búsqueda exacta por número de ticket
       query = qNum !== null ? query.eq('ticket', qNum) : query.eq('ticket', -1);
       break;
+
     case 'estado':
-      query = query.eq('estado', q); // igualdad por el select
+      // Igualdad directa (se asume que la UI provee valores válidos)
+      query = query.eq('estado', q);
       break;
+
     case 'cliente':
+      // Búsqueda por “cliente.cliente” (nombre del cliente) con ilike
+      // Requiere el !inner en el select para que la relación exista
       query = query.ilike('cliente.cliente', `%${q}%`);
       break;
+
     case 'maquina':
+      // Búsqueda por “impresora.modelo”
+      // Requiere el !inner en el select para que la relación exista
       query = query.ilike('impresora.modelo', `%${q}%`);
       break;
+
     default:
+      // Sin filtro adicional
       break;
   }
 }
 
-// Orden + rango
+// =================== Orden + rango (paginación) ===================
 query = query.order('id', { ascending: false }).range(from, to);
 
-// Ejecutar
+// =================== Ejecución ===================
 const { data, error } = await query;
-// Blindamos: nunca dejar que impresoras sea null/undefined para evitar .length de null
+
+// Blindaje: siempre devolver array para mapear en el template
 const impresoras = Array.isArray(data) ? data : [];
 if (error) console.error('Error supabase:', error, { by, q });
 ---
@@ -86,7 +115,7 @@ if (error) console.error('Error supabase:', error, { by, q });
 <BasePrivateLayout showFilters={true}>
   <div class="container mt-4">
 
-    <!-- Resultados -->
+    <!-- =================== Resultados =================== -->
     {Array.isArray(impresoras) && impresoras.length > 0 ? (
       <div class="row g-4">
         {impresoras.map((item: any) => (
@@ -111,7 +140,7 @@ if (error) console.error('Error supabase:', error, { by, q });
       </div>
     )}
 
-    <!-- Navegación -->
+    <!-- =================== Navegación =================== -->
     <div class="d-flex justify-content-center mt-4 gap-2">
       {currentPage > 1 && (
         <a

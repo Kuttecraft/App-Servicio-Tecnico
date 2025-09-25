@@ -1,21 +1,32 @@
 ---
+/**
+ * no-autorizado.astro
+ * -------------------
+ * Página simple de error de autorización.
+ * Se muestra cuando el usuario no tiene los permisos necesarios
+ * para acceder a una sección de la app.
+ */
 ---
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
     <title>Acceso Denegado | Servicio Técnico Kuttecraft</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+
     <style>
+      /* Estilos generales de la página */
       body {
         font-family: system-ui, sans-serif;
         background: #f7f7fa;
         margin: 0;
         padding: 0;
-        min-height: 100vh;
+        min-height: 100vh; /* siempre ocupa toda la ventana */
         display: flex;
         align-items: center;
         justify-content: center;
       }
+
+      /* Tarjeta central */
       .card {
         background: #fff;
         padding: 2.5rem 2rem 2rem;
@@ -24,14 +35,20 @@
         max-width: 380px;
         text-align: center;
       }
+
+      /* Título */
       h1 {
         color: #e74c3c;
         margin-bottom: .5rem;
       }
+
+      /* Texto explicativo */
       p {
         color: #222;
         margin-bottom: 1.8rem;
       }
+
+      /* Link de volver al login */
       a {
         color: #1565c0;
         text-decoration: none;
@@ -41,6 +58,8 @@
       a:hover {
         text-decoration: underline;
       }
+
+      /* Emoji grande */
       .emoji {
         font-size: 3rem;
         margin-bottom: .5rem;
@@ -53,18 +72,24 @@
       <h1>Acceso denegado</h1>
       <p>
         Tu cuenta no tiene permisos para ingresar a la aplicación.<br />
-        Si creés que esto es un error o necesitás acceso, por favor <b>contactá al administrador</b>.
+        Si creés que esto es un error o necesitás acceso, por favor
+        <b>contactá al administrador</b>.
       </p>
+      <!-- Link que desloguea al usuario y lo manda al login -->
       <a href="#" id="logout-link">Volver al inicio de sesión</a>
     </div>
+
     <script>
+      // Script para manejar el "logout" seguro
       const logoutLink = document.getElementById('logout-link');
       if (logoutLink) {
         logoutLink.addEventListener('click', async function (e) {
           e.preventDefault();
+          // Si está Clerk integrado, hacemos signOut
           if (window.Clerk && window.Clerk.signOut) {
             await window.Clerk.signOut();
           }
+          // Redirigir al login
           window.location.href = '/signin';
         });
       }

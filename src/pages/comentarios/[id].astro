@@ -1,15 +1,26 @@
 ---
+/**
+ * Página de comentarios de un ticket.
+ * - Muestra cabecera con nro de ticket y cliente.
+ * - Lista los comentarios (últimos primero).
+ * - Si el usuario es admin o técnico, permite agregar comentarios vía fetch
+ *   con UI optimista, sin recargar la página.
+ */
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import { supabase } from '../../lib/supabase';
 
+// Tomamos el :id de la URL dinámica (p. ej. /comentarios/123)
 const { id } = Astro.params as { id: string };
 
+// Perfil/rol del usuario logueado (inyectado en Astro.locals por tu middleware)
 type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
 const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
 
-// Ticket para cabecera
+// ================== Fetch de datos para render ==================
+
+// 1) Traemos datos mínimos del ticket para cabecera (número, estado, y nombre del cliente)
 const { data: ticket } = await supabase
   .from('tickets_mian')
   .select(`
@@ -19,7 +30,8 @@ const { data: ticket } = await supabase
   .eq('id', id)
   .maybeSingle();
 
-// Comentarios (últimos primero)
+// 2) Traemos los comentarios del ticket (ordenados descendente por fecha de creación).
+//    También pedimos el count exacto para mostrar el total.
 const { data: comentarios, count: totalComentarios } = await supabase
   .from('ticket_comentarios')
   .select(`
@@ -31,12 +43,16 @@ const { data: comentarios, count: totalComentarios } = await supabase
   .eq('ticket_id', id)
   .order('creado_en', { ascending: false });
 
+// ================== Helpers de presentación ==================
+
+/** Convierte ISO → fecha/hora local de AR o devuelve '—' si no hay valor. */
 const fechaHoraAR = (iso?: string | null) => {
   if (!iso) return '—';
   try { return new Date(iso).toLocaleString('es-AR', { hour12: false }); }
   catch { return iso; }
 };
 
+/** Devuelve "Nombre Apellido" del autor (con tolerancia a join como array). */
 const getAutorNombre = (autor: any): string => {
   const a = Array.isArray(autor) ? autor[0] : autor;
   if (!a) return '—';
@@ -44,6 +60,8 @@ const getAutorNombre = (autor: any): string => {
   const ape = (a?.apellido ?? '').toString();
   return `${nom} ${ape}`.trim() || '—';
 };
+
+/** Obtiene el nombre completo del cliente (string) desde el join o null si no hay. */
 const getClienteNombre = (cli: any): string | null => {
   const c = Array.isArray(cli) ? cli[0] : cli;
   if (!c) return null;
@@ -54,8 +72,10 @@ const getClienteNombre = (cli: any): string | null => {
 
 <BasePrivateLayout>
   <div class="container mt-4">
+    <!-- Cabecera: título + botón volver -->
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h1 class="h5 mb-0">
+        <!-- Preferimos mostrar #ticket; si no, cae en id de la fila -->
         Comentarios del Ticket #{ticket?.ticket ?? ticket?.id ?? id}
         {getClienteNombre(ticket?.cliente) && (
           <small class="text-muted"> — {getClienteNombre(ticket?.cliente)}</small>
@@ -67,16 +87,21 @@ const getClienteNombre = (cli: any): string | null => {
       </a>
     </div>
 
+    <!-- Tarjeta principal con historial y formulario -->
     <div class="card shadow-sm">
       <div class="card-header bg-white d-flex align-items-center justify-content-between">
         <div>
           <strong>Historial</strong>
+          <!-- Contador total de comentarios (se actualiza en vivo al agregar) -->
           <span class="text-muted">(<span id="comentarios-count">{totalComentarios ?? 0}</span>)</span>
         </div>
         {(isAdmin || isTecnico) && <span class="text-muted small"></span>}
       </div>
 
       <div class="card-body">
+        {/* Formulario para agregar comentario:
+            - Solo visible para admin o técnico
+            - Usa fetch + UI optimista para insertar sin recargar */}
         {(isAdmin || isTecnico) && (
           <form id="form-comentario" class="mb-3" data-ticketid={id}>
             <div class="input-group">
@@ -96,39 +121,49 @@ const getClienteNombre = (cli: any): string | null => {
           </form>
         )}
 
-        <!-- SIEMPRE renderizamos la UL aunque esté vacía -->
+        <!-- Lista de comentarios. La UL se renderiza siempre (aunque esté vacía)
+             para que el JS pueda insertar elementos dinámicamente. -->
         <ul class="list-group" id="comentarios-lista">
           {Array.isArray(comentarios) && comentarios.length > 0 && comentarios.map((c) => (
             <li class="list-group-item">
+              <!-- Encabezado del comentario: autor y fecha -->
               <div class="small text-muted">
                 <strong>{getAutorNombre(c.autor)}</strong>
                 · {fechaHoraAR(c.creado_en)}
               </div>
-              <!-- 🔹 Aplicamos la clase que respeta \n -->
+              <!-- Contenido del comentario:
+                   Usamos set:html porque los comentarios de sistema incluyen <strong>, viñetas, etc.
+                   La clase .comentario aplica 'white-space: pre-wrap' via CSS para respetar saltos de línea. -->
               <div class="comentario" set:html={c.mensaje}></div>
             </li>
           ))}
         </ul>
 
-        {/* Mensaje de vacío controlado por JS */}
-        <div id="no-comentarios" class="text-muted" style={{ display: (Array.isArray(comentarios) && comentarios.length > 0) ? 'none' : '' }}>
+        {/* Mensaje “no hay comentarios”: lo oculta el JS cuando se crea el primero */}
+        <div
+          id="no-comentarios"
+          class="text-muted"
+          style={{ display: (Array.isArray(comentarios) && comentarios.length > 0) ? 'none' : '' }}
+        >
           No hay comentarios todavía.
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Script de la página: maneja el envío del formulario y la UI optimista -->
   <script>
     // Alta de comentario con Optimistic UI (sin recargar)
     (function(){
       const form = document.getElementById('form-comentario') as HTMLFormElement | null;
-      if (!form) return;
+      if (!form) return; // Si no hay form (usuario sin permisos), no hacemos nada.
 
       const textarea = document.getElementById('comentario-texto') as HTMLTextAreaElement | null;
       const lista = document.getElementById('comentarios-lista') as HTMLUListElement | null;
       const noMsg = document.getElementById('no-comentarios') as HTMLDivElement | null;
       const countEl = document.getElementById('comentarios-count') as HTMLSpanElement | null;
 
+      // El ticketId viaja en un data-attribute del form para evitar leer desde la URL
       const ticketId = form.dataset.ticketid ? Number(form.dataset.ticketid) : null;
 
       form.addEventListener('submit', async (e) => {
@@ -138,9 +173,10 @@ const getClienteNombre = (cli: any): string | null => {
         const mensaje = (textarea?.value || '').trim();
         if (!mensaje || !Number.isFinite(ticketId)) return;
 
-        if (btn) btn.disabled = true;
+        if (btn) btn.disabled = true; // evita doble envío
 
         try {
+          // POST al endpoint de API que inserta el comentario en BD
           const res = await fetch('/api/agregarComentario', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -150,14 +186,15 @@ const getClienteNombre = (cli: any): string | null => {
           const data = await res.json();
 
           if (!res.ok) {
+            // Si la API devolvió error, lo mostramos y cortamos
             alert(data?.error || 'No se pudo agregar el comentario.');
             return;
           }
 
-          // ocultar mensaje "no hay comentarios"
+          // Ocultamos mensaje de “no hay comentarios”
           if (noMsg && noMsg.style.display !== 'none') noMsg.style.display = 'none';
 
-          // crear <li> y prepender al <ul>
+          // Creamos un <li> y lo insertamos al principio de la lista (optimista)
           if (lista) {
             const li = document.createElement('li');
             li.className = 'list-group-item';
@@ -173,13 +210,14 @@ const getClienteNombre = (cli: any): string | null => {
             `;
             (li.querySelector('strong') as HTMLElement).textContent = autor;
             (li.querySelector('.fecha') as HTMLElement).textContent = fechaHumana;
+            // Para el comentario del usuario usamos textContent (no HTML) para evitar XSS desde la UI
             (li.querySelector('.mensaje') as HTMLElement).textContent = mensaje;
 
             if (lista.firstChild) lista.insertBefore(li, lista.firstChild);
             else lista.appendChild(li);
           }
 
-          // limpiar textarea y contar
+          // Limpiar textarea y actualizar contador
           if (textarea) {
             textarea.value = '';
             textarea.focus();
@@ -198,3 +236,10 @@ const getClienteNombre = (cli: any): string | null => {
     })();
   </script>
 </BasePrivateLayout>
+
+<style>
+  /* Asegura que los saltos de línea (\n) se vean correctamente en mensajes largos. */
+  .comentario {
+    white-space: pre-wrap;
+  }
+</style>

@@ -1,16 +1,31 @@
 ---
+/**
+ * Vista de detalle de un ticket/equipo.
+ * - Carga ticket + joins (cliente, técnico, impresora, delivery) y último presupuesto.
+ * - Normaliza formatos (fechas, DNI/CUIT, joins en array vs objeto).
+ * - Muestra imágenes (principal + miniaturas con zoom).
+ * - Acciones: marcar "Máquina Lista", ir a Presupuesto/Delivery, ver Comentarios, eliminar (solo admin).
+ */
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import { supabase } from '../../lib/supabase';
 import { formatearFecha, booleanATexto, formatARS } from '../../lib/utils';
 
+// Parámetro dinámico de ruta /detalle/:id
 const { id } = Astro.params as { id: string };
 
+// Roles a partir de Astro.locals (inyectado en middleware)
 type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
 const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
 
 /* ===== Normalizadores ===== */
+/**
+ * normDateLite: intenta llevar una fecha en varios formatos a 'YYYY-MM-DD'.
+ * - Recorta T/hora si viene ISO
+ * - Acepta YYYY-MM-DD, YYYY/MM/DD, M/D/YYYY, D/M/YYYY
+ * - Fallback a Date() nativo si matchea
+ */
 function normDateLite(value?: string | null): string | null {
   if (!value) return null;
   const s = String(value).trim();
@@ -39,6 +54,7 @@ function normDateLite(value?: string | null): string | null {
   return null;
 }
 
+/** Formatea DNI/CUIT de forma amigable; devuelve '—' si no hay valor. */
 function formatDniCuit(raw?: string | null): string {
   if (raw == null) return '—';
   const digits = String(raw).replace(/\D+/g, '');
@@ -50,6 +66,7 @@ function formatDniCuit(raw?: string | null): string {
 }
 
 /* ===== Datos principales (el * ya trae solicitar_presupuesto) ===== */
+// Traemos el ticket y sus relaciones clave via aliases
 const { data } = await supabase
   .from('tickets_mian')
   .select(`
@@ -74,7 +91,7 @@ const { data: presuRows } = await supabase
 
 const presupuesto = Array.isArray(presuRows) ? (presuRows[0] ?? null) : null;
 
-/* ===== Normalizaciones de joins ===== */
+/* ===== Normalizaciones de joins: impresora y delivery pueden venir como array ===== */
 const impresora = Array.isArray((equipo as any)?.impresoras)
   ? (equipo as any).impresoras?.[0]
   : (equipo as any)?.impresoras;
@@ -82,14 +99,17 @@ const impresora = Array.isArray((equipo as any)?.impresoras)
 const deliveryRaw = (equipo as any)?.delivery;
 const delivery = Array.isArray(deliveryRaw) ? (deliveryRaw[0] ?? null) : (deliveryRaw ?? null);
 
+/** Modelo mostrado: prioriza join de impresoras, luego texto libre guardado en el ticket. */
 const modeloMostrado =
   (impresora?.modelo && String(impresora?.modelo).trim()) ||
   (equipo?.maquina_reparada && String(equipo?.maquina_reparada).trim()) ||
   'Modelo no especificado';
 
+/** Imagen principal: preferimos comprobante del ticket, luego otras; fallback a logo. */
 const imagenPrincipal =
   equipo?.imagen_ticket || equipo?.imagen || equipo?.imagen_extra || '/logo.webp';
 
+/** Miniaturas: coleccionamos únicas y no vacías. */
 const imagenes: string[] = Array.from(new Set(
   [equipo?.imagen_ticket, equipo?.imagen, equipo?.imagen_extra].filter(Boolean) as string[]
 ));
@@ -103,7 +123,7 @@ const { data: deliveryExistente } = await supabase
   .maybeSingle();
 const hasDelivery = Boolean(deliveryExistente?.id);
 
-/* ===== Fechas ===== */
+/* ===== Fechas mostradas ===== */
 const fechaFormularioNorm = normDateLite(equipo?.marca_temporal);
 const fechaListoNorm      = normDateLite(equipo?.fecha_de_reparacion);
 
@@ -122,6 +142,7 @@ const quierePresupuesto =
 
 <BasePrivateLayout>
   <style>
+    /* Miniaturas y estilos visuales */
     .thumbs { display: flex; gap: .5rem; justify-content: center; }
     .thumb { height: 60px; width: 60px; border-radius: 8px; object-fit: cover; cursor: pointer;
       border: 2px solid transparent; transition: transform .15s ease, border-color .15s ease; outline: none; }
@@ -146,23 +167,34 @@ const quierePresupuesto =
       </div>
 
       <div class="card-body">
-        <!-- Imagen principal + thumbs -->
+        <!-- Imagen principal -->
         <div class="text-center mb-3">
-          <img id="imagen-equipo" src={`${imagenPrincipal}?t=${Date.now()}`} alt="Imagen impresora"
+          <img
+            id="imagen-equipo"
+            src={`${imagenPrincipal}?t=${Date.now()}`}
+            alt="Imagen impresora"
             class="rounded img-fluid shadow-sm"
-            style="max-height: 300px; max-width: 300px; object-fit: cover; border-radius: 15px; cursor: zoom-in;" />
+            style="max-height: 300px; max-width: 300px; object-fit: cover; border-radius: 15px; cursor: zoom-in;"
+          />
         </div>
 
+        <!-- Miniaturas -->
         {imagenes.length > 0 && (
           <div class="thumbs mb-4" id="thumbs">
             {imagenes.map((src) => (
-              <img src={`${src}?t=${Date.now()}`} data-src={src} alt="Miniatura"
-                class={`thumb ${src === imagenPrincipal ? 'active' : ''}`} role="button" tabindex="0" />
+              <img
+                src={`${src}?t=${Date.now()}`}
+                data-src={src}
+                alt="Miniatura"
+                class={`thumb ${src === imagenPrincipal ? 'active' : ''}`}
+                role="button"
+                tabindex="0"
+              />
             ))}
           </div>
         )}
 
-        <!-- Encabezado -->
+        <!-- Encabezado: cliente y modelo -->
         <div class="text-center mb-3">
           <h4 class="fw-bold text-dark mb-1">{equipo?.cliente?.cliente ?? '—'}</h4>
           <div class="text-muted small">{modeloMostrado}</div>
@@ -282,6 +314,7 @@ const quierePresupuesto =
 
   {isAdmin && (
     <script>
+      // Acción admin: eliminar ticket (confirm + POST a /api/eliminarTicket)
       (window as any).eliminarTicket = async function(id) {
         if (!confirm("¿Estás seguro de que querés eliminar este ticket? Esta acción no se puede deshacer.")) return;
         const res = await fetch(`/api/eliminarTicket?id=${id}`, { method: 'POST' });
@@ -292,11 +325,12 @@ const quierePresupuesto =
     </script>
   )}
 
-  <!-- Acciones Máquina Lista -->
+  <!-- Acción: marcar "Máquina Lista" -->
   <script>
     (window as any).maquinaLista = async function(id) {
       if (!confirm("¿Marcar este equipo como LISTA? Esto actualizará el estado y la fecha de listo.")) return;
 
+      // Deshabilitamos todos los botones/links para evitar doble clic mientras se procesa
       const elements = document.querySelectorAll('button, a.btn');
       elements.forEach((el) => {
         if (el instanceof HTMLButtonElement) el.disabled = true;
@@ -305,6 +339,7 @@ const quierePresupuesto =
 
       try {
         const res = await fetch(`/api/maquinaLista?id=${encodeURIComponent(id)}`, { method: 'POST' });
+        // El endpoint puede redirigir con 303 → seguimos la redirección manual
         if (res.redirected) { window.location.href = res.url; return; }
         if (res.ok) { window.location.reload(); return; }
         const data = await res.json().catch(() => ({}));
@@ -312,6 +347,7 @@ const quierePresupuesto =
       } catch (e) {
         alert("Error de red: " + (e && (e as any).message ? (e as any).message : String(e)));
       } finally {
+        // Rehabilitamos la UI
         elements.forEach((el) => {
           if (el instanceof HTMLButtonElement) el.disabled = false;
           else if (el instanceof HTMLAnchorElement) { el.classList.remove('disabled'); el.removeAttribute('aria-disabled'); el.style.pointerEvents = ''; }
@@ -320,7 +356,7 @@ const quierePresupuesto =
     }
   </script>
 
-  <!-- Miniaturas -> imagen principal -->
+  <!-- Miniaturas → imagen principal -->
   <script>
     const thumbs = document.querySelectorAll('#thumbs .thumb');
     const mainImg = document.getElementById('imagen-equipo');
@@ -343,7 +379,7 @@ const quierePresupuesto =
     }
   </script>
 
-  <!-- Overlay zoom (igual que tenías) -->
+  <!-- Overlay de zoom para la imagen principal -->
   <style>
     .zoom-overlay{ position:fixed; inset:0; display:none; z-index:2000; background:rgba(0,0,0,.9); align-items:center; justify-content:center; padding:24px; }
     .zoom-overlay.open{ display:flex; }
@@ -358,6 +394,7 @@ const quierePresupuesto =
   </div>
 
   <script>
+    // Lógica de overlay/zoom (doble click o doble tap alterna zoom 1x/2x)
     const mainImgZoom  = document.getElementById('imagen-equipo');
     const overlayZoom  = document.getElementById('zoomOverlay');
     const overlayImg   = document.getElementById('zoomImg');

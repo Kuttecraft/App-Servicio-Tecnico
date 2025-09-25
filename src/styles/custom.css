@@ -1,8 +1,9 @@
 :root {
+  /* 🎨 Colores base de Bootstrap y custom */
   --bs-body-bg: #f8f9fa;
   --bs-body-color: #23253a;
 
-  /* Colores principales */
+  /* Colores principales de la app */
   --bs-primary: #6c63ff;
   --bs-primary-light: #c3c0fa;
   --bs-primary-dark: #534bd8;
@@ -10,46 +11,49 @@
   --bs-secondary: #2f3144;
   --bs-accent: #00d9c0;
 
-  /* Neutrales */
+  /* Escala de grises / neutrales */
   --bs-light: #f1f0fb;
   --bs-lighter: #f8f9fa;
   --bs-dark: #1b1b1b;
   --bs-border: #e2e2f3;
 
-  /* Estados */
+  /* Colores de estados */
   --bs-success: #24c18a;
   --bs-danger: #fa6161;
   --bs-warning: #ffc440;
   --bs-info: #36b7ff;
 
-  /* Efectos/gradientes */
+  /* Gradientes de marca */
   --gradient-main: linear-gradient(90deg, #6c63ff 0%, #817cfa 100%);
   --gradient-secondary: linear-gradient(90deg, #2f3144 0%, #565874 100%);
 
+  /* Colores para botón upload */
   --upload-blue: #0366f1;
   --upload-blue-hover: #0548a7;
 
+  /* Colores para disabled */
   --bs-disabled-bg: #e3e3ef;
   --bs-disabled-text: #a1a1b1;
 }
 
-/* Card personalizada */
+/* 🖼️ Imagen de card de impresora */
 .card-img-equip {
   width: 170px;
   height: 170px;
   max-width: 100%;
   max-height: 170px;
-  object-fit: cover;
+  object-fit: cover; /* asegura proporción */
   border-radius: 9px;
   transition: box-shadow 0.2s;
 }
 
+/* Hover de cards custom */
 .card-custom:hover {
   transform: scale(1.025) translateY(-3px);
   box-shadow: 0 8px 32px rgba(108,99,255,0.13);
 }
 
-/* Botones violeta para card SIN hover */
+/* Botones violetas en cards (ver/editar) */
 .btn-ver-card, .btn-editar-card {
   background: var(--bs-primary);
   color: #fff !important;
@@ -59,7 +63,6 @@
   font-size: 1rem;
   letter-spacing: 0.01em;
   box-shadow: 0 3px 16px 0 rgba(108, 99, 255, 0.07);
-  /* Sin transition, ni sombra ni cambios de color en hover */
   padding: 0.55rem 1.35rem;
   display: inline-block;
   text-decoration: none !important;
@@ -67,7 +70,7 @@
   margin: 0 !important;
   cursor: pointer;
 }
-/* Elimina cualquier efecto hover/focus */
+/* Sin cambios al hacer hover/focus */
 .btn-ver-card:hover,
 .btn-ver-card:focus,
 .btn-editar-card:hover,
@@ -80,19 +83,19 @@
   transform: none;
 }
 
-/* Quita subrayado en todos los enlaces con esas clases */
+/* Quitar subrayado en enlaces-botón */
 a.btn-ver-card,
 a.btn-editar-card {
   text-decoration: none !important;
 }
 
-/* Espacio entre botones de acción en cards */
+/* Ajuste de spacing en botones de card */
 .d-flex.flex-row.gap-2.justify-content-center.mt-2 {
   gap: 0.8rem !important;
   margin-top: 1rem !important;
 }
 
-/* Botón editar general (no usar en card, solo otras vistas) */
+/* Botón editar general (fuera de cards) */
 .btn-editar {
   background-color: var(--bs-secondary);
   color: #ffffff;
@@ -105,7 +108,7 @@ a.btn-editar-card {
   color: #ffffff;
 }
 
-/* Botón de upload custom */
+/* Botón custom para subir imágenes */
 .btn-upload-image {
   display: inline-block;
   background-color: var(--upload-blue);
@@ -116,10 +119,7 @@ a.btn-editar-card {
   cursor: pointer;
   text-align: center;
   border: 1.5px solid var(--upload-blue);
-  transition:
-    background-color 0.19s,
-    border-color 0.18s,
-    box-shadow 0.16s;
+  transition: background-color 0.19s, border-color 0.18s, box-shadow 0.16s;
   box-shadow: 0 2px 12px 0 rgba(3, 102, 241, 0.09);
   min-width: 180px;
   max-width: 320px;
@@ -132,11 +132,12 @@ a.btn-editar-card {
   color: #fff;
   box-shadow: 0 6px 18px 0 rgba(5, 72, 167, 0.17);
 }
+/* Oculta el input file real */
 .btn-upload-image input[type="file"] {
   display: none !important;
 }
 
-/* Imagen preview: sombra sutil y hover */
+/* Imagen preview (con borde y sombra suave) */
 #img-actual-o-preview {
   box-shadow: 0 1px 12px 0 rgba(44, 44, 44, 0.11);
   border: 1.5px solid #ececec;
@@ -147,7 +148,7 @@ a.btn-editar-card {
   border-color: var(--bs-primary);
 }
 
-/* Sidebar/Topbar spacing */
+/* Ajustes sidebar/topbar en desktop */
 @media (min-width: 768px) {
   main.ms-md-240 {
     margin-left: 240px !important;
@@ -157,7 +158,7 @@ a.btn-editar-card {
   }
 }
 
-/* Responsive: Mobile */
+/* Ajustes en móviles */
 @media (max-width: 768px) {
   .card-custom {
     box-shadow: 0 2px 20px rgba(44, 44, 44, 0.13);
@@ -183,6 +184,7 @@ a.btn-editar-card {
   }
 }
 
+/* Puntito de estado (pastel pero intensificado) */
 .estado-dot {
   width: 12px;
   height: 12px;
@@ -191,34 +193,20 @@ a.btn-editar-card {
   border: 1px solid rgba(0,0,0,.15);
   display: inline-block;
   flex: 0 0 auto;
-
-  /* Pastel → apenas más fuerte */
-  filter: brightness(0.85) saturate(1.6);
+  filter: brightness(0.9) saturate(1.4);
 }
 
+/* Ajustes de dropdown activo */
 .dropdown-menu .dropdown-item.active,
 .dropdown-menu .dropdown-item:active {
   background-color: rgba(0,0,0,.05);
   color: inherit;
 }
 
-/* Intensificar solo los circulitos del dropdown */
-.estado-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--dot-color, #007bff);
-  border: 1px solid rgba(0,0,0,.15);
-  display: inline-block;
-  flex: 0 0 auto;
-
-  /* hace el color un poquito más intenso sin perder tono */
-  filter: brightness(0.9) saturate(1.4);
-}
-
+/* Estilo para comentarios: respeta saltos de línea */
 .comentario { white-space: pre-line; }
 
-/* por si el componente usa .card-text o .list-group-item p */
+/* También aplica a textos en cards/listas */
 .card-text, .comment-message, .list-group-item p {
   white-space: pre-line;
 }

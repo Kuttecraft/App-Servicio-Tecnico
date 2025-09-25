@@ -1,24 +1,33 @@
 ---
+/**
+ * Página de Presupuesto de un ticket.
+ * - Carga el ticket (para conocer `solicitar_presupuesto`) y el ÚLTIMO presupuesto.
+ * - Mezcla datos para pasarle a <PresupuestoForm /> cuando el usuario es admin.
+ * - Si es técnico: muestra vista de SOLO LECTURA.
+ * - Muestra fecha de presupuesto: la guardada o, si no hay, la fecha actual formateada.
+ */
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import PresupuestoForm from '../../components/PresupuestoForm.astro';
 import { supabase } from '../../lib/supabase';
 import { formatearFecha } from '../../lib/utils';
 
+// Roles del usuario autenticado
 type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
 const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
 
-const { id } = Astro.params;
+// ID del ticket desde la ruta dinámica (/presupuesto/:id)
+const { id } = Astro.params as { id: string };
 
-// Ticket (traemos solicitar_presupuesto)
+// ===== 1) Ticket (traemos solicitar_presupuesto) =====
 const { data: ticket } = await supabase
   .from('tickets_mian')
   .select('id, ticket, solicitar_presupuesto')
   .eq('id', id)
   .single();
 
-// Presupuesto: traer SIEMPRE la última fila
+// ===== 2) Presupuesto: traer SIEMPRE la última fila (id DESC, limit 1) =====
 const { data: presuRows } = await supabase
   .from('presupuestos')
   .select('*')
@@ -27,9 +36,9 @@ const { data: presuRows } = await supabase
   .limit(1);
 
 const presupuesto = Array.isArray(presuRows) ? (presuRows[0] ?? null) : null;
-const isVerificar = Boolean(presupuesto?.id);
+const isVerificar = Boolean(presupuesto?.id); // true si existe presupuesto para “verificar”
 
-// Mezcla datos (ticket + presupuesto)
+// ===== 3) Mezcla datos (ticket + presupuesto) para el formulario o vista =====
 const equipo = {
   ticketId: ticket?.id,
   ticketNumero: ticket?.ticket,
@@ -37,15 +46,16 @@ const equipo = {
   ...presupuesto
 };
 
-// Fecha visible
+// ===== 4) Fecha visible: usa la del presupuesto o la fecha/hora actual =====
 const fechaPresupuesto = presupuesto?.fecha_presupuesto || null;
 const fechaPresupuestoVista = fechaPresupuesto
   ? formatearFecha(fechaPresupuesto)
   : formatearFecha(new Date().toISOString());
 
-// Helpers
+// ===== 5) Helpers de UI =====
 const v = (x: any) => (x ?? '') || '—';
 
+// (Se incluyen helpers de formato monetario por si el componente de solo lectura los requiere)
 function parseToNumberLike(s?: string | null): string {
   if (!s) return '';
   let t = String(s).trim().replace(/[^\d.,-]/g,'');
@@ -73,6 +83,7 @@ function formatARS(v?: string | number | null): string {
 
 <BasePrivateLayout>
   <div class="container mt-5">
+    <!-- Encabezado: título dinámico + volver -->
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h2 class="mb-0">
         <i class="bi bi-receipt me-2"></i>
@@ -83,6 +94,8 @@ function formatARS(v?: string | number | null): string {
 
     {equipo?.ticketId ? (
       <>
+        <!-- Fecha de presupuesto mostrada en modo lectura (decisión de diseño):
+             - El backend (`actualizarTicket.ts`) administra persistencia y reglas -->
         <div class="row g-3 mb-3">
           <div class="col-md-6">
             <label class="form-label">Fecha presupuesto</label>
@@ -91,8 +104,10 @@ function formatARS(v?: string | number | null): string {
         </div>
 
         {isAdmin ? (
+          // Admin: puede crear/editar presupuesto (componente con formulario completo)
           <PresupuestoForm equipo={equipo} />
         ) : isTecnico ? (
+          // Técnico: vista de SOLO LECTURA
           <>
             <div class="alert alert-info d-flex align-items-center" role="alert">
               <i class="bi bi-info-circle me-2"></i>
@@ -143,10 +158,12 @@ function formatARS(v?: string | number | null): string {
             </div>
           </>
         ) : (
+          // Usuario sin rol válido
           <div class="alert alert-warning">No tenés permisos para ver esta sección.</div>
         )}
       </>
     ) : (
+      // Ticket inexistente
       <div class="alert alert-danger">No se encontró el ticket con ID: {id}</div>
     )}
   </div>

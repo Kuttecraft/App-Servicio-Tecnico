@@ -1,19 +1,38 @@
 ---
+/**
+ * usuarios.astro
+ * ---------------
+ * Pantalla de gestión de permisos por usuario.
+ * - Lista filas de `usuarios_perfil` desde Supabase.
+ * - Permite marcar permisos (checkbox) y rol admin por fila.
+ * - Permite marcar usuarios para eliminar.
+ * - Incluye una última fila para crear un usuario nuevo.
+ * - Envía todo a /api/actualizarPermisosUsuarios (POST).
+ *
+ * Seguridad: solo admins.
+ */
 import { supabase } from '../lib/supabase';
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 
-// 1) Traer usuarios
+// ✅ Solo admin
+const perfil = (Astro.locals as any)?.perfil;
+const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
+if (!isAdmin) {
+  return Astro.redirect('/no-autorizado');
+}
+
+// 1) Traer usuarios (ordenados por email)
 const { data: usuarios, error } = await supabase
   .from('usuarios_perfil')
   .select('*')
   .order('email', { ascending: true });
 
-// 2) Definición de columnas de permisos
+// 2) Definición de columnas de permisos (clave => label visible)
 const PERMISOS = [
-  { nombre: 'dashboard', label: 'Inicio' },
-  { nombre: 'tickets', label: 'Tickets' },
-  { nombre: 'usuarios', label: 'Usuarios' },
-  { nombre: 'estadisticas', label: 'Estadísticas' },
+  { nombre: 'dashboard',   label: 'Inicio' },
+  { nombre: 'tickets',     label: 'Tickets' },
+  { nombre: 'usuarios',    label: 'Usuarios' },
+  { nombre: 'estadisticas',label: 'Estadísticas' },
 ];
 ---
 
@@ -27,12 +46,18 @@ const PERMISOS = [
       </div>
     )}
 
+    <!--
+      El backend /api/actualizarPermisosUsuarios debe:
+      - Leer el array `usuarios[...]` (email + flags + admin + eliminar)
+      - Aplicar updates/inserts/deletes en `usuarios_perfil`
+      - Validar que quien pega este endpoint es admin
+    -->
     <form id="form-permisos" method="post" action="/api/actualizarPermisosUsuarios">
       <div class="table-responsive">
         <table class="table table-bordered mt-4 align-middle">
           <thead>
             <tr>
-              <th>Email</th>
+              <th style="min-width:280px">Email</th>
               {PERMISOS.map((p) => <th>{p.label}</th>)}
               <th>Admin</th>
               <th>Eliminar</th>
@@ -40,10 +65,11 @@ const PERMISOS = [
           </thead>
 
           <tbody>
+            {/* Filas existentes (una por usuario) */}
             {usuarios?.map((usuario, idx) => (
               <tr>
-                {/* email */}
-                <td style="min-width:280px">
+                {/* Email (solo lectura) */}
+                <td>
                   <input
                     type="email"
                     name={`usuarios[${idx}][email]`}
@@ -53,19 +79,19 @@ const PERMISOS = [
                   />
                 </td>
 
-                {/* checks de permisos */}
+                {/* Checks de permisos (flags booleanos por clave) */}
                 {PERMISOS.map((p) => (
                   <td class="text-center">
                     <input
                       type="checkbox"
                       class="form-check-input"
                       name={`usuarios[${idx}][${p.nombre}]`}
-                      checked={Boolean(usuario[p.nombre])}
+                      checked={Boolean((usuario as any)[p.nombre])}
                     />
                   </td>
                 ))}
 
-                {/* admin = rol === 'admin' */}
+                {/* Admin se deriva de rol === 'admin' */}
                 <td class="text-center">
                   <input
                     type="checkbox"
@@ -75,26 +101,28 @@ const PERMISOS = [
                   />
                 </td>
 
-                {/* marcar para eliminar (en el submit) */}
+                {/* Marcar para eliminar este usuario en el submit */}
                 <td class="text-center">
                   <input
                     type="checkbox"
                     class="form-check-input eliminar-checkbox"
                     name={`usuarios[${idx}][eliminar]`}
                     id={`eliminar-${idx}`}
+                    title="Marcar para eliminar"
                   />
                 </td>
               </tr>
             ))}
 
-            {/* fila para agregar un nuevo usuario */}
+            {/* Fila para AGREGAR un nuevo usuario */}
             <tr>
               <td>
                 <input
-                  type="email"
-                  name="nuevo[email]"
-                  placeholder="nuevo@gmail.com"
-                  class="form-control"
+                    type="email"
+                    name="nuevo[email]"
+                    placeholder="nuevo@gmail.com"
+                    class="form-control"
+                    autocomplete="email"
                 />
               </td>
 
@@ -118,12 +146,46 @@ const PERMISOS = [
       </div>
 
       <div class="mt-3 d-flex flex-wrap gap-2">
-        <button type="submit" class="btn btn-primary">Guardar cambios</button>
-        <button type="button" class="btn btn-danger" id="btn-eliminar">Eliminar seleccionados</button>
+        <button type="submit" class="btn btn-primary">
+          Guardar cambios
+        </button>
+
+        <!--
+          Botón auxiliar para borrar en masa los marcados.
+          El script solo marca/avisa; el borrado efectivo lo hace el endpoint.
+        -->
+        <button type="button" class="btn btn-danger" id="btn-eliminar">
+          Eliminar seleccionados
+        </button>
       </div>
     </form>
 
-    {/* tu script de borrado masivo (si lo usas) */}
-    <script src="/scripts/formUser-eliminar-user.js" is:inline></script>
+    <!--
+      Script opcional: confirmación de borrado masivo.
+      Si tenés lógica adicional (deshabilitar/contar/confirmar), colócala acá.
+    -->
+    <script is:inline>
+      (function(){
+        const btn = document.getElementById('btn-eliminar');
+        const form = document.getElementById('form-permisos');
+        if (!btn || !form) return;
+
+        btn.addEventListener('click', function(){
+          const marcados = Array.from(
+            form.querySelectorAll('.eliminar-checkbox')
+          ).filter((el) => el instanceof HTMLInputElement && el.checked);
+
+          if (!marcados.length) {
+            alert('No hay usuarios marcados para eliminar.');
+            return;
+          }
+          const ok = confirm(`¿Eliminar ${marcados.length} usuario(s) seleccionados?`);
+          if (!ok) return;
+
+          // Enviamos el mismo form (el backend debe respetar [eliminar]=on)
+          form.submit();
+        });
+      })();
+    </script>
   </div>
 </BasePrivateLayout>

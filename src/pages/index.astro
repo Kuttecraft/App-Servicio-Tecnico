@@ -1,7 +1,19 @@
 ---
+/**
+ * index.astro
+ * -----------
+ * Punto de entrada de la app.
+ * - Desactiva el prerender estático (prerender = false) para que el redirect
+ *   sea manejado en tiempo de solicitud.
+ * - Si existe Astro.request (es decir, estamos atendiendo una petición),
+ *   redirige a /signin.
+ *
+ * Nota: este archivo actúa como landing minimal que envía al flujo de login.
+ */
 export const prerender = false;
 
 if (Astro.request) {
+  // Redirecciona a la página de inicio de sesión
   return Astro.redirect('/signin');
 }
 ---
