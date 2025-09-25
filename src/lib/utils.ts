@@ -43,7 +43,11 @@ export function capitalizar(str: string): string {
    💰 Utilidades de moneda ARS
    ========================= */
 
-/** ¿La cadena usa el separador `sep` como miles? (grupos de 3 a la derecha) */
+/**
+ * Verifica si un string numérico sigue el patrón de miles con `sep`.
+ * Ejemplo válido: "1,234", "12.345", "1.234.567".
+ * Devuelve `true` si el separador actúa como miles, `false` si no.
+ */
 function esPatronMiles(s: string, sep: ',' | '.'): boolean {
   // ejemplos válidos: "1,234", "12,345", "1,234,567" / "1.234", "1.234.567"
   const partes = s.split(sep);
@@ -74,26 +78,27 @@ export function parseNumeroAR(input: any): number | null {
   const dotCount   = (s.match(/\./g) || []).length;
 
   if (commaCount > 0 && dotCount > 0) {
-    // Hay ambos: el ÚLTIMO separador que aparezca es el decimal; el otro es miles
+    // Caso mixto: "1.234,56" o "1,234.56"
+    // El ÚLTIMO separador es el decimal; el otro es miles
     const lastP = s.lastIndexOf('.');
     const lastC = s.lastIndexOf(',');
     const decimalSep: '.' | ',' = lastP > lastC ? '.' : ',';
     const milesSep: '.' | ','   = decimalSep === '.' ? ',' : '.';
     s = s.split(milesSep).join(''); // quitar miles
-    if (decimalSep === ',') s = s.replace(',', '.'); // decimal a punto
+    if (decimalSep === ',') s = s.replace(',', '.'); // decimal → punto
   } else if (commaCount > 0 && dotCount === 0) {
-    // Solo coma: ¿es miles o decimal?
+    // Solo coma → puede ser miles ("12,345") o decimal ("12,5")
     if (esPatronMiles(s, ',')) {
       s = s.split(',').join(''); // miles
     } else {
       s = s.replace(',', '.');   // decimal
     }
   } else if (dotCount > 0 && commaCount === 0) {
-    // Solo punto: ¿es miles o decimal?
+    // Solo punto → puede ser miles ("12.345") o decimal ("12.5")
     if (esPatronMiles(s, '.')) {
       s = s.split('.').join(''); // miles
     } else {
-      // punto decimal → queda igual
+      // punto decimal → se deja igual
     }
   }
   const n = Number(s);

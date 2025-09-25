@@ -44,14 +44,29 @@ export async function resolverAutor(locals: any): Promise<Autor | null> {
   return (created as Autor) ?? null;
 }
 
-export function nombreAutor(autor?: Pick<Autor, 'nombre'|'apellido'> | null): string {
+/**
+ * Devuelve el nombre completo de un autor o "Técnico" si no existe.
+ */
+export function nombreAutor(autor?: Pick<Autor, 'nombre' | 'apellido'> | null): string {
   return `${autor?.nombre ?? ''} ${autor?.apellido ?? ''}`.trim() || 'Técnico';
 }
 
+/**
+ * A partir de un email intenta derivar nombre y apellido.
+ * Ejemplo: "juan.perez@..." → { nombre: "Juan", apellido: "Perez" }
+ * Si no puede separar, devuelve solo el nombre capitalizado.
+ */
 function deriveNameFromEmail(email: string): { nombre: string; apellido: string } {
   const local = email.split('@')[0] || 'Usuario';
   const parts = local.split(/[._-]+/).filter(Boolean);
   if (parts.length >= 2) return { nombre: capitalize(parts[0]), apellido: capitalize(parts[1]) };
   return { nombre: capitalize(local), apellido: '' };
 }
-function capitalize(s: string) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
+/**
+ * Capitaliza la primera letra de un string.
+ * Ejemplo: "juan" → "Juan"
+ */
+function capitalize(s: string) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
