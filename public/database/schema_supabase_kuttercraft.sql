@@ -182,10 +182,23 @@ CREATE TABLE ticket_comentarios (
     creado_en  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+--8. Repuestos
+CREATE TABLE  repuestos_csv ( 
+  id SERIAL PRIMARY KEY,
+  "Componentes presupuestados" TEXT,
+  "Cantidad" TEXT,
+  "Stock" TEXT,
+  "categoria" TEXT,
+  "Precio" TEXT,
+  activo BOOLEAN NOT NULL DEFAULT TRUE,
+  creado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actualizado_en TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 */
 
 /* Esta es aparte 
--- 8. Permisos de usuario (por técnico)
+-- 9. Permisos de usuario (por técnico)
 CREATE TABLE usuarios_perfil (
     id BIGSERIAL PRIMARY KEY,
     tecnico_id BIGINT NOT NULL REFERENCES tecnicos(id) ON DELETE CASCADE,

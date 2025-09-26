@@ -1,0 +1,238 @@
+---
+import Sidebar from '../components/Sidebar.astro';
+---
+
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Repuestos</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
+    <style>
+      :root { --sidebar-w: 240px; }
+      body { background: #f7f7f9; }
+      @media (min-width: 768px) { .page { margin-left: var(--sidebar-w); } }
+      .page { padding: 24px; }
+      .content { max-width: 1100px; margin: 0 auto; }
+      .row-actions button { margin-right: .25rem; }
+    </style>
+  </head>
+  <body>
+    <Sidebar />
+    <main class="page">
+      <div class="content">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h1 class="h3 mb-0"><i class="bi bi-box-seam"></i> Repuestos</h1>
+        </div>
+
+        <!-- Formulario -->
+        <div class="card mb-4">
+          <div class="card-header">Crear / Editar repuesto</div>
+          <div class="card-body">
+            <form id="repuestoForm" class="row g-3">
+              <!-- ID oculto sólo para edición -->
+              <input type="hidden" name="id" />
+
+              <div class="col-12 col-md-6">
+                <label class="form-label">Componentes presupuestados</label>
+                <input required name="componentes" type="text" class="form-control" />
+              </div>
+              <div class="col-6 col-md-2">
+                <label class="form-label">Cantidad</label>
+                <input name="cantidad" type="text" class="form-control" />
+              </div>
+              <div class="col-6 col-md-2">
+                <label class="form-label">Stock</label>
+                <input name="stock" type="text" class="form-control" />
+              </div>
+              <div class="col-6 col-md-3">
+                <label class="form-label">Categoría</label>
+                <input name="categoria" type="text" class="form-control" />
+              </div>
+              <div class="col-6 col-md-3">
+                <label class="form-label">Precio</label>
+                <input name="precio" type="text" class="form-control" />
+              </div>
+              <div class="col-12 col-md-3">
+                <label class="form-label">Activo</label>
+                <select name="activo" class="form-select">
+                  <option value="true">Sí</option>
+                  <option value="false">No</option>
+                </select>
+              </div>
+
+              <div class="col-12 d-flex gap-2">
+                <button type="button" id="btnCrear"  class="btn btn-primary"><i class="bi bi-plus-circle"></i> Crear</button>
+                <button type="button" id="btnEditar" class="btn btn-warning"><i class="bi bi-pencil-square"></i> Editar</button>
+                <button type="button" id="btnBorrar" class="btn btn-danger"><i class="bi bi-trash"></i> Borrar</button>
+                <span id="status" class="ms-2"></span>
+              </div>
+            </form>
+            <div class="form-text mt-2">Tip: hacé clic en una fila para cargarla en el formulario y poder editar/borrar.</div>
+          </div>
+        </div>
+
+        <!-- Listado -->
+        <div class="card">
+          <div class="card-header">Listado</div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm table-striped mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>ID</th>
+                    <th>Componentes presupuestados</th>
+                    <th>Cantidad</th>
+                    <th>Stock</th>
+                    <th>Categoría</th>
+                    <th>Precio</th>
+                    <th>Activo</th>
+                    <th>Actualizado</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-repuestos">
+                  <tr><td colspan="9" class="text-center py-3">Cargando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script type="module">
+      const form = document.getElementById('repuestoForm');
+      const statusEl = document.getElementById('status');
+      const tbody = document.getElementById('tbody-repuestos');
+      const btnCrear  = document.getElementById('btnCrear');
+      const btnEditar = document.getElementById('btnEditar');
+      const btnBorrar = document.getElementById('btnBorrar');
+
+      function getPayloadFromForm(requireId=false) {
+        const fd = new FormData(form);
+        const idStr = String(fd.get('id') || '').trim();
+        const id = idStr ? Number(idStr) : undefined;
+        if (requireId && !id) throw new Error('Seleccioná un repuesto (clic en una fila)');
+        return {
+          id,
+          componentes: String(fd.get('componentes') || '').trim(),
+          cantidad: String(fd.get('cantidad') || '').trim() || null,
+          stock: String(fd.get('stock') || '').trim() || null,
+          categoria: String(fd.get('categoria') || '').trim() || null,
+          precio: String(fd.get('precio') || '').trim() || null,
+          activo: String(fd.get('activo')) === 'true',
+        };
+      }
+
+      async function cargar() {
+        try {
+          const res = await fetch('/api/listarRepuestos');
+          const data = await res.json();
+          if (!Array.isArray(data) || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-3">Sin repuestos.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = data.map(r => `
+            <tr data-id="${r.id}" style="cursor:pointer">
+              <td>${r.id}</td>
+              <td>${r.componentes_presupuestados ?? ''}</td>
+              <td>${r.cantidad ?? ''}</td>
+              <td>${r.stock ?? ''}</td>
+              <td>${r.categoria ?? ''}</td>
+              <td>${r.precio ?? ''}</td>
+              <td>${r.activo ? 'Sí' : 'No'}</td>
+              <td>${r.actualizado_en ?? ''}</td>
+              <td class="row-actions">
+                <button class="btn btn-sm btn-outline-primary btn-row-editar">Editar</button>
+                <button class="btn btn-sm btn-outline-danger btn-row-borrar">Borrar</button>
+              </td>
+            </tr>
+          `).join('');
+        } catch (e) {
+          tbody.innerHTML = '<tr><td colspan="9" class="text-danger text-center py-3">Error al cargar.</td></tr>';
+          console.error('Error listar:', e);
+        }
+      }
+
+      // Cargar fila al form
+      tbody.addEventListener('click', (e) => {
+        const tr = e.target.closest('tr[data-id]');
+        if (!tr) return;
+        const tds = tr.querySelectorAll('td');
+        form.elements['id'].value           = tds[0].textContent.trim();
+        form.elements['componentes'].value  = tds[1].textContent.trim();
+        form.elements['cantidad'].value     = tds[2].textContent.trim();
+        form.elements['stock'].value        = tds[3].textContent.trim();
+        form.elements['categoria'].value    = tds[4].textContent.trim();
+        form.elements['precio'].value       = tds[5].textContent.trim();
+        form.elements['activo'].value       = (tds[6].textContent.includes('Sí')).toString();
+      });
+
+      btnCrear.addEventListener('click', async () => {
+        statusEl.textContent = 'Creando...';
+        try {
+          const p = getPayloadFromForm(false);
+          delete p.id; // Insert
+          const res = await fetch('/api/actualizarRepuesto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(p),
+          });
+          const out = await res.json();
+          if (!res.ok) throw new Error(out?.error || 'Error al crear');
+          statusEl.textContent = 'Creado ✔';
+          form.reset();
+          await cargar();
+        } catch (e) {
+          statusEl.textContent = `Error: ${e?.message || 'al crear'}`;
+          console.error(e);
+        }
+      });
+
+      btnEditar.addEventListener('click', async () => {
+        statusEl.textContent = 'Actualizando...';
+        try {
+          const p = getPayloadFromForm(true); // requiere ID
+          const res = await fetch('/api/actualizarRepuesto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(p),
+          });
+          const out = await res.json();
+          if (!res.ok) throw new Error(out?.error || 'Error al actualizar');
+          statusEl.textContent = 'Actualizado ✔';
+          form.reset();
+          await cargar();
+        } catch (e) {
+          statusEl.textContent = `Error: ${e?.message || 'al actualizar'}`;
+          console.error(e);
+        }
+      });
+
+      btnBorrar.addEventListener('click', async () => {
+        statusEl.textContent = 'Borrando...';
+        try {
+          const p = getPayloadFromForm(true); // requiere ID
+          const res = await fetch('/api/borrarRepuesto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: p.id }),
+          });
+          const out = await res.json();
+          if (!res.ok || !out.ok) throw new Error(out?.error || 'Error al borrar');
+          statusEl.textContent = 'Borrado ✔';
+          form.reset();
+          await cargar();
+        } catch (e) {
+          statusEl.textContent = `Error: ${e?.message || 'al borrar'}`;
+          console.error(e);
+        }
+      });
+
+      cargar();
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>
