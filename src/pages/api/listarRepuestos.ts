@@ -1,33 +1,49 @@
-// src/pages/api/listarRepuestos.ts
 import type { APIRoute } from 'astro'
 import { supabaseServer } from '../../lib/supabaseServer'
 
-export const GET: APIRoute = async () => {
-  const { data, error } = await supabaseServer
-    .from('repuestos_csv')
-    .select('id,"Componentes presupuestados","Cantidad","Stock",categoria,"Precio",activo,actualizado_en')
-    .order('actualizado_en', { ascending: false })
-    .order('id', { ascending: false })
-    .limit(500)
+export const GET: APIRoute = async ({ url }) => {
+  try {
+    const q = (url.searchParams.get('q') || '').trim()
+    const categoria = (url.searchParams.get('categoria') || '').trim()
+    const estado = (url.searchParams.get('estado') || '').trim().toLowerCase()
+    const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10))
+    const pageSize = 30
+    const sortDirParam = (url.searchParams.get('sortDir') || 'asc').toLowerCase()
+    const ascending = sortDirParam !== 'desc'
 
-  if (error) {
-    console.error('listarRepuestos:', error)
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 })
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+
+    let query = supabaseServer
+      .from('repuestos_csv')
+      .select('id,"Componentes presupuestados","Stock",categoria,"Precio",activo,actualizado_en', { count: 'exact' })
+
+    if (q) query = query.ilike('Componentes presupuestados', `%${q}%`)
+    if (categoria) query = query.eq('categoria', categoria)
+    if (estado === 'activo') query = query.eq('activo', true)
+    if (estado === 'inactivo') query = query.eq('activo', false)
+
+    query = query.order('id', { ascending }).range(from, to)
+
+    const { data, count, error } = await query
+    if (error) throw error
+
+    const rows = (data ?? []).map((r: any) => ({
+      id: r.id,
+      componente: r['Componentes presupuestados'],
+      stock: r['Stock'],
+      categoria: r.categoria,
+      precio: r['Precio'],
+      activo: r.activo,
+      actualizado_en: r.actualizado_en ? String(r.actualizado_en).slice(0, 10) : null,
+    }))
+
+    return new Response(JSON.stringify({ rows, total: count ?? 0, page, pageSize }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  } catch (e: any) {
+    console.error('listarRepuestos error:', e?.message || e)
+    return new Response(JSON.stringify({ error: e?.message || 'Error' }), { status: 500 })
   }
-
-  const rows = (data ?? []).map((r: any) => ({
-    id: r.id,
-    componentes_presupuestados: r['Componentes presupuestados'],
-    cantidad: r['Cantidad'],
-    stock: r['Stock'],
-    categoria: r.categoria,
-    precio: r['Precio'],
-    activo: r.activo,
-    actualizado_en: r.actualizado_en,
-  }))
-
-  return new Response(JSON.stringify(rows), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
 }

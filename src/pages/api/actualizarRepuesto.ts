@@ -1,60 +1,70 @@
-// src/pages/api/actualizarRepuesto.ts
 import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { supabaseServer } from '../../lib/supabaseServer'
 
 const Schema = z.object({
   id: z.number().int().positive().optional(),
-  componentes: z.string().min(1),
-  cantidad: z.string().nullable().optional(),
+  componente: z.string().min(1),
   stock: z.string().nullable().optional(),
   categoria: z.string().nullable().optional(),
   precio: z.string().nullable().optional(),
   activo: z.boolean().default(true),
 })
 
+// Normaliza a pesos enteros SIN redondear: "$2.150"
+function normalizarPrecioARS(input?: string | null): string | null {
+  if (input == null) return null
+  const digits = String(input).replace(/[^\d]/g, '')
+  if (!digits) return null
+  const pesos = Number(digits)
+  const numero = new Intl.NumberFormat('es-AR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(pesos).replace(/\s/g, '')
+  return '$' + numero
+}
+
 export const POST: APIRoute = async ({ request }) => {
   try {
     const b = Schema.parse(await request.json())
+
+    const stockNum =
+      b.stock == null || String(b.stock).trim() === ''
+        ? null
+        : Number(String(b.stock).replace(/[^\d]/g, '')) || 0
+
     const payload: any = {
-      'Componentes presupuestados': b.componentes,
-      'Cantidad': b.cantidad ?? null,
+      'Componentes presupuestados': b.componente,
       'Stock': b.stock ?? null,
       categoria: b.categoria ?? null,
-      'Precio': b.precio ?? null,
-      activo: b.activo ?? true,
+      'Precio': normalizarPrecioARS(b.precio),
+      activo: stockNum === 0 ? false : (b.activo ?? true),
       actualizado_en: new Date().toISOString(),
     }
 
     let resp
     if (b.id) {
-      // UPDATE
       resp = await supabaseServer
         .from('repuestos_csv')
         .update(payload)
         .eq('id', b.id)
-        .select('id,"Componentes presupuestados","Cantidad","Stock",categoria,"Precio",activo,actualizado_en')
+        .select('id,"Componentes presupuestados","Stock",categoria,"Precio",activo,actualizado_en')
         .single()
     } else {
-      // INSERT
       payload.creado_en = new Date().toISOString()
       resp = await supabaseServer
         .from('repuestos_csv')
         .insert(payload)
-        .select('id,"Componentes presupuestados","Cantidad","Stock",categoria,"Precio",activo,actualizado_en')
+        .select('id,"Componentes presupuestados","Stock",categoria,"Precio",activo,actualizado_en')
         .single()
     }
 
     const { data, error } = resp
-    if (error) {
-      console.error('actualizarRepuesto:', error)
-      return new Response(JSON.stringify({ error: error.message }), { status: 400 })
-    }
+    if (error) throw error
 
     const out = {
       id: data!.id,
-      componentes_presupuestados: data!['Componentes presupuestados'],
-      cantidad: data!['Cantidad'],
+      componente: data!['Componentes presupuestados'],
       stock: data!['Stock'],
       categoria: data!.categoria,
       precio: data!['Precio'],
@@ -63,6 +73,7 @@ export const POST: APIRoute = async ({ request }) => {
     }
     return new Response(JSON.stringify(out), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (e: any) {
+    console.error('actualizarRepuesto error:', e?.message || e)
     return new Response(JSON.stringify({ error: e?.message || 'Error' }), { status: 400 })
   }
 }
