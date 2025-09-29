@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { supabaseServer } from '../../lib/supabaseServer'
 
+/** Validación del cuerpo (lo que envía la UI) */
 const Schema = z.object({
   id: z.number().int().positive().optional(),
   componente: z.string().min(1),
@@ -11,12 +12,12 @@ const Schema = z.object({
   activo: z.boolean().default(true),
 })
 
-// Normaliza a pesos enteros SIN redondear: "$2.150"
+/** Normaliza precio en ARS a "$X.XXX" sin decimales y SIN redondear (solo quita no-dígitos) */
 function normalizarPrecioARS(input?: string | null): string | null {
   if (input == null) return null
-  const digits = String(input).replace(/[^\d]/g, '')
+  const digits = String(input).replace(/[^\d]/g, '') // deja solo dígitos
   if (!digits) return null
-  const pesos = Number(digits)
+  const pesos = Number(digits) // mantiene el valor exacto
   const numero = new Intl.NumberFormat('es-AR', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
@@ -28,20 +29,24 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     const b = Schema.parse(await request.json())
 
+    // Interpreta stock como número (para forzar activo=false cuando stock==0)
     const stockNum =
       b.stock == null || String(b.stock).trim() === ''
         ? null
         : Number(String(b.stock).replace(/[^\d]/g, '')) || 0
 
+    // Mapeo a nombres de columnas reales en la tabla (algunas con espacios)
     const payload: any = {
       'Componentes presupuestados': b.componente,
       'Stock': b.stock ?? null,
       categoria: b.categoria ?? null,
       'Precio': normalizarPrecioARS(b.precio),
+      // Regla de negocio: si stock === 0 → inactivo
       activo: stockNum === 0 ? false : (b.activo ?? true),
       actualizado_en: new Date().toISOString(),
     }
 
+    // Update o Insert según si viene ID
     let resp
     if (b.id) {
       resp = await supabaseServer
@@ -62,6 +67,7 @@ export const POST: APIRoute = async ({ request }) => {
     const { data, error } = resp
     if (error) throw error
 
+    // Respuesta normalizada para la UI
     const out = {
       id: data!.id,
       componente: data!['Componentes presupuestados'],

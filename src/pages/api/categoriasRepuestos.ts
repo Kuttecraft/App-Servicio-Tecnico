@@ -1,6 +1,13 @@
 import type { APIRoute } from 'astro';
 import { supabaseServer } from '../../lib/supabaseServer';
 
+/**
+ * Devuelve las categorías existentes en la tabla:
+ * - sin nulls/strings vacíos
+ * - con trim
+ * - únicas
+ * - ordenadas alfabéticamente (ES, case-insensitive)
+ */
 export const GET: APIRoute = async () => {
   try {
     const { data, error } = await supabaseServer
@@ -12,11 +19,14 @@ export const GET: APIRoute = async () => {
 
     if (error) throw error;
 
+    // Set para deduplicar
     const set = new Set<string>();
     for (const r of data ?? []) {
       const cleaned = String(r.categoria ?? '').trim();
       if (cleaned) set.add(cleaned);
     }
+
+    // Orden ES, sin sensibilidad de mayúsculas/minúsculas
     const categorias = Array.from(set).sort((a, b) =>
       a.localeCompare(b, 'es', { sensitivity: 'base' })
     );

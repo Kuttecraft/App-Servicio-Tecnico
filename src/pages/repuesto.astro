@@ -11,11 +11,13 @@ import Sidebar from '../components/Sidebar.astro';
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
     <style>
+      /* Layout básico con sidebar */
       :root { --sidebar-w: 240px; }
       @media (min-width: 768px) { .page { margin-left: var(--sidebar-w); } }
       .page { padding: 24px; background:#f7f7f9; }
       .content { max-width: 1200px; margin: 0 auto; }
 
+      /* Tabla con header sticky y columna ID “pegada” a la izquierda */
       .table-wrap { max-height: 520px; overflow: auto; border-top: 1px solid #dee2e6; }
       .table thead th { position: sticky; top: 0; background: #f8f9fa; z-index: 2; }
       .table tbody tr:hover td { background: #f5f7fb; }
@@ -28,18 +30,22 @@ import Sidebar from '../components/Sidebar.astro';
       .th-id-toggle { cursor: pointer; user-select: none; white-space: nowrap; }
       .th-id-toggle i { opacity: .7; }
 
+      /* Acciones por fila visibles solo al hacer hover */
       .actions { opacity: .0; transition: opacity .15s ease; white-space: nowrap; }
       tbody tr:hover .actions { opacity: 1; }
       .actions .btn { padding: .15rem .4rem; line-height: 1; }
 
+      /* Toolbar de filtros */
       .toolbar { gap: .5rem; flex-wrap: wrap; }
       .toolbar .form-control, .toolbar .form-select { min-width: 220px; }
 
+      /* Botonera del formulario (cambia color si está en modo edición) */
       #btnSubmit { background: #0d6efd; border-color: #0d6efd; }
       #btnCancel { display:none; }
       .editing #btnSubmit { background:#198754; border-color:#198754; }
       .editing #btnCancel { display:inline-block; }
 
+      /* Estados de mensajes */
       #status { font-size: .9rem; }
       #status.ok { color: #198754; }
       #status.err { color: #dc3545; }
@@ -54,7 +60,7 @@ import Sidebar from '../components/Sidebar.astro';
           <h1 class="h3 mb-0"><i class="bi bi-box-seam"></i> Repuestos</h1>
         </div>
 
-        <!-- ====== Formulario ====== -->
+        <!-- ====== Formulario de creación/edición ====== -->
         <div class="card mb-3" id="cardForm">
           <div class="card-header d-flex justify-content-between align-items-center">
             <span id="formTitle">Crear repuesto</span>
@@ -62,6 +68,7 @@ import Sidebar from '../components/Sidebar.astro';
           </div>
           <div class="card-body">
             <form id="repuestoForm" class="row g-3">
+              <!-- Campo oculto para ID cuando se edita -->
               <input type="hidden" name="id" />
               <div class="col-12 col-md-6">
                 <label class="form-label">Componente</label>
@@ -99,30 +106,33 @@ import Sidebar from '../components/Sidebar.astro';
           </div>
         </div>
 
-        <!-- ====== Toolbar (debajo del form) ====== -->
+        <!-- ====== Toolbar de búsqueda/filtros (debajo del formulario) ====== -->
         <div class="card mb-4">
           <div class="card-body toolbar">
             <div class="row g-2">
+              <!-- Buscador: input + botón X propio -->
               <div class="col-12">
                 <div class="input-group">
                   <span class="input-group-text" title="Buscar por nombre de componente">
                     <i class="bi bi-search"></i>
                   </span>
-                  <!-- type="text" para no mostrar la X nativa -->
+                  <!-- type="text" para evitar la X nativa de los inputs search -->
                   <input id="q" type="text" class="form-control" placeholder="Buscar componente..." aria-label="Buscar componente" />
-                  <!-- Nuestra X, solo con texto -->
+                  <!-- La X propia se muestra solo si hay texto -->
                   <button id="btnClearQ" class="btn btn-outline-secondary" type="button" title="Limpiar búsqueda" style="display:none;">
                     <i class="bi bi-x-lg"></i>
                   </button>
                 </div>
               </div>
 
+              <!-- Select categoría (se llena desde la API con las categorías existentes) -->
               <div class="col-6 col-md-6">
                 <select id="categoria" class="form-select" title="Filtrar por categoría">
                   <option value="">Todas las categorías</option>
                 </select>
               </div>
 
+              <!-- Select estado: Todos / Activo / No activo -->
               <div class="col-6 col-md-6">
                 <select id="estado" class="form-select" title="Filtrar por estado">
                   <option value="">Todos los estados</option>
@@ -134,7 +144,7 @@ import Sidebar from '../components/Sidebar.astro';
           </div>
         </div>
 
-        <!-- ====== Listado ====== -->
+        <!-- ====== Tabla de resultados ====== -->
         <div class="card">
           <div class="card-header d-flex justify-content-between align-items-center">
             <span>Listado</span>
@@ -155,6 +165,7 @@ import Sidebar from '../components/Sidebar.astro';
                 </tr>
               </thead>
               <tbody id="tbody-repuestos">
+                <!-- Estado inicial -->
                 <tr><td colspan="8" class="text-center py-3">Cargando...</td></tr>
               </tbody>
             </table>
@@ -171,6 +182,7 @@ import Sidebar from '../components/Sidebar.astro';
     </main>
 
     <script type="module">
+      /* ---------- Referencias a elementos del DOM ---------- */
       const q = document.getElementById('q');
       const btnClearQ = document.getElementById('btnClearQ');
       const categoria = document.getElementById('categoria');
@@ -193,11 +205,12 @@ import Sidebar from '../components/Sidebar.astro';
       const thId = document.getElementById('th-id');
       const idArrow = document.getElementById('id-arrow');
 
+      /* ---------- Estado de la paginación/orden ---------- */
       let page = 1;
       const pageSize = 30;
       let sortDir = 'asc';
 
-      // Mostrar/ocultar la X según texto
+      /* ---------- Mostrar/ocultar la X de limpiar búsqueda ---------- */
       function toggleClearBtn() {
         btnClearQ?.style && (btnClearQ.style.display = (q?.value ?? '').trim() ? 'block' : 'none');
       }
@@ -208,11 +221,11 @@ import Sidebar from '../components/Sidebar.astro';
         if (!q) return;
         q.value = '';
         toggleClearBtn();
-        page = 1;
+        page = 1;   // reinicia a primera página
         cargar();
       });
 
-      // Status temporal
+      /* ---------- Helpers de mensajes breves ---------- */
       let statusTimer = null;
       function setStatus(text = '', kind = 'info', ms = 2200) {
         statusEl.classList.remove('ok','err','info');
@@ -227,10 +240,10 @@ import Sidebar from '../components/Sidebar.astro';
         }, ms);
       }
 
-      // Precio visual (sin redondeo)
+      /* ---------- Formateo visual del precio en ARS (sin redondeo) ---------- */
       const precioInput = form.elements['precio'];
       function formatPrecioVisual(raw) {
-        const digits = String(raw ?? '').replace(/[^\d]/g, '');
+        const digits = String(raw ?? '').replace(/[^\d]/g, ''); // deja solo dígitos
         if (!digits) return '';
         const pesos = Number(digits);
         const numero = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
@@ -239,6 +252,7 @@ import Sidebar from '../components/Sidebar.astro';
       }
       precioInput.addEventListener('blur', () => { precioInput.value = formatPrecioVisual(precioInput.value); });
 
+      /* ---------- Modo crear/editar ---------- */
       function setCreateMode() {
         form.reset();
         cardForm.classList.remove('editing');
@@ -249,6 +263,7 @@ import Sidebar from '../components/Sidebar.astro';
         setStatus('');
       }
 
+      /* Lee y normaliza el payload desde el formulario */
       function getPayloadFromForm(requireId=false) {
         const fd = new FormData(form);
         const idStr = String(fd.get('id') || '').trim();
@@ -264,14 +279,17 @@ import Sidebar from '../components/Sidebar.astro';
         };
       }
 
+      /* ---------- Lista “Cargando…” mientras se trae la data ---------- */
       function setLoadingRows() {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center py-3">Cargando...</td></tr>';
         setStatus('');
       }
 
+      /* ---------- Cargar tabla con filtros/paginación ---------- */
       async function cargar() {
         setLoadingRows();
         try {
+          // Params seguros (evita crashear por .value en null)
           const params = new URLSearchParams({
             page: String(page),
             pageSize: String(pageSize),
@@ -288,13 +306,14 @@ import Sidebar from '../components/Sidebar.astro';
           const data = out.rows || [];
           const total = out.total || 0;
 
-          // Si hay datos pero estoy fuera de rango, voy a la última página válida y reintento
+          // Si estoy en una página que ya no existe (p.ej. tras borrar), salto a la última válida y reintento
           const maxPage = total ? Math.ceil(total / pageSize) : 1;
           if (total > 0 && page > maxPage) {
             page = maxPage;
             return cargar();
           }
 
+          // Render de filas o estado “Sin resultados”
           if (!Array.isArray(data) || data.length === 0) {
             tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Sin resultados.</td></tr>';
           } else {
@@ -317,11 +336,11 @@ import Sidebar from '../components/Sidebar.astro';
             `).join('');
           }
 
+          // Resumen + estado de paginación
           const from = total ? (page - 1) * pageSize + 1 : 0;
           const to = total ? Math.min(page * pageSize, total) : 0;
           resumen.textContent = total ? `Total: ${total}` : '';
           paginacionInfo.textContent = total ? `Mostrando ${from}-${to} de ${total}` : '';
-
           prevPageBtn.disabled = page <= 1;
           nextPageBtn.disabled = (page * pageSize) >= total;
 
@@ -334,7 +353,7 @@ import Sidebar from '../components/Sidebar.astro';
         }
       }
 
-      // Categorías dinámicas
+      /* ---------- Llenado dinámico del select de categorías ---------- */
       async function cargarCategorias(keepSelected = true) {
         const selectedBefore = keepSelected ? (categoria?.value ?? '') : '';
         try {
@@ -346,6 +365,7 @@ import Sidebar from '../components/Sidebar.astro';
             .concat(cats.map(c => `<option value="${c.replaceAll('"','&quot;')}">${c}</option>`));
           categoria.innerHTML = opts.join('');
 
+          // Restaura la selección si sigue existiendo
           if (keepSelected && selectedBefore && cats.includes(selectedBefore)) {
             categoria.value = selectedBefore;
           }
@@ -355,7 +375,7 @@ import Sidebar from '../components/Sidebar.astro';
         }
       }
 
-      // Orden por ID
+      /* ---------- Orden por ID (toggle asc/desc) ---------- */
       thId?.addEventListener('click', () => {
         sortDir = sortDir === 'asc' ? 'desc' : 'asc';
         if (idArrow) idArrow.className = sortDir === 'asc' ? 'bi bi-arrow-up' : 'bi bi-arrow-down';
@@ -363,7 +383,7 @@ import Sidebar from '../components/Sidebar.astro';
         cargar();
       });
 
-      // Acciones de fila
+      /* ---------- Eventos en la tabla: editar / borrar ---------- */
       tbody.addEventListener('click', async (e) => {
         const btnEdit = e.target.closest('.btn-row-editar');
         const btnDel  = e.target.closest('.btn-row-borrar');
@@ -373,6 +393,7 @@ import Sidebar from '../components/Sidebar.astro';
         const tds = tr.querySelectorAll('td');
         const id = tds[0].textContent.trim();
 
+        // Cargar datos de la fila en el formulario para editar
         if (btnEdit) {
           form.elements['id'].value           = id;
           form.elements['componente'].value   = tds[1].textContent.trim();
@@ -388,6 +409,7 @@ import Sidebar from '../components/Sidebar.astro';
           form.elements['componente'].focus();
         }
 
+        // Borrado: intenta hard delete; si RLS no deja, hace soft delete
         if (btnDel) {
           if (!confirm(`¿Borrar repuesto #${id}?`)) return;
           try {
@@ -399,12 +421,10 @@ import Sidebar from '../components/Sidebar.astro';
             const out = await res.json();
             if (!res.ok || !out.ok) throw new Error(out?.error || 'Error al borrar');
 
-            // volver a la página 1 tras borrar
-            page = 1;
-
+            page = 1;           // tras borrar, volvemos a página 1
             await cargar();
             if (form.elements['id'].value === id) setCreateMode();
-            await cargarCategorias();  // refrescar categorías
+            await cargarCategorias();  // refresca set de categorías
             setStatus('Borrado ✔', 'ok');
           } catch (err) {
             console.error(err);
@@ -413,7 +433,7 @@ import Sidebar from '../components/Sidebar.astro';
         }
       });
 
-      // Submit
+      /* ---------- Guardar (crear/editar) ---------- */
       btnSubmit.addEventListener('click', async () => {
         const editando = !!form.elements['id'].value;
         btnSubmit.disabled = true;
@@ -429,7 +449,7 @@ import Sidebar from '../components/Sidebar.astro';
           if (!res.ok) throw new Error(out?.error || 'Error');
           setCreateMode();
           await cargar();
-          await cargarCategorias(); // por si hay nueva categoría
+          await cargarCategorias(); // por si se creó una categoría nueva
           setStatus(editando ? 'Guardado ✔' : 'Creado ✔', 'ok');
         } catch (e) {
           console.error(e);
@@ -439,10 +459,10 @@ import Sidebar from '../components/Sidebar.astro';
         }
       });
 
-      // Cancelar edición
+      // Cancelar edición → vuelve al modo crear
       btnCancel.addEventListener('click', () => setCreateMode());
 
-      // Filtros + paginación
+      // Filtros + paginación: cuando cambian, recarga desde página 1
       const refetch = (() => { let t; return () => { clearTimeout(t); t=setTimeout(()=>{ page=1; cargar(); }, 250);} })();
       q?.addEventListener('input', refetch);
       q?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); page=1; cargar(); } });
@@ -451,9 +471,9 @@ import Sidebar from '../components/Sidebar.astro';
       prevPageBtn?.addEventListener('click', () => { if (page>1) { page--; cargar(); } });
       nextPageBtn?.addEventListener('click', () => { page++; cargar(); } );
 
-      // Init
+      // Init: resetea form, carga categorías y resultados
       setCreateMode();
-      await cargarCategorias(false); // primera vez
+      await cargarCategorias(false); // primera carga sin restaurar selección previa
       cargar();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

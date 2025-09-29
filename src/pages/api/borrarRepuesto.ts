@@ -2,20 +2,25 @@ import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { supabaseServer } from '../../lib/supabaseServer'
 
+/** Cuerpo esperado: { id: number } */
 const Schema = z.object({ id: z.number().int().positive() })
 
+/**
+ * Intenta borrar de verdad (DELETE).
+ * Si RLS/permiso lo impide, hace soft delete (activo=false).
+ */
 export const POST: APIRoute = async ({ request }) => {
   try {
     const { id } = Schema.parse(await request.json())
 
-    // Intento de borrado REAL
+    // 1) Hard delete
     let { error } = await supabaseServer
       .from('repuestos_csv')
       .delete()
       .eq('id', id)
 
     if (error) {
-      // Fallback a soft delete
+      // 2) Fallback: soft delete
       console.warn('DELETE falló, intentando soft delete:', error?.message || error)
       const upd = await supabaseServer
         .from('repuestos_csv')
