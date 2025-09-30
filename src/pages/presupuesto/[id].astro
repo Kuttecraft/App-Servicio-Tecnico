@@ -1,10 +1,6 @@
 ---
 /**
  * Página de Presupuesto de un ticket.
- * - Carga el ticket (para conocer `solicitar_presupuesto`) y el ÚLTIMO presupuesto.
- * - Mezcla datos para pasarle a <PresupuestoForm /> cuando el usuario es admin.
- * - Si es técnico: muestra vista de SOLO LECTURA.
- * - Muestra fecha de presupuesto: la guardada o, si no hay, la fecha actual formateada.
  */
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import PresupuestoForm from '../../components/PresupuestoForm.astro';
@@ -27,7 +23,7 @@ const { data: ticket } = await supabase
   .eq('id', id)
   .single();
 
-// ===== 2) Presupuesto: traer SIEMPRE la última fila (id DESC, limit 1) =====
+// ===== 2) Presupuesto: siempre la última fila =====
 const { data: presuRows } = await supabase
   .from('presupuestos')
   .select('*')
@@ -36,9 +32,9 @@ const { data: presuRows } = await supabase
   .limit(1);
 
 const presupuesto = Array.isArray(presuRows) ? (presuRows[0] ?? null) : null;
-const isVerificar = Boolean(presupuesto?.id); // true si existe presupuesto para “verificar”
+const isVerificar = Boolean(presupuesto?.id);
 
-// ===== 3) Mezcla datos (ticket + presupuesto) para el formulario o vista =====
+// ===== 3) Mezcla para el form/vista =====
 const equipo = {
   ticketId: ticket?.id,
   ticketNumero: ticket?.ticket,
@@ -46,16 +42,15 @@ const equipo = {
   ...presupuesto
 };
 
-// ===== 4) Fecha visible: usa la del presupuesto o la fecha/hora actual =====
+// ===== 4) Fecha visible =====
 const fechaPresupuesto = presupuesto?.fecha_presupuesto || null;
 const fechaPresupuestoVista = fechaPresupuesto
   ? formatearFecha(fechaPresupuesto)
   : formatearFecha(new Date().toISOString());
 
-// ===== 5) Helpers de UI =====
+// ===== 5) Helpers =====
 const v = (x: any) => (x ?? '') || '—';
 
-// (Se incluyen helpers de formato monetario por si el componente de solo lectura los requiere)
 function parseToNumberLike(s?: string | null): string {
   if (!s) return '';
   let t = String(s).trim().replace(/[^\d.,-]/g,'');
@@ -79,35 +74,61 @@ function formatARS(v?: string | number | null): string {
   const decimals = parts[1]?.length ? Math.min(2, parts[1].length) : 0;
   return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
+
+// ===== 6) Path centralizado a la página real =====
+const repsPath = `/presupuesto/${id}/repuestosItems`;
 ---
 
 <BasePrivateLayout>
-  <div class="container mt-5">
-    <!-- Encabezado: título dinámico + volver -->
+  <!-- data-ticket-id expone el id al script sin interpolarlo en código -->
+  <div id="presupuesto-root" class="container mt-5" data-ticket-id={id}>
+    <!-- Encabezado -->
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h2 class="mb-0">
         <i class="bi bi-receipt me-2"></i>
         {isVerificar ? 'Verificar presupuesto' : 'Añadir presupuesto'} del ticket #{equipo.ticketNumero ?? id}
       </h2>
-      <a class="btn btn-light btn-sm" href={`/detalle/${id}`}><i class="bi bi-arrow-left"></i> Volver</a>
+      <div class="d-flex gap-2">
+        <!-- 🔵 Solo queda Volver en la cabecera -->
+        <a class="btn btn-light btn-sm" href={`/detalle/${id}`}>
+          <i class="bi bi-arrow-left"></i> Volver
+        </a>
+      </div>
     </div>
 
     {equipo?.ticketId ? (
       <>
-        <!-- Fecha de presupuesto mostrada en modo lectura (decisión de diseño):
-             - El backend (`actualizarTicket.ts`) administra persistencia y reglas -->
-        <div class="row g-3 mb-3">
-          <div class="col-md-6">
-            <label class="form-label">Fecha presupuesto</label>
-            <input type="text" class="form-control" value={fechaPresupuestoVista} readonly />
+        <!-- Bloque de fecha + botón integrado con badge -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="row g-3 align-items-end">
+              <div class="col-md-6">
+                <label class="form-label">Fecha presupuesto</label>
+                <input type="text" class="form-control" value={fechaPresupuestoVista} readonly />
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label d-flex align-items-center justify-content-between">
+                  <span>Repuestos necesarios</span>
+                  <span class="small text-muted" id="rep-sum-help" style="display:none;"></span>
+                </label>
+                <div class="d-flex align-items-center gap-2">
+                  <!-- 🔵 ÚNICO botón funcional para administrar repuestos -->
+                  <a id="btnRepuestos" class="btn btn-outline-primary" href={repsPath}>
+                    <i class="bi bi-box-seam me-1"></i>
+                    Administrar repuestos
+                    <span id="badgeRepuestosCount" class="badge text-bg-secondary ms-2" style="display:none;">0</span>
+                  </a>
+                  <span id="repResumen" class="text-muted small"></span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         {isAdmin ? (
-          // Admin: puede crear/editar presupuesto (componente con formulario completo)
           <PresupuestoForm equipo={equipo} />
         ) : isTecnico ? (
-          // Técnico: vista de SOLO LECTURA
           <>
             <div class="alert alert-info d-flex align-items-center" role="alert">
               <i class="bi bi-info-circle me-2"></i>
@@ -158,13 +179,70 @@ function formatARS(v?: string | number | null): string {
             </div>
           </>
         ) : (
-          // Usuario sin rol válido
           <div class="alert alert-warning">No tenés permisos para ver esta sección.</div>
         )}
       </>
     ) : (
-      // Ticket inexistente
       <div class="alert alert-danger">No se encontró el ticket con ID: {id}</div>
     )}
   </div>
+
+  <!-- Script: toma ticketId desde data-* y carga el resumen -->
+  <script type="module">
+    const root = document.getElementById('presupuesto-root');
+    const ticketId = Number(root?.dataset.ticketId || 0);
+
+    const badge = document.getElementById('badgeRepuestosCount');
+    const resumen = document.getElementById('repResumen');
+    const help = document.getElementById('rep-sum-help');
+
+    function fmt(n){ return new Intl.NumberFormat('es-AR').format(n); }
+
+    async function cargarResumen() {
+      if (!ticketId) return;
+      try {
+        const res = await fetch(`/api/presupuestoItems?ticket_id=${ticketId}`);
+        const out = await res.json();
+        const rows = Array.isArray(out?.rows) ? out.rows : [];
+
+        // cantidad de filas distintas + sumatoria de cantidades * precio
+        let totalCant = 0;
+        let totalPrecio = 0;
+        for (const r of rows) {
+          const cantidad = Number(r?.cantidad || 0);
+          totalCant += cantidad;
+          const pn = Number(String(r?.precio || '').replace(/[^\d]/g,'') || '0');
+          totalPrecio += pn * cantidad;
+        }
+
+        if (badge) {
+          if (rows.length > 0) {
+            badge.style.display = 'inline-block';
+            badge.textContent = String(rows.length);
+          } else {
+            badge.style.display = 'none';
+          }
+        }
+
+        if (resumen) {
+          if (rows.length > 0) {
+            const itemsTxt = rows.length === 1 ? 'ítem' : 'ítems';
+            const totalTxt = '$' + fmt(totalPrecio);
+            resumen.textContent = `${rows.length} ${itemsTxt} · ${totalTxt}`;
+          } else {
+            resumen.textContent = 'Sin repuestos seleccionados';
+          }
+        }
+
+        if (help) {
+          help.style.display = rows.length > 0 ? 'inline' : 'none';
+          help.textContent = rows.length > 0 ? 'Seleccionados para este presupuesto' : '';
+        }
+      } catch(e) {
+        console.warn('No se pudo cargar el resumen de repuestos', e);
+      }
+    }
+
+    cargarResumen();
+  </script>
 </BasePrivateLayout>

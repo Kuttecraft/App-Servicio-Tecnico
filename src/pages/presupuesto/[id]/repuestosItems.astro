@@ -1,0 +1,207 @@
+---
+import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
+---
+
+<BasePrivateLayout>
+  <div class="container mt-5">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <h2 class="mb-0">
+        <i class="bi bi-box-seam me-2"></i> Repuestos necesarios
+      </h2>
+      <div class="d-flex gap-2">
+        <a class="btn btn-light btn-sm" href={`/presupuesto/${Astro.params.id}`}>
+          <i class="bi bi-arrow-left"></i> Volver al presupuesto
+        </a>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-12">
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-search"></i></span>
+              <input id="q" type="text" class="form-control" placeholder="Buscar componente..." />
+              <button id="btnClearQ" class="btn btn-outline-secondary" type="button" style="display:none;">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+          </div>
+          <div class="col-6">
+            <select id="categoria" class="form-select">
+              <option value="">Todas las categorías</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <select id="estado" class="form-select">
+              <option value="">Todos los estados</option>
+              <option value="activo">Estado activo</option>
+              <option value="inactivo">No activo</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <span>Seleccionar repuestos</span>
+        <span class="text-muted small" id="resumen"></span>
+      </div>
+      <div class="table-responsive" style="max-height:520px; overflow:auto;">
+        <table class="table table-sm table-striped mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width:44px;"><input type="checkbox" id="chkAll" /></th>
+              <th>ID</th>
+              <th>Componente</th>
+              <th>Stock</th>
+              <th>Categoría</th>
+              <th>Precio</th>
+              <th>Activo</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-repuestos">
+            <tr><td colspan="7" class="text-center py-3">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer d-flex justify-content-between align-items-center">
+        <div>
+          <button class="btn btn-outline-secondary btn-sm" id="prevPage"><i class="bi bi-chevron-left"></i> Anterior</button>
+          <button class="btn btn-outline-secondary btn-sm ms-2" id="nextPage">Siguiente <i class="bi bi-chevron-right"></i></button>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <div id="paginacionInfo" class="text-muted small me-2"></div>
+          <button id="btnAgregar" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle me-1"></i> Agregar al presupuesto
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script de listado/selección -->
+  <script type="module">
+    const q = document.getElementById('q');
+    const btnClearQ = document.getElementById('btnClearQ');
+    const categoria = document.getElementById('categoria');
+    const estado = document.getElementById('estado');
+    const tbody = document.getElementById('tbody-repuestos');
+    const resumen = document.getElementById('resumen');
+    const paginacionInfo = document.getElementById('paginacionInfo');
+    const prevPageBtn = document.getElementById('prevPage');
+    const nextPageBtn = document.getElementById('nextPage');
+    const chkAll = document.getElementById('chkAll');
+    const btnAgregar = document.getElementById('btnAgregar');
+
+    let page = 1;
+    const pageSize = 30;
+    let sortDir = 'asc';
+
+    function toggleClearBtn() {
+      btnClearQ.style.display = (q.value ?? '').trim() ? 'block' : 'none';
+    }
+    q.addEventListener('input', toggleClearBtn);
+    btnClearQ.addEventListener('click', () => { q.value=''; toggleClearBtn(); page=1; cargar(); });
+    toggleClearBtn();
+
+    async function cargarCategorias() {
+      try {
+        const res = await fetch('/api/categoriasRepuestos');
+        const out = await res.json();
+        const cats = Array.isArray(out?.categorias) ? out.categorias : [];
+        categoria.innerHTML = '<option value="">Todas las categorías</option>' +
+          cats.map(c => `<option value="${c.replaceAll('"','&quot;')}">${c}</option>`).join('');
+      } catch (e) { console.error('No se pudieron cargar categorías', e); }
+    }
+
+    function setLoading() {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3">Cargando...</td></tr>';
+    }
+
+    async function cargar() {
+      setLoading();
+      try {
+        const params = new URLSearchParams({
+          page: String(page),
+          pageSize: String(pageSize),
+          q: (q.value ?? '').trim(),
+          categoria: (categoria.value ?? '').trim(),
+          estado: (estado.value ?? '').trim(),
+          sortDir,
+        });
+        const res = await fetch('/api/listarRepuestos?' + params.toString());
+        const out = await res.json();
+        if (!res.ok) throw new Error(out?.error || 'Error al listar');
+
+        const data = out.rows || [];
+        const total = out.total || 0;
+        const maxPage = total ? Math.ceil(total / pageSize) : 1;
+        if (total > 0 && page > maxPage) { page = maxPage; return cargar(); }
+
+        if (data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">Sin resultados.</td></tr>';
+        } else {
+          tbody.innerHTML = data.map(r => `
+            <tr>
+              <td><input type="checkbox" class="chkItem" data-id="${r.id}" /></td>
+              <td>${r.id}</td>
+              <td>${r.componente ?? ''}</td>
+              <td>${r.stock ?? ''}</td>
+              <td>${r.categoria ?? ''}</td>
+              <td>${r.precio ?? ''}</td>
+              <td>${r.activo ? 'Sí' : 'No'}</td>
+            </tr>
+          `).join('');
+        }
+
+        const from = total ? (page-1)*pageSize + 1 : 0;
+        const to = total ? Math.min(page*pageSize, total) : 0;
+        resumen.textContent = total ? `Total: ${total}` : '';
+        paginacionInfo.textContent = total ? `Mostrando ${from}-${to} de ${total}` : '';
+        prevPageBtn.disabled = page <= 1;
+        nextPageBtn.disabled = (page*pageSize) >= total;
+
+        // reset master checkbox
+        chkAll.checked = false;
+
+      } catch (e) {
+        console.error(e);
+        tbody.innerHTML = '<tr><td colspan="7" class="text-danger text-center py-3">Error al cargar.</td></tr>';
+        resumen.textContent = '';
+        paginacionInfo.textContent = '';
+      }
+    }
+
+    // Selección masiva
+    chkAll.addEventListener('change', () => {
+      document.querySelectorAll('.chkItem').forEach((el) => { el.checked = chkAll.checked; });
+    });
+
+    // Filtros y paginación
+    const refetch = (() => { let t; return () => { clearTimeout(t); t=setTimeout(()=>{ page=1; cargar(); }, 250);} })();
+    q.addEventListener('input', refetch);
+    q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); page=1; cargar(); } });
+    categoria.addEventListener('change', () => { page=1; cargar(); });
+    estado.addEventListener('change', () => { page=1; cargar(); });
+    prevPageBtn.addEventListener('click', () => { if (page>1) { page--; cargar(); } });
+    nextPageBtn.addEventListener('click', () => { page++; cargar(); });
+
+    // Placeholder para próximo paso (persistencia)
+    btnAgregar.addEventListener('click', () => {
+      const ids = Array.from(document.querySelectorAll('.chkItem'))
+        .filter((el) => el.checked)
+        .map((el) => Number(el.getAttribute('data-id')));
+      if (!ids.length) { alert('Seleccioná al menos un repuesto.'); return; }
+      alert('Seleccionados: ' + ids.join(', '));
+      // Próximo paso: POST /api/presupuestoItems con { ticket_id: Astro.params.id, repuesto_ids: ids }
+    });
+
+    // Init
+    await cargarCategorias();
+    cargar();
+  </script>
+</BasePrivateLayout>
