@@ -1,15 +1,19 @@
 ---
 import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
+
+// id dinámico del ticket para inyectar al DOM
+const ticketId = Astro.params.id;
 ---
 
 <BasePrivateLayout>
-  <div class="container mt-5">
+  <!-- data-ticket-id para que el script lo lea -->
+  <div id="repuestos-root" class="container mt-5" data-ticket-id={ticketId}>
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h2 class="mb-0">
         <i class="bi bi-box-seam me-2"></i> Repuestos necesarios
       </h2>
       <div class="d-flex gap-2">
-        <a class="btn btn-light btn-sm" href={`/presupuesto/${Astro.params.id}`}>
+        <a class="btn btn-light btn-sm" href={`/presupuesto/${ticketId}`}>
           <i class="bi bi-arrow-left"></i> Volver al presupuesto
         </a>
       </div>
@@ -55,7 +59,12 @@ import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
           <thead class="table-light">
             <tr>
               <th style="width:44px;"><input type="checkbox" id="chkAll" /></th>
-              <th>ID</th>
+
+              <!-- Encabezado ID con orden asc/desc -->
+              <th id="thId" style="cursor:pointer; white-space:nowrap;">
+                ID <span id="sortIcon" class="ms-1 text-muted">↕</span>
+              </th>
+
               <th>Componente</th>
               <th>Stock</th>
               <th>Categoría</th>
@@ -83,8 +92,52 @@ import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
     </div>
   </div>
 
-  <!-- Script de listado/selección -->
+  <!-- Modal de confirmación/edición -->
+  <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-check2-circle me-2"></i> Confirmar repuestos a agregar</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted mb-2">Revisá la lista. Podés cambiar cantidades o quitar ítems antes de guardar.</p>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th style="width:80px;">ID</th>
+                  <th>Componente</th>
+                  <th style="width:120px;">Cantidad</th>
+                  <th style="width:100px;">Stock</th>
+                  <th style="width:140px;">Precio unitario</th>
+                  <th style="width:140px;">Subtotal</th>
+                  <th style="width:60px;"></th>
+                </tr>
+              </thead>
+              <tbody id="tbody-confirm"></tbody>
+            </table>
+          </div>
+          <div id="stockAlert" class="alert alert-warning py-2 px-3" style="display:none;">
+            Hay cantidades que superan el stock disponible (o stock = 0). Corregí para poder guardar.
+          </div>
+        </div>
+        <div class="modal-footer d-flex justify-content-end gap-3">
+          <div class="fw-semibold me-auto">Total estimado: <span id="totalEstimado">$0</span></div>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button id="btnGuardar" type="button" class="btn btn-primary" disabled>
+            <i class="bi bi-save me-1"></i> Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script de listado/selección + modal -->
   <script type="module">
+    const root = document.getElementById('repuestos-root');
+    const ticketId = Number(root?.dataset.ticketId || 0);
+
     const q = document.getElementById('q');
     const btnClearQ = document.getElementById('btnClearQ');
     const categoria = document.getElementById('categoria');
@@ -97,9 +150,42 @@ import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
     const chkAll = document.getElementById('chkAll');
     const btnAgregar = document.getElementById('btnAgregar');
 
+    const thId = document.getElementById('thId');
+    const sortIcon = document.getElementById('sortIcon');
+
+    // Modal
+    const confirmModalEl = document.getElementById('confirmModal');
+    const stockAlert = document.getElementById('stockAlert');
+    const tbodyConfirm = document.getElementById('tbody-confirm');
+    const btnGuardar = document.getElementById('btnGuardar');
+    const totalEstimadoEl = document.getElementById('totalEstimado');
+    let bsModal = null;
+
     let page = 1;
     const pageSize = 30;
-    let sortDir = 'asc';
+    let sortDir = 'asc'; // asc | desc
+
+    // ===== Selección global que persiste entre cambios de sección/página =====
+    // id -> { id, comp, stock, unitPrice, cantidad }
+    const seleccion = new Map();
+
+    /* ===== Utils ===== */
+    const fmtMoney = (n) => {
+      const x = Number(n) || 0;
+      return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(x);
+    };
+
+    function updateSortIcon() {
+      sortIcon.textContent = sortDir === 'asc' ? '↑' : '↓';
+      sortIcon.classList.remove('text-muted');
+    }
+    thId.addEventListener('click', () => {
+      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      updateSortIcon();
+      page = 1;
+      cargar();
+    });
+    updateSortIcon();
 
     function toggleClearBtn() {
       btnClearQ.style.display = (q.value ?? '').trim() ? 'block' : 'none';
@@ -120,6 +206,30 @@ import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
 
     function setLoading() {
       tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3">Cargando...</td></tr>';
+    }
+
+    function wireRowCheckboxes() {
+      // Re-marca checkboxes según la selección global y escucha cambios
+      document.querySelectorAll('.chkItem').forEach((el) => {
+        const id = Number(el.getAttribute('data-id'));
+        const comp = String(el.getAttribute('data-comp') || '');
+        const stock = Number(el.getAttribute('data-stock') || '0');
+        const unitPrice = Number(el.getAttribute('data-precio') || '0');
+
+        // set estado checked desde selección global
+        el.checked = seleccion.has(id);
+
+        el.addEventListener('change', () => {
+          if (el.checked) {
+            // si ya existía, conservo cantidad previa; si no, arranco en 1
+            const prev = seleccion.get(id);
+            const cantidad = prev?.cantidad ?? 1;
+            seleccion.set(id, { id, comp, stock, unitPrice, cantidad });
+          } else {
+            seleccion.delete(id);
+          }
+        });
+      });
     }
 
     async function cargar() {
@@ -145,17 +255,29 @@ import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
         if (data.length === 0) {
           tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">Sin resultados.</td></tr>';
         } else {
-          tbody.innerHTML = data.map(r => `
-            <tr>
-              <td><input type="checkbox" class="chkItem" data-id="${r.id}" /></td>
-              <td>${r.id}</td>
-              <td>${r.componente ?? ''}</td>
-              <td>${r.stock ?? ''}</td>
-              <td>${r.categoria ?? ''}</td>
-              <td>${r.precio ?? ''}</td>
-              <td>${r.activo ? 'Sí' : 'No'}</td>
-            </tr>
-          `).join('');
+          tbody.innerHTML = data.map(r => {
+            const stockNum = Number(String(r.stock ?? '0').replace(/[^0-9.-]/g,'')) || 0;
+            const unitPrice = Number(String(r.precio ?? '').replace(/[^0-9]/g,'')) || 0;
+
+            return `
+              <tr>
+                <td>
+                  <input type="checkbox" class="chkItem"
+                    data-id="${r.id}"
+                    data-comp="${(r.componente ?? '').toString().replace(/"/g,'&quot;')}"
+                    data-stock="${stockNum}"
+                    data-precio="${unitPrice}"
+                  />
+                </td>
+                <td>${r.id}</td>
+                <td>${r.componente ?? ''}</td>
+                <td>${r.stock ?? ''}</td>
+                <td>${r.categoria ?? ''}</td>
+                <td>${r.precio ?? ''}</td>
+                <td>${r.activo ? 'Sí' : 'No'}</td>
+              </tr>
+            `;
+          }).join('');
         }
 
         const from = total ? (page-1)*pageSize + 1 : 0;
@@ -165,8 +287,29 @@ import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
         prevPageBtn.disabled = page <= 1;
         nextPageBtn.disabled = (page*pageSize) >= total;
 
-        // reset master checkbox
+        // Master checkbox comportamiento "visibles"
         chkAll.checked = false;
+        chkAll.onchange = () => {
+          document.querySelectorAll('.chkItem').forEach((el) => {
+            const id = Number(el.getAttribute('data-id'));
+            const comp = String(el.getAttribute('data-comp') || '');
+            const stock = Number(el.getAttribute('data-stock') || '0');
+            const unitPrice = Number(el.getAttribute('data-precio') || '0');
+
+            el.checked = chkAll.checked;
+            if (chkAll.checked) {
+              const prev = seleccion.get(id);
+              const cantidad = prev?.cantidad ?? 1;
+              seleccion.set(id, { id, comp, stock, unitPrice, cantidad });
+            } else {
+              // deselecciono solo los visibles
+              seleccion.delete(id);
+            }
+          });
+        };
+
+        // re-marca y escucha cambios individuales
+        wireRowCheckboxes();
 
       } catch (e) {
         console.error(e);
@@ -175,11 +318,6 @@ import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
         paginacionInfo.textContent = '';
       }
     }
-
-    // Selección masiva
-    chkAll.addEventListener('change', () => {
-      document.querySelectorAll('.chkItem').forEach((el) => { el.checked = chkAll.checked; });
-    });
 
     // Filtros y paginación
     const refetch = (() => { let t; return () => { clearTimeout(t); t=setTimeout(()=>{ page=1; cargar(); }, 250);} })();
@@ -190,14 +328,120 @@ import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
     prevPageBtn.addEventListener('click', () => { if (page>1) { page--; cargar(); } });
     nextPageBtn.addEventListener('click', () => { page++; cargar(); });
 
-    // Placeholder para próximo paso (persistencia)
+    /* ========== Modal ========== */
+
+    function renderConfirmTableFromSelection(){
+      const items = Array.from(seleccion.values());
+      tbodyConfirm.innerHTML = items.map((it, idx) => `
+        <tr data-row="${idx}" data-id="${it.id}">
+          <td class="fw-semibold">${it.id}</td>
+          <td>${it.comp || ''}</td>
+          <td>
+            <input type="number" class="form-control form-control-sm inpCant" value="${it.cantidad ?? 1}" min="1" step="1" style="max-width:110px;" />
+          </td>
+          <td><span class="badge text-bg-light badgeStock">${it.stock}</span></td>
+          <td><span class="precioUnit" data-punit="${it.unitPrice}">${fmtMoney(it.unitPrice)}</span></td>
+          <td><span class="subtotal">${fmtMoney((it.unitPrice)*(it.cantidad ?? 1))}</span></td>
+          <td class="text-end">
+            <button type="button" class="btn btn-outline-danger btn-sm btnQuitar">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
+      tbodyConfirm.querySelectorAll('.inpCant').forEach((inp) => {
+        inp.addEventListener('input', actualizarSubtotalesYValidar);
+      });
+      tbodyConfirm.querySelectorAll('.btnQuitar').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const tr = e.currentTarget.closest('tr');
+          const id = Number(tr?.getAttribute('data-id') || '0');
+          tr?.remove();
+          // también deselecciono globalmente para que no reaparezca
+          if (id) seleccion.delete(id);
+          actualizarSubtotalesYValidar();
+          // re-sincronizo los checkboxes visibles
+          wireRowCheckboxes();
+        });
+      });
+
+      actualizarSubtotalesYValidar();
+    }
+
+    function actualizarSubtotalesYValidar(){
+      let ok = true;
+      let total = 0;
+
+      const rows = Array.from(tbodyConfirm.querySelectorAll('tr'));
+      rows.forEach((tr) => {
+        const id = Number(tr.getAttribute('data-id') || '0');
+        const stock = Number(tr.querySelector('.badgeStock')?.textContent || '0');
+        const cant = Math.max(1, Number(tr.querySelector('.inpCant')?.value || '1'));
+        const unit = Number(tr.querySelector('.precioUnit')?.getAttribute('data-punit') || '0');
+
+        // subtotal
+        const sub = unit * cant;
+        tr.querySelector('.subtotal').textContent = fmtMoney(sub);
+        total += sub;
+
+        // inválido si stock===0 y cant>0, o si cant>stock cuando stock>0
+        const invalido = (stock === 0 && cant > 0) || (stock > 0 && cant > stock);
+        tr.classList.toggle('table-warning', invalido);
+        if (invalido) ok = false;
+
+        // guardo cantidad en selección global para persistirla
+        const item = seleccion.get(id);
+        if (item) item.cantidad = cant;
+      });
+
+      totalEstimadoEl.textContent = fmtMoney(total);
+      stockAlert.style.display = ok ? 'none' : 'block';
+      btnGuardar.disabled = !ok || rows.length === 0;
+    }
+
+    // Abrir modal con selección global
     btnAgregar.addEventListener('click', () => {
-      const ids = Array.from(document.querySelectorAll('.chkItem'))
-        .filter((el) => el.checked)
-        .map((el) => Number(el.getAttribute('data-id')));
-      if (!ids.length) { alert('Seleccioná al menos un repuesto.'); return; }
-      alert('Seleccionados: ' + ids.join(', '));
-      // Próximo paso: POST /api/presupuestoItems con { ticket_id: Astro.params.id, repuesto_ids: ids }
+      if (seleccion.size === 0) { alert('Seleccioná al menos un repuesto.'); return; }
+      // Render del modal desde la selección actual
+      renderConfirmTableFromSelection();
+
+      // Bootstrap Modal
+      // @ts-ignore
+      bsModal = new bootstrap.Modal(confirmModalEl);
+      bsModal.show();
+    });
+
+    // Guardar (POST)
+    btnGuardar.addEventListener('click', async () => {
+      if (!ticketId) { alert('ticket_id inválido'); return; }
+
+      // payload desde lo que quedó en el modal (más fiel)
+      const rows = Array.from(tbodyConfirm.querySelectorAll('tr'));
+      const payloadItems = rows.map((tr) => {
+        const id = Number(tr.getAttribute('data-id') || '0');
+        const cantidad = Math.max(1, Number(tr.querySelector('.inpCant')?.value || '1'));
+        return { repuesto_id: id, cantidad };
+      }).filter(x => x.repuesto_id > 0);
+
+      try {
+        const res = await fetch('/api/presupuestoItems', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticket_id: ticketId, items: payloadItems })
+        });
+        const out = await res.json();
+
+        if (res.ok && out.ok) {
+          bsModal?.hide();
+          window.location.href = `/presupuesto/${ticketId}`;
+        } else {
+          alert('Error al guardar: ' + (out.error || res.statusText));
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al guardar.');
+      }
     });
 
     // Init

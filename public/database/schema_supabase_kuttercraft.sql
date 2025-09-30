@@ -195,6 +195,15 @@ CREATE TABLE  repuestos_csv (
   actualizado_en TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+--9. Puente repuestos
+CREATE TABLE presupuesto_repuestos (
+  id BIGSERIAL PRIMARY KEY,
+  presupuesto_id BIGINT NOT NULL REFERENCES presupuestos(id) ON DELETE CASCADE,
+  repuesto_id BIGINT NOT NULL REFERENCES repuestos_csv(id) ON DELETE RESTRICT,
+  cantidad INT NOT NULL DEFAULT 1,
+  precio_unit NUMERIC
+);
+
 */
 
 /* Esta es aparte 
