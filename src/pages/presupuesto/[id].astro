@@ -170,15 +170,16 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
 
           <div class="card-body p-0">
             <div class="table-responsive">
-              <table class="table table-sm mb-0">
+              <!-- quitamos text-end global: alineamos por columna -->
+              <table class="table table-sm mb-0 align-middle">
                 <thead class="table-light">
                   <tr>
-                    <th style="width:90px;">ID</th>
-                    <th>Componente</th>
-                    <th style="width:120px;">Cantidad</th>
-                    <th style="width:160px;">Precio unitario</th>
-                    <th style="width:160px;">Subtotal</th>
-                    <th style="width:70px;"></th>
+                    <th style="width:90px;" class="text-start">ID</th>
+                    <th class="text-start">Componente</th>
+                    <th style="width:120px;" class="text-end">Cantidad</th>
+                    <th style="width:160px;" class="text-end">Precio unitario</th>
+                    <th style="width:160px;" class="text-end">Subtotal</th>
+                    <th style="width:70px;" class="text-center"></th>
                   </tr>
                 </thead>
                 <tbody id="tbody-sel">
@@ -194,7 +195,7 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
     )}
   </div>
 
-  <!-- Script: usa precio_unit_num del API y permite eliminar ítems -->
+  <!-- Script: usa precio_unit_num del API (entero ARS) y alinea columnas correctas -->
   <script type="module">
     const root = document.getElementById('presupuesto-root');
     const ticketId = Number(root?.dataset.ticketId || 0);
@@ -203,39 +204,55 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
     const repCount = document.getElementById('repCount');
     const repTotal = document.getElementById('repTotal');
 
-    const fmtARS = (n) =>
+    // Formato ARS sin decimales (enteros con punto de miles)
+    const fmtARS0 = (n) =>
       new Intl.NumberFormat('es-AR', {
-        style:'currency', currency:'ARS',
-        minimumFractionDigits: 0, maximumFractionDigits: 2
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
       }).format(Number(n) || 0);
 
-    // Fallback (solo si el API no mandara precio_unit_num en algún item)
-    function parsePrecioARS(v){
-      if (v == null || v === '') return 0;
-      if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
-      const s = String(v).trim();
-      const sDigits      = s.replace(/[^0-9]/g, '');
-      const sDigitsComma = s.replace(/[^\d,]/g, '');
-      const hasDot = s.includes('.');
-      const hasCom = s.includes(',');
+    // Fallback por si algún item no trae precio_unit_num (de string -> entero ARS)
+    const parseEnteroARS = (s) => {
+      if (!s) return 0;
+      const raw = String(s).trim();
+      const hasDot = raw.includes('.');
+      const hasCom = raw.includes(',');
       if (hasDot && hasCom) {
-        const lastDot = s.lastIndexOf('.');
-        const lastCom = s.lastIndexOf(',');
+        const lastDot = raw.lastIndexOf('.');
+        const lastCom = raw.lastIndexOf(',');
         const dec = lastDot > lastCom ? '.' : ',';
         const mil = dec === '.' ? ',' : '.';
-        let t = s.split(mil).join('');
+        let t = raw.split(mil).join('');
         if (dec === ',') t = t.replace(',', '.');
         const n = Number(t.replace(/[^\d.-]/g, ''));
-        return Number.isFinite(n) ? n : 0;
+        return Number.isFinite(n) ? Math.round(n < 1000 ? n * 1000 : n) : 0;
       }
       if (hasCom && !hasDot) {
-        const patternOk = /^\d{1,3},\d{1,2}$/.test(sDigitsComma);
-        const decLike = Number(sDigitsComma.replace(',', '.'));
-        if (patternOk && decLike < 100) return Math.round(decLike * 1000); // 9,4 -> 9400
-        return Number(sDigits) || 0;
+        const only = raw.replace(/[^\d,]/g, '');
+        if (/^\d{1,3},\d{1,2}$/.test(only)) {
+          const n = Number(only.replace(',', '.'));
+          return Number.isFinite(n) ? Math.round(n * 1000) : 0;
+        }
+        const d = raw.replace(/[^\d]/g, '');
+        const n = Number(d);
+        return Number.isFinite(n) ? n : 0;
       }
-      return Number(sDigits) || 0;
-    }
+      if (hasDot && !hasCom) {
+        const only = raw.replace(/[^\d.]/g, '');
+        if (/^\d{1,3}\.\d{1,2}$/.test(only)) {
+          const n = Number(only);
+          return Number.isFinite(n) ? Math.round(n * 1000) : 0;
+        }
+        const d = raw.replace(/[^\d]/g, '');
+        const n = Number(d);
+        return Number.isFinite(n) ? n : 0;
+      }
+      const d = raw.replace(/[^\d]/g, '');
+      const n = Number(d);
+      return Number.isFinite(n) ? n : 0;
+    };
 
     let cacheRows = [];
 
@@ -250,28 +267,35 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
         if (rows.length === 0) {
           tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">Sin repuestos seleccionados. Usá “Administrar repuestos”.</td></tr>';
           repCount.textContent = '0 ítems';
-          repTotal.textContent = fmtARS(0);
+          repTotal.textContent = fmtARS0(0);
           return;
         }
 
         let total = 0;
         const html = rows.map(r => {
           const cant = Number(r?.cantidad || 0);
-          // <<< USAR SIEMPRE EL NUMÉRICO DEL API (precio_unit_num)
-          const unit = Number(r?.precio_unit_num ?? parsePrecioARS(r?.precio ?? r?.precio_unit_al_momento ?? null));
+
+          // preferimos el número del API; si no está, calculamos del string
+          let unit = Number(r?.precio_unit_num);
+          if (!Number.isFinite(unit) || unit <= 0) {
+            unit = parseEnteroARS(r?.precio ?? r?.precio_unit_al_momento ?? '');
+          } else {
+            // si vino muy chico (ej 7.51), corroboro con el string
+            const fromStr = parseEnteroARS(r?.precio ?? r?.precio_unit_al_momento ?? '');
+            if (fromStr > unit && unit < 1000) unit = fromStr;
+          }
+
           const sub = unit * cant;
           total += sub;
-          const comp = String(r?.componente || '');
-          const id = Number(r?.repuesto_id || 0);
 
           return `
-            <tr data-id="${id}">
-              <td class="fw-semibold">${id}</td>
-              <td>${comp}</td>
-              <td>${cant}</td>
-              <td>${fmtARS(unit)}</td>
-              <td>${fmtARS(sub)}</td>
-              <td class="text-end" style="width:70px;">
+            <tr data-id="${r.repuesto_id}">
+              <td class="fw-semibold text-start">${r.repuesto_id}</td>
+              <td class="text-start">${r.componente || ''}</td>
+              <td class="text-end">${cant}</td>
+              <td class="text-end">${fmtARS0(unit)}</td>
+              <td class="text-end">${fmtARS0(sub)}</td>
+              <td class="text-center" style="width:70px;">
                 <button type="button" class="btn btn-outline-danger btn-sm btnEliminar" title="Eliminar">
                   <i class="bi bi-trash"></i>
                 </button>
@@ -282,15 +306,10 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
 
         tbody.innerHTML = html;
         repCount.textContent = `${rows.length} ${rows.length === 1 ? 'ítem' : 'ítems'}`;
-        repTotal.textContent = fmtARS(total);
+        repTotal.textContent = fmtARS0(total);
 
-        // wire eliminar
-        tbody.querySelectorAll('.btnEliminar').forEach(btn => {
-          btn.addEventListener('click', onEliminarClick);
-        });
-
+        tbody.querySelectorAll('.btnEliminar').forEach(btn => btn.addEventListener('click', onEliminarClick));
       } catch(e) {
-        console.warn('No se pudo cargar los repuestos seleccionados', e);
         tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-danger">Error al cargar los repuestos seleccionados.</td></tr>';
         repCount.textContent = '—';
         repTotal.textContent = '—';
@@ -322,7 +341,6 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
           alert('No se pudo eliminar: ' + (out.error || res.statusText));
         }
       } catch (err) {
-        console.error(err);
         alert('Error de red al eliminar.');
       }
     }

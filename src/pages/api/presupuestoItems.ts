@@ -2,46 +2,69 @@
 import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
 
-/** Helpers numéricos seguros */
+/** ===== Helpers ===== */
 function toInt(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? Math.trunc(n) : NaN;
 }
 
-/** Normalizador de precio a número ARS (para guardar en NUMERIC) */
-function precioStringToNumber(v?: unknown): number | null {
-  if (v == null) return null;
-  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
-  const s = String(v).trim();
+/** Convierte un string de precio a ENTERO ARS (miles con punto, sin decimales).
+ * Reglas:
+ * "$7.510" -> 7510
+ * "7,51"   -> 7510
+ * "7.51"   -> 7510
+ * "12.345" -> 12345
+ * "12,3"   -> 12300
+ */
+function parseEnteroARS(s?: string | null): number | null {
   if (!s) return null;
-  // quitar moneda/espacios/puntos de miles y normalizar coma/punto
-  let t = s.replace(/[^\d,.-]/g, '');
-  // si hay ambos, detecto decimal real
-  const hasDot = t.includes('.');
-  const hasCom = t.includes(',');
+  const raw = String(s).trim();
+  if (!raw) return null;
+
+  const hasDot = raw.includes('.');
+  const hasCom = raw.includes(',');
+
   if (hasDot && hasCom) {
-    const lastDot = t.lastIndexOf('.');
-    const lastCom = t.lastIndexOf(',');
+    const lastDot = raw.lastIndexOf('.');
+    const lastCom = raw.lastIndexOf(',');
     const dec = lastDot > lastCom ? '.' : ',';
     const mil = dec === '.' ? ',' : '.';
-    t = t.split(mil).join('');
+    let t = raw.split(mil).join('');
     if (dec === ',') t = t.replace(',', '.');
-  } else if (hasCom && !hasDot) {
-    // tratar la coma como miles salvo patrón claro de decimales de 1-2 dígitos
-    const onlyDigitsComma = t.replace(/[^\d,]/g, '');
-    if (/^\d{1,3},\d{1,2}$/.test(onlyDigitsComma)) {
-      t = t.replace(',', '.');
-    } else {
-      t = t.replace(/,/g, '');
-    }
+    const n = Number(t.replace(/[^\d.-]/g, ''));
+    if (!Number.isFinite(n)) return null;
+    return Math.round(n < 1000 ? n * 1000 : n);
   }
-  const n = Number(t.replace(/[^\d.-]/g, ''));
+
+  if (hasCom && !hasDot) {
+    const only = raw.replace(/[^\d,]/g, '');
+    if (/^\d{1,3},\d{1,2}$/.test(only)) {
+      const n = Number(only.replace(',', '.'));
+      return Number.isFinite(n) ? Math.round(n * 1000) : null;
+    }
+    const d = raw.replace(/[^\d]/g, '');
+    const n = Number(d);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  if (hasDot && !hasCom) {
+    const only = raw.replace(/[^\d.]/g, '');
+    if (/^\d{1,3}\.\d{1,2}$/.test(only)) {
+      const n = Number(only);
+      return Number.isFinite(n) ? Math.round(n * 1000) : null;
+    }
+    const d = raw.replace(/[^\d]/g, '');
+    const n = Number(d);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const d = raw.replace(/[^\d]/g, '');
+  const n = Number(d);
   return Number.isFinite(n) ? n : null;
 }
 
-/** Busca (o crea si no existe) un presupuesto para el ticket_id */
+/** Busca (o crea) un presupuesto y devuelve su id */
 async function getOrCreatePresupuestoId(ticket_id: number): Promise<number> {
-  // Intento encontrar el presupuesto más reciente del ticket
   const { data: found, error: errFind } = await supabase
     .from('presupuestos')
     .select('id')
@@ -49,25 +72,22 @@ async function getOrCreatePresupuestoId(ticket_id: number): Promise<number> {
     .order('id', { ascending: false })
     .limit(1)
     .maybeSingle();
-
   if (errFind) throw errFind;
   if (found?.id) return found.id;
 
-  // Si no existe, creo uno mínimo
   const { data: created, error: errIns } = await supabase
     .from('presupuestos')
-    .insert({
-      ticket_id,
-      fecha_presupuesto: new Date().toISOString(),
-    })
+    .insert({ ticket_id, fecha_presupuesto: new Date().toISOString() })
     .select('id')
     .single();
-
   if (errIns) throw errIns;
   return created!.id as number;
 }
 
-/** GET: devuelve los ítems del presupuesto (derivado de ticket_id) */
+/** ================= GET =================
+ * Devuelve ítems desde presupuesto_repuestos + info de repuesto,
+ * siempre con precio_unit_num como ENTERO ARS.
+ */
 export const GET: APIRoute = async ({ url }) => {
   try {
     const ticketId = toInt(url.searchParams.get('ticket_id'));
@@ -75,15 +95,12 @@ export const GET: APIRoute = async ({ url }) => {
       return new Response(JSON.stringify({ rows: [], error: 'ticket_id inválido' }), { status: 400 });
     }
 
-    // 1) presupuesto_id por ticket
-    const presuId = await getOrCreatePresupuestoId(ticketId);
+    const presupuesto_id = await getOrCreatePresupuestoId(ticketId);
 
-    // 2) Traer ítems actuales del puente
     const { data: itemsRaw, error: errItems } = await supabase
       .from('presupuesto_repuestos')
       .select('repuesto_id, cantidad, precio_unit')
-      .eq('presupuesto_id', presuId);
-
+      .eq('presupuesto_id', presupuesto_id);
     if (errItems) throw errItems;
 
     const items = Array.isArray(itemsRaw) ? itemsRaw : [];
@@ -94,35 +111,32 @@ export const GET: APIRoute = async ({ url }) => {
       });
     }
 
-    // 3) Enriquecer con componente y precio visible
     const ids = Array.from(new Set(items.map((r: any) => r.repuesto_id)));
     const { data: repRaw, error: errRep } = await supabase
       .from('repuestos_csv')
       .select('id, "Componentes presupuestados", "Precio"')
       .in('id', ids);
-
     if (errRep) throw errRep;
 
-    type RepRow = {
-      id: number;
-      ['Componentes presupuestados']?: string | null;
-      ['Precio']?: string | null;
-    };
+    type RepRow = { id: number; ['Componentes presupuestados']?: string | null; ['Precio']?: string | null };
     const repuestos: RepRow[] = Array.isArray(repRaw) ? (repRaw as RepRow[]) : [];
     const byId: Record<number, RepRow> = {};
     for (const r of repuestos) byId[r.id] = r;
 
     const rows = items.map((it: any) => {
-      const precioPrefer = byId[it.repuesto_id]?.['Precio'] ?? null;
-      const unitFromTable = it.precio_unit as number | null;
-      const precio_unit_num = unitFromTable ?? precioStringToNumber(precioPrefer) ?? 0;
+      const preferStr = byId[it.repuesto_id]?.['Precio'] ?? null;
+      const preferNum =
+        it?.precio_unit != null && Number.isFinite(Number(it.precio_unit))
+          ? Number(it.precio_unit)
+          : parseEnteroARS(preferStr);
+
       return {
         repuesto_id: it.repuesto_id,
         cantidad: it.cantidad,
         componente: byId[it.repuesto_id]?.['Componentes presupuestados'] ?? '',
-        precio: precioPrefer ?? '',                 // string original visible
-        precio_unit_al_momento: unitFromTable,      // lo que hay en el puente
-        precio_unit_num,                            // numérico normalizado
+        precio: preferStr ?? '',
+        precio_unit_al_momento: it?.precio_unit ?? null,
+        precio_unit_num: preferNum ?? 0, // ENTERO ARS
       };
     });
 
@@ -136,7 +150,10 @@ export const GET: APIRoute = async ({ url }) => {
   }
 };
 
-/** POST: reemplaza los ítems del presupuesto (derivado de ticket_id) */
+/** ================= POST =================
+ * Reemplaza ítems del presupuesto y guarda snapshot del precio como ENTERO ARS.
+ * No permite repuestos inactivos.
+ */
 export const POST: APIRoute = async ({ request }) => {
   try {
     const body = (await request.json()) as { ticket_id?: unknown; items?: Array<{ repuesto_id: unknown; cantidad?: unknown }> };
@@ -147,32 +164,28 @@ export const POST: APIRoute = async ({ request }) => {
       return new Response(JSON.stringify({ ok: false, error: 'ticket_id inválido' }), { status: 400 });
     }
 
-    // Saneado
     const clean = incoming
       .map((it) => {
         const repuesto_id = toInt(it?.repuesto_id);
         if (!Number.isFinite(repuesto_id)) return null;
-        const cantRaw = toInt(it?.cantidad ?? 1);
-        const cantidad = Math.max(1, Number.isFinite(cantRaw) ? cantRaw : 1);
+        const cr = toInt(it?.cantidad ?? 1);
+        const cantidad = Math.max(1, Number.isFinite(cr) ? cr : 1);
         return { repuesto_id, cantidad };
       })
       .filter((x): x is { repuesto_id: number; cantidad: number } => x !== null);
 
-    // presupuesto_id por ticket (lo crea si no existe)
     const presupuesto_id = await getOrCreatePresupuestoId(ticket_id);
 
-    // Traigo precios ACTUALES y estado activo
+    // Traigo estado + precio actual (string) de los repuestos
     const ids = Array.from(new Set(clean.map((x) => x.repuesto_id)));
     const { data: repRaw, error: errRep } = await supabase
       .from('repuestos_csv')
       .select('id, "Precio", activo')
       .in('id', ids);
-
     if (errRep) throw errRep;
 
     type RepRow = { id: number; ['Precio']?: string | null; activo?: boolean | null };
-    const repuestos: RepRow[] = Array.isArray(repRaw) ? (repRaw as RepRow[]) : [];
-
+    const repuestos: RepRow[] = Array.isArray(repRaw) ? repRaw : [];
     const priceById: Record<number, string | null> = {};
     const activeById: Record<number, boolean> = {};
     for (const r of repuestos) {
@@ -180,46 +193,35 @@ export const POST: APIRoute = async ({ request }) => {
       activeById[r.id] = !!r.activo;
     }
 
-    // Validación: no permitir inactivos
-    const inactivos = clean.filter((x) => activeById[x.repuesto_id] === false).map((x) => x.repuesto_id);
+    // Bloqueo inactivos
+    const inactivos = clean.filter(x => activeById[x.repuesto_id] === false).map(x => x.repuesto_id);
     if (inactivos.length > 0) {
-      return new Response(
-        JSON.stringify({ ok: false, error: `Hay repuestos inactivos: ${inactivos.join(', ')}` }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: `Hay repuestos inactivos: ${inactivos.join(', ')}` }), { status: 400 });
     }
 
-    // Reemplazo total: borro lo anterior
-    const del = await supabase
-      .from('presupuesto_repuestos')
-      .delete()
-      .eq('presupuesto_id', presupuesto_id);
+    // Reemplazo total
+    const del = await supabase.from('presupuesto_repuestos').delete().eq('presupuesto_id', presupuesto_id);
     if (del.error) throw del.error;
 
     if (clean.length === 0) {
       return new Response(JSON.stringify({ ok: true, count: 0 }), { status: 200 });
     }
 
-    // Payload final para el puente
-    const payload = clean.map((x) => ({
+    // Inserto snapshot con precio ENTERO ARS
+    const payload = clean.map(x => ({
       presupuesto_id,
       repuesto_id: x.repuesto_id,
       cantidad: x.cantidad,
-      // snapshot del precio actual (NUMERIC) si existe; si no, null
       precio_unit: (() => {
-        const p = priceById[x.repuesto_id];
-        const n = precioStringToNumber(p);
-        return n === null ? null : n;
+        const parsed = parseEnteroARS(priceById[x.repuesto_id]);
+        return parsed ?? null; // NUMERIC entero en ARS
       })(),
     }));
 
     const { error: insErr } = await supabase.from('presupuesto_repuestos').insert(payload);
     if (insErr) throw insErr;
 
-    return new Response(JSON.stringify({ ok: true, count: payload.length }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return new Response(JSON.stringify({ ok: true, count: payload.length }), { status: 200 });
   } catch (e: any) {
     console.error('presupuestoItems POST error:', e?.message || e);
     return new Response(JSON.stringify({ ok: false, error: e?.message || 'Error' }), { status: 500 });

@@ -1,26 +1,24 @@
 ---
 const { equipo } = Astro.props as { equipo: any };
-const isVerificar = Boolean(equipo?.id); // si existe presupuesto (modo verificación)
+const isVerificar = Boolean(equipo?.id);
 
 function formatARS(v?: string | number | null): string {
-  // Formatea a ARS aceptando string/number (limpia miles y usa coma/punto)
   if (v == null || v === '') return '';
-  const n = Number(String(v).replace(/[^\d,-]/g, '').replace(',', '.'));
+  const digits = String(v).replace(/[^\d]/g, '');
+  const n = Number(digits);
   if (!isFinite(n)) return String(v);
   return new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency: 'ARS',
     minimumFractionDigits: 0,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 0
   }).format(n);
 }
 ---
 
-<!-- Formulario de presupuesto: crea/actualiza el presupuesto del ticket -->
 <form id="presupuesto-form" method="POST" action={`/api/actualizarPresupuesto?id=${equipo.ticketId}`} class="card shadow-sm">
   <div class="card-body">
     <div class="row g-3">
-      <!-- Monto (input con formateo en vivo) -->
       <div class="col-md-6">
         <label class="form-label">Monto</label>
         <input
@@ -32,7 +30,6 @@ function formatARS(v?: string | number | null): string {
         />
       </div>
 
-      <!-- Link al presupuesto (Drive, Notion, PDF, etc.) -->
       <div class="col-md-6">
         <label class="form-label">Link presupuesto</label>
         <input
@@ -44,7 +41,6 @@ function formatARS(v?: string | number | null): string {
         />
       </div>
 
-      <!-- Estado de garantía (Sí/No) -->
       <div class="col-md-6">
         <label class="form-label">¿Garantía activa?</label>
         <select name="garantia_activa" class="form-select">
@@ -54,7 +50,6 @@ function formatARS(v?: string | number | null): string {
         </select>
       </div>
 
-      <!-- Preferencia del cliente: quiere o no recibir presupuesto (tri-estado) -->
       <div class="col-md-6">
         <label class="form-label">¿Quiere saber presupuesto?</label>
         <select name="solicitar_presupuesto" class="form-select">
@@ -64,13 +59,11 @@ function formatARS(v?: string | number | null): string {
         </select>
       </div>
 
-      <!-- Notas internas para administración -->
       <div class="col-12">
         <label class="form-label">Notas (administración)</label>
         <textarea name="notas_administracion" class="form-control" rows="3">{equipo?.notas_administracion ?? ''}</textarea>
       </div>
 
-      <!-- Solo visible en modo verificación (cuando ya existe presupuesto) -->
       {isVerificar && (
         <div class="col-12 mt-2">
           <h5 class="mb-2"><i class="bi bi-check2-circle me-2"></i> Aprobación del presupuesto</h5>
@@ -82,7 +75,6 @@ function formatARS(v?: string | number | null): string {
       )}
     </div>
 
-    <!-- Acción principal -->
     <div class="mt-4 text-end">
       <button type="submit" class="btn btn-primary">
         <i class="bi bi-save me-1"></i> Guardar cambios
@@ -91,32 +83,26 @@ function formatARS(v?: string | number | null): string {
   </div>
 </form>
 
-<!-- JS: formatea el input de monto como ARS mientras escribe y al salir -->
 <script>
 (function(){
-  function parseNumber(s){
-    // Limpia a número (deja dígitos y decimal como punto)
+  function digitsToInt(s){
     if(!s) return 0;
-    s = s.replace(/[^\d,-]/g,'').replace(',', '.');
-    return Number(s) || 0;
+    const d = s.replace(/[^\d]/g,'');
+    return Number(d)||0;
   }
   function formatARS(n){
-    // Formatea número a moneda ARS
     return new Intl.NumberFormat('es-AR',{
       style:'currency',currency:'ARS',
-      minimumFractionDigits:0, maximumFractionDigits:2
+      minimumFractionDigits:0, maximumFractionDigits:0
     }).format(n);
   }
   function onBlur(e){
-    // Al salir del input: normaliza a formato ARS o vacío si no hay número
-    const n = parseNumber(e.target.value);
+    const n = digitsToInt(e.target.value);
     e.target.value = n ? formatARS(n) : '';
   }
   function onInput(e){
-    // Mientras escribe: permite solo números, coma, punto y guiones
-    e.target.value = e.target.value.replace(/[^\d,.-]/g,'');
+    e.target.value = e.target.value.replace(/[^\d]/g,'');
   }
-  // Aplica a todos los inputs con clase .currency-ars
   document.querySelectorAll('.currency-ars').forEach(el=>{
     el.addEventListener('blur', onBlur);
     el.addEventListener('input', onInput);
