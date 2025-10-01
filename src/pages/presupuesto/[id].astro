@@ -149,7 +149,7 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
             </div>
           </>
         ) : (
-          <div class="alert alert-warning">No tenés permisos para ver esta sección.</div>
+          <div class="alert alert_warning">No tenés permisos para ver esta sección.</div>
         )}
 
         <!-- Repuestos seleccionados -->
@@ -195,7 +195,7 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
     )}
   </div>
 
-  <!-- Script: usa precio_unit_num del API (entero ARS) y alinea columnas correctas -->
+  <!-- Script: usa precio_unit_num del API (entero ARS), alinea columnas y AUTOCARGA el Monto -->
   <script type="module">
     const root = document.getElementById('presupuesto-root');
     const ticketId = Number(root?.dataset.ticketId || 0);
@@ -212,6 +212,26 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
         minimumFractionDigits: 0,
         maximumFractionDigits: 0,
       }).format(Number(n) || 0);
+
+    // --- AUTOFILL DEL MONTO (editable, sin pisar cambios del usuario) ---
+    function setMontoFromRepuestos(totalEnteroARS) {
+      // Solo si existe el formulario (modo admin)
+      const inp = document.querySelector('#presupuesto-form input[name="monto"]');
+      if (!inp) return;
+
+      // Último valor auto-asignado
+      const lastAuto = Number(inp.dataset.autofillTotal || '0');
+
+      // ¿El usuario ya escribió algo distinto al último autofill?
+      const digits = String(inp.value || '').replace(/\D/g, '');
+      const currNum = Number(digits || '0');
+      const userEdited = (currNum !== 0 && currNum !== lastAuto);
+
+      if (userEdited) return; // no lo piso
+
+      inp.value = fmtARS0(totalEnteroARS);
+      inp.dataset.autofillTotal = String(totalEnteroARS);
+    }
 
     // Fallback por si algún item no trae precio_unit_num (de string -> entero ARS)
     const parseEnteroARS = (s) => {
@@ -268,6 +288,7 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
           tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">Sin repuestos seleccionados. Usá “Administrar repuestos”.</td></tr>';
           repCount.textContent = '0 ítems';
           repTotal.textContent = fmtARS0(0);
+          setMontoFromRepuestos(0); // también reflejamos que no hay repuestos
           return;
         }
 
@@ -307,6 +328,9 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
         tbody.innerHTML = html;
         repCount.textContent = `${rows.length} ${rows.length === 1 ? 'ítem' : 'ítems'}`;
         repTotal.textContent = fmtARS0(total);
+
+        // --- volcamos el total de repuestos al campo Monto (sin pisar cambios manuales) ---
+        setMontoFromRepuestos(total);
 
         tbody.querySelectorAll('.btnEliminar').forEach(btn => btn.addEventListener('click', onEliminarClick));
       } catch(e) {
