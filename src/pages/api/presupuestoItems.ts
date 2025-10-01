@@ -1,82 +1,73 @@
+// src/pages/api/presupuestoItems.ts
 import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
 
-/* ===================== Helpers ===================== */
-
+/** Helpers numéricos seguros */
 function toInt(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? Math.trunc(n) : NaN;
 }
 
-function parseNumberLike(s?: string | null): number | null {
-  if (s == null) return null;
-  let t = String(s).trim();
-  if (!t) return null;
-  // deja dígitos, coma, punto y signo
-  t = t.replace(/[^0-9.,-]/g, '');
-  const lastDot = t.lastIndexOf('.');
-  const lastCom = t.lastIndexOf(',');
-  if (lastDot !== -1 && lastCom !== -1) {
+/** Normalizador de precio a número ARS (para guardar en NUMERIC) */
+function precioStringToNumber(v?: unknown): number | null {
+  if (v == null) return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const s = String(v).trim();
+  if (!s) return null;
+  // quitar moneda/espacios/puntos de miles y normalizar coma/punto
+  let t = s.replace(/[^\d,.-]/g, '');
+  // si hay ambos, detecto decimal real
+  const hasDot = t.includes('.');
+  const hasCom = t.includes(',');
+  if (hasDot && hasCom) {
+    const lastDot = t.lastIndexOf('.');
+    const lastCom = t.lastIndexOf(',');
     const dec = lastDot > lastCom ? '.' : ',';
     const mil = dec === '.' ? ',' : '.';
     t = t.split(mil).join('');
     if (dec === ',') t = t.replace(',', '.');
-  } else if (lastCom !== -1) {
-    t = t.replace(',', '.');
+  } else if (hasCom && !hasDot) {
+    // tratar la coma como miles salvo patrón claro de decimales de 1-2 dígitos
+    const onlyDigitsComma = t.replace(/[^\d,]/g, '');
+    if (/^\d{1,3},\d{1,2}$/.test(onlyDigitsComma)) {
+      t = t.replace(',', '.');
+    } else {
+      t = t.replace(/,/g, '');
+    }
   }
-  const n = Number(t);
+  const n = Number(t.replace(/[^\d.-]/g, ''));
   return Number.isFinite(n) ? n : null;
 }
 
-/* ===================== Tipos ===================== */
-
-interface IncomingItem {
-  repuesto_id: unknown;
-  cantidad?: unknown;
-}
-
-interface CleanItem {
-  repuesto_id: number;
-  cantidad: number;
-}
-
-interface DBBridgeRow {
-  repuesto_id: number;
-  cantidad: number;
-  precio_unit: number | null;
-}
-
-/* ===================== Utiles de presupuesto ===================== */
-
-async function getOrCreatePresupuestoId(ticketId: number): Promise<number | null> {
-  // 1) buscar último presupuesto del ticket
-  const { data: rows, error } = await supabase
+/** Busca (o crea si no existe) un presupuesto para el ticket_id */
+async function getOrCreatePresupuestoId(ticket_id: number): Promise<number> {
+  // Intento encontrar el presupuesto más reciente del ticket
+  const { data: found, error: errFind } = await supabase
     .from('presupuestos')
     .select('id')
-    .eq('ticket_id', ticketId)
+    .eq('ticket_id', ticket_id)
     .order('id', { ascending: false })
-    .limit(1);
+    .limit(1)
+    .maybeSingle();
 
-  if (error) throw error;
+  if (errFind) throw errFind;
+  if (found?.id) return found.id;
 
-  if (Array.isArray(rows) && rows.length > 0 && rows[0]?.id) {
-    return rows[0].id as number;
-  }
-
-  // 2) si no existe, crear uno mínimo (para poder asociar ítems)
-  const nowIso = new Date().toISOString();
-  const { data: ins, error: insErr } = await supabase
+  // Si no existe, creo uno mínimo
+  const { data: created, error: errIns } = await supabase
     .from('presupuestos')
-    .insert([{ ticket_id: ticketId, fecha_presupuesto: nowIso }])
+    .insert({
+      ticket_id,
+      fecha_presupuesto: new Date().toISOString(),
+    })
     .select('id')
     .single();
 
-  if (insErr) throw insErr;
-  return ins?.id ?? null;
+  if (errIns) throw errIns;
+  return created!.id as number;
 }
 
-/* ===================== GET ===================== */
-
+/** GET: devuelve los ítems del presupuesto (derivado de ticket_id) */
 export const GET: APIRoute = async ({ url }) => {
   try {
     const ticketId = toInt(url.searchParams.get('ticket_id'));
@@ -84,132 +75,142 @@ export const GET: APIRoute = async ({ url }) => {
       return new Response(JSON.stringify({ rows: [], error: 'ticket_id inválido' }), { status: 400 });
     }
 
-    // presupuesto asociado
-    const presupuestoId = await getOrCreatePresupuestoId(ticketId);
-    if (!presupuestoId) {
-      return new Response(JSON.stringify({ rows: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }
+    // 1) presupuesto_id por ticket
+    const presuId = await getOrCreatePresupuestoId(ticketId);
 
-    // ítems guardados en la tabla puente
+    // 2) Traer ítems actuales del puente
     const { data: itemsRaw, error: errItems } = await supabase
       .from('presupuesto_repuestos')
       .select('repuesto_id, cantidad, precio_unit')
-      .eq('presupuesto_id', presupuestoId);
+      .eq('presupuesto_id', presuId);
 
     if (errItems) throw errItems;
 
-    const items: DBBridgeRow[] = Array.isArray(itemsRaw) ? (itemsRaw as DBBridgeRow[]) : [];
+    const items = Array.isArray(itemsRaw) ? itemsRaw : [];
     if (items.length === 0) {
-      return new Response(JSON.stringify({ rows: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ rows: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    // info de repuestos
-    const ids = Array.from(new Set(items.map(r => r.repuesto_id)));
+    // 3) Enriquecer con componente y precio visible
+    const ids = Array.from(new Set(items.map((r: any) => r.repuesto_id)));
     const { data: repRaw, error: errRep } = await supabase
       .from('repuestos_csv')
       .select('id, "Componentes presupuestados", "Precio"')
       .in('id', ids);
+
     if (errRep) throw errRep;
 
-    type RepRow = { id: number; ['Componentes presupuestados']?: string | null; ['Precio']?: string | null };
+    type RepRow = {
+      id: number;
+      ['Componentes presupuestados']?: string | null;
+      ['Precio']?: string | null;
+    };
     const repuestos: RepRow[] = Array.isArray(repRaw) ? (repRaw as RepRow[]) : [];
     const byId: Record<number, RepRow> = {};
     for (const r of repuestos) byId[r.id] = r;
 
-    // respuesta unificada (precio: preferimos precio_unit snapshot; si no hay, tomamos el actual)
-    const rows = items.map((it) => {
-      const precioDeTabla = parseNumberLike(byId[it.repuesto_id]?.['Precio'] ?? null);
-      const precio = (it.precio_unit ?? precioDeTabla ?? null);
+    const rows = items.map((it: any) => {
+      const precioPrefer = byId[it.repuesto_id]?.['Precio'] ?? null;
+      const unitFromTable = it.precio_unit as number | null;
+      const precio_unit_num = unitFromTable ?? precioStringToNumber(precioPrefer) ?? 0;
       return {
         repuesto_id: it.repuesto_id,
         cantidad: it.cantidad,
         componente: byId[it.repuesto_id]?.['Componentes presupuestados'] ?? '',
-        precio: precio != null ? precio : null,
-        precio_unit: it.precio_unit,
+        precio: precioPrefer ?? '',                 // string original visible
+        precio_unit_al_momento: unitFromTable,      // lo que hay en el puente
+        precio_unit_num,                            // numérico normalizado
       };
     });
 
-    return new Response(JSON.stringify({ rows }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ rows }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (e: any) {
     console.error('presupuestoItems GET error:', e?.message || e);
     return new Response(JSON.stringify({ rows: [], error: e?.message || 'Error' }), { status: 500 });
   }
 };
 
-/* ===================== POST ===================== */
-
+/** POST: reemplaza los ítems del presupuesto (derivado de ticket_id) */
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const body = (await request.json()) as { ticket_id?: unknown; items?: IncomingItem[] } | unknown;
-    const parsed = body as { ticket_id?: unknown; items?: IncomingItem[] };
+    const body = (await request.json()) as { ticket_id?: unknown; items?: Array<{ repuesto_id: unknown; cantidad?: unknown }> };
+    const ticket_id = toInt(body?.ticket_id);
+    const incoming = Array.isArray(body?.items) ? body!.items : [];
 
-    const ticket_id = toInt(parsed?.ticket_id);
     if (!ticket_id) {
       return new Response(JSON.stringify({ ok: false, error: 'ticket_id inválido' }), { status: 400 });
     }
 
-    const incoming = Array.isArray(parsed?.items) ? (parsed!.items as IncomingItem[]) : [];
-    const clean: CleanItem[] = incoming
-      .map((it): CleanItem | null => {
+    // Saneado
+    const clean = incoming
+      .map((it) => {
         const repuesto_id = toInt(it?.repuesto_id);
         if (!Number.isFinite(repuesto_id)) return null;
-        const cantidadRaw = toInt(it?.cantidad ?? 1);
-        const cantidad = Math.max(1, Number.isFinite(cantidadRaw) ? cantidadRaw : 1);
+        const cantRaw = toInt(it?.cantidad ?? 1);
+        const cantidad = Math.max(1, Number.isFinite(cantRaw) ? cantRaw : 1);
         return { repuesto_id, cantidad };
       })
-      .filter((x): x is CleanItem => x !== null);
+      .filter((x): x is { repuesto_id: number; cantidad: number } => x !== null);
 
-    // presupuesto destino
+    // presupuesto_id por ticket (lo crea si no existe)
     const presupuesto_id = await getOrCreatePresupuestoId(ticket_id);
-    if (!presupuesto_id) {
-      return new Response(JSON.stringify({ ok: false, error: 'No se pudo obtener/crear presupuesto' }), { status: 500 });
+
+    // Traigo precios ACTUALES y estado activo
+    const ids = Array.from(new Set(clean.map((x) => x.repuesto_id)));
+    const { data: repRaw, error: errRep } = await supabase
+      .from('repuestos_csv')
+      .select('id, "Precio", activo')
+      .in('id', ids);
+
+    if (errRep) throw errRep;
+
+    type RepRow = { id: number; ['Precio']?: string | null; activo?: boolean | null };
+    const repuestos: RepRow[] = Array.isArray(repRaw) ? (repRaw as RepRow[]) : [];
+
+    const priceById: Record<number, string | null> = {};
+    const activeById: Record<number, boolean> = {};
+    for (const r of repuestos) {
+      priceById[r.id] = r['Precio'] ?? null;
+      activeById[r.id] = !!r.activo;
     }
 
-    // si viene vacío, limpiamos y salimos
+    // Validación: no permitir inactivos
+    const inactivos = clean.filter((x) => activeById[x.repuesto_id] === false).map((x) => x.repuesto_id);
+    if (inactivos.length > 0) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `Hay repuestos inactivos: ${inactivos.join(', ')}` }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Reemplazo total: borro lo anterior
+    const del = await supabase
+      .from('presupuesto_repuestos')
+      .delete()
+      .eq('presupuesto_id', presupuesto_id);
+    if (del.error) throw del.error;
+
     if (clean.length === 0) {
-      await supabase.from('presupuesto_repuestos').delete().eq('presupuesto_id', presupuesto_id);
       return new Response(JSON.stringify({ ok: true, count: 0 }), { status: 200 });
     }
 
-    // Traer precios y stock actuales para validar y snapshot
-    const ids = Array.from(new Set(clean.map(x => x.repuesto_id)));
-    const { data: repRaw, error: errRep } = await supabase
-      .from('repuestos_csv')
-      .select('id, "Precio", "Stock"')
-      .in('id', ids as number[]);
-    if (errRep) throw errRep;
-
-    type RepRow = { id: number; ['Precio']?: string | null; ['Stock']?: string | null };
-    const repuestos: RepRow[] = Array.isArray(repRaw) ? (repRaw as RepRow[]) : [];
-    const stockById: Record<number, number> = {};
-    const priceById: Record<number, number | null> = {};
-
-    for (const r of repuestos) {
-      stockById[r.id] = parseNumberLike(r['Stock'] ?? null) ?? 0;
-      priceById[r.id] = parseNumberLike(r['Precio'] ?? null);
-    }
-
-    // Validación de stock (si stock > 0, no permitir exceder)
-    const stockErrors = clean
-      .filter(x => {
-        const st = stockById[x.repuesto_id] ?? 0;
-      return (st === 0 && x.cantidad > 0) || (st > 0 && x.cantidad > st);
-      })
-      .map(x => ({ repuesto_id: x.repuesto_id, cantidad: x.cantidad, stock: stockById[x.repuesto_id] ?? 0 }));
-
-    if (stockErrors.length > 0) {
-      return new Response(JSON.stringify({ ok: false, error: 'Cantidad supera stock', stock_errors: stockErrors }), { status: 400 });
-    }
-
-    // Reemplazo total: borro anteriores y cargo nuevos (snapshot de precio)
-    const del = await supabase.from('presupuesto_repuestos').delete().eq('presupuesto_id', presupuesto_id);
-    if (del.error) throw del.error;
-
+    // Payload final para el puente
     const payload = clean.map((x) => ({
       presupuesto_id,
       repuesto_id: x.repuesto_id,
       cantidad: x.cantidad,
-      precio_unit: priceById[x.repuesto_id] ?? null,
+      // snapshot del precio actual (NUMERIC) si existe; si no, null
+      precio_unit: (() => {
+        const p = priceById[x.repuesto_id];
+        const n = precioStringToNumber(p);
+        return n === null ? null : n;
+      })(),
     }));
 
     const { error: insErr } = await supabase.from('presupuesto_repuestos').insert(payload);

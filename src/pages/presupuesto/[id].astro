@@ -7,23 +7,19 @@ import PresupuestoForm from '../../components/PresupuestoForm.astro';
 import { supabase } from '../../lib/supabase';
 import { formatearFecha } from '../../lib/utils';
 
-// Roles del usuario autenticado
 type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
 const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
 
-// ID del ticket desde la ruta dinámica (/presupuesto/:id)
 const { id } = Astro.params as { id: string };
 
-// ===== 1) Ticket (traemos solicitar_presupuesto) =====
 const { data: ticket } = await supabase
   .from('tickets_mian')
   .select('id, ticket, solicitar_presupuesto')
   .eq('id', id)
   .single();
 
-// ===== 2) Presupuesto: siempre la última fila =====
 const { data: presuRows } = await supabase
   .from('presupuestos')
   .select('*')
@@ -34,7 +30,6 @@ const { data: presuRows } = await supabase
 const presupuesto = Array.isArray(presuRows) ? (presuRows[0] ?? null) : null;
 const isVerificar = Boolean(presupuesto?.id);
 
-// ===== 3) Mezcla para el form/vista =====
 const equipo = {
   ticketId: ticket?.id,
   ticketNumero: ticket?.ticket,
@@ -42,14 +37,10 @@ const equipo = {
   ...presupuesto
 };
 
-// ===== 4) Fecha visible =====
 const fechaPresupuesto = presupuesto?.fecha_presupuesto || null;
 const fechaPresupuestoVista = fechaPresupuesto
   ? formatearFecha(fechaPresupuesto)
   : formatearFecha(new Date().toISOString());
-
-// ===== 5) Helpers =====
-const v = (x: any) => (x ?? '') || '—';
 
 function parseToNumberLike(s?: string | null): string {
   if (!s) return '';
@@ -66,8 +57,7 @@ function parseToNumberLike(s?: string | null): string {
 }
 function formatARS(v?: string | number | null): string {
   if (v == null || v === '') return '';
-  const asStr = typeof v === 'number' ? String(v) : String(v);
-  const norm = parseToNumberLike(asStr);
+  const norm = parseToNumberLike(String(v));
   const n = Number(norm);
   if (!isFinite(n)) return String(v);
   const parts = norm.split('.');
@@ -75,12 +65,10 @@ function formatARS(v?: string | number | null): string {
   return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-// ===== 6) Path centralizado a la página real =====
 const repsPath = `/presupuesto/${id}/repuestosItems`;
 ---
 
 <BasePrivateLayout>
-  <!-- data-ticket-id expone el id al script sin interpolarlo en código -->
   <div id="presupuesto-root" class="container mt-5" data-ticket-id={id}>
     <!-- Encabezado -->
     <div class="d-flex align-items-center justify-content-between mb-3">
@@ -88,17 +76,14 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
         <i class="bi bi-receipt me-2"></i>
         {isVerificar ? 'Verificar presupuesto' : 'Añadir presupuesto'} del ticket #{equipo.ticketNumero ?? id}
       </h2>
-      <div class="d-flex gap-2">
-        <!-- 🔵 Solo queda Volver en la cabecera -->
-        <a class="btn btn-light btn-sm" href={`/detalle/${id}`}>
-          <i class="bi bi-arrow-left"></i> Volver
-        </a>
-      </div>
+      <a class="btn btn-light btn-sm" href={`/detalle/${id}`}>
+        <i class="bi bi-arrow-left"></i> Volver
+      </a>
     </div>
 
     {equipo?.ticketId ? (
       <>
-        <!-- Bloque de fecha + botón integrado con badge -->
+        <!-- Fecha -->
         <div class="card mb-3">
           <div class="card-body">
             <div class="row g-3 align-items-end">
@@ -106,26 +91,11 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
                 <label class="form-label">Fecha presupuesto</label>
                 <input type="text" class="form-control" value={fechaPresupuestoVista} readonly />
               </div>
-
-              <div class="col-md-6">
-                <label class="form-label d-flex align-items-center justify-content-between">
-                  <span>Repuestos necesarios</span>
-                  <span class="small text-muted" id="rep-sum-help" style="display:none;"></span>
-                </label>
-                <div class="d-flex align-items-center gap-2">
-                  <!-- 🔵 ÚNICO botón funcional para administrar repuestos -->
-                  <a id="btnRepuestos" class="btn btn-outline-primary" href={repsPath}>
-                    <i class="bi bi-box-seam me-1"></i>
-                    Administrar repuestos
-                    <span id="badgeRepuestosCount" class="badge text-bg-secondary ms-2" style="display:none;">0</span>
-                  </a>
-                  <span id="repResumen" class="text-muted small"></span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
 
+        <!-- Form (admin) o vista (técnico) -->
         {isAdmin ? (
           <PresupuestoForm equipo={equipo} />
         ) : isTecnico ? (
@@ -144,16 +114,16 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
                   </div>
                   <div class="col-md-6">
                     <label class="form-label fw-semibold">¿Garantía activa?</label>
-                    <input type="text" class="form-control" value={v(equipo.garantia_activa)} readonly />
+                    <input type="text" class="form-control" value={(equipo.garantia_activa ?? '') || '—'} readonly />
                   </div>
                   <div class="col-md-6">
                     <label class="form-label fw-semibold">Link presupuesto</label>
-                    <input type="text" class="form-control" value={v(equipo.link_presupuesto)} readonly />
+                    <input type="text" class="form-control" value={(equipo.link_presupuesto ?? '') || '—'} readonly />
                   </div>
                   {isVerificar && (
                     <div class="col-md-6">
                       <label class="form-label fw-semibold">Aprobación del presupuesto</label>
-                      <input type="text" class="form-control" value={v(equipo.presupuesto_aprobado)} readonly />
+                      <input type="text" class="form-control" value={(equipo.presupuesto_aprobado ?? '') || '—'} readonly />
                     </div>
                   )}
                   <div class="col-md-6">
@@ -172,7 +142,7 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
 
                   <div class="col-12">
                     <label class="form-label fw-semibold">Notas de administración</label>
-                    <textarea class="form-control" rows={4} readonly>{v(equipo.notas_administracion)}</textarea>
+                    <textarea class="form-control" rows={4} readonly>{(equipo.notas_administracion ?? '') || '—'}</textarea>
                   </div>
                 </div>
               </div>
@@ -181,68 +151,182 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
         ) : (
           <div class="alert alert-warning">No tenés permisos para ver esta sección.</div>
         )}
+
+        <!-- Repuestos seleccionados -->
+        <div class="card mt-4">
+          <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="fw-semibold">Repuestos seleccionados</div>
+            <div class="d-flex align-items-center gap-3 ms-auto">
+              <div class="small text-muted">
+                <span id="repCount">0 ítems</span>
+                <span class="mx-2">•</span>
+                Total: <span id="repTotal">$0</span>
+              </div>
+              <a id="btnRepuestos" class="btn btn-primary btn-sm" href={repsPath}>
+                <i class="bi bi-box-seam me-1"></i> Administrar repuestos
+              </a>
+            </div>
+          </div>
+
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width:90px;">ID</th>
+                    <th>Componente</th>
+                    <th style="width:120px;">Cantidad</th>
+                    <th style="width:160px;">Precio unitario</th>
+                    <th style="width:160px;">Subtotal</th>
+                    <th style="width:70px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-sel">
+                  <tr><td colspan="6" class="text-center py-3 text-muted">Cargando…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </>
     ) : (
       <div class="alert alert-danger">No se encontró el ticket con ID: {id}</div>
     )}
   </div>
 
-  <!-- Script: toma ticketId desde data-* y carga el resumen -->
+  <!-- Script: usa precio_unit_num del API y permite eliminar ítems -->
   <script type="module">
     const root = document.getElementById('presupuesto-root');
     const ticketId = Number(root?.dataset.ticketId || 0);
 
-    const badge = document.getElementById('badgeRepuestosCount');
-    const resumen = document.getElementById('repResumen');
-    const help = document.getElementById('rep-sum-help');
+    const tbody = document.getElementById('tbody-sel');
+    const repCount = document.getElementById('repCount');
+    const repTotal = document.getElementById('repTotal');
 
-    function fmt(n){ return new Intl.NumberFormat('es-AR').format(n); }
+    const fmtARS = (n) =>
+      new Intl.NumberFormat('es-AR', {
+        style:'currency', currency:'ARS',
+        minimumFractionDigits: 0, maximumFractionDigits: 2
+      }).format(Number(n) || 0);
 
-    async function cargarResumen() {
+    // Fallback (solo si el API no mandara precio_unit_num en algún item)
+    function parsePrecioARS(v){
+      if (v == null || v === '') return 0;
+      if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+      const s = String(v).trim();
+      const sDigits      = s.replace(/[^0-9]/g, '');
+      const sDigitsComma = s.replace(/[^\d,]/g, '');
+      const hasDot = s.includes('.');
+      const hasCom = s.includes(',');
+      if (hasDot && hasCom) {
+        const lastDot = s.lastIndexOf('.');
+        const lastCom = s.lastIndexOf(',');
+        const dec = lastDot > lastCom ? '.' : ',';
+        const mil = dec === '.' ? ',' : '.';
+        let t = s.split(mil).join('');
+        if (dec === ',') t = t.replace(',', '.');
+        const n = Number(t.replace(/[^\d.-]/g, ''));
+        return Number.isFinite(n) ? n : 0;
+      }
+      if (hasCom && !hasDot) {
+        const patternOk = /^\d{1,3},\d{1,2}$/.test(sDigitsComma);
+        const decLike = Number(sDigitsComma.replace(',', '.'));
+        if (patternOk && decLike < 100) return Math.round(decLike * 1000); // 9,4 -> 9400
+        return Number(sDigits) || 0;
+      }
+      return Number(sDigits) || 0;
+    }
+
+    let cacheRows = [];
+
+    async function cargarSeleccion() {
       if (!ticketId) return;
       try {
         const res = await fetch(`/api/presupuestoItems?ticket_id=${ticketId}`);
         const out = await res.json();
         const rows = Array.isArray(out?.rows) ? out.rows : [];
+        cacheRows = rows;
 
-        // cantidad de filas distintas + sumatoria de cantidades * precio
-        let totalCant = 0;
-        let totalPrecio = 0;
-        for (const r of rows) {
-          const cantidad = Number(r?.cantidad || 0);
-          totalCant += cantidad;
-          const pn = Number(String(r?.precio || '').replace(/[^\d]/g,'') || '0');
-          totalPrecio += pn * cantidad;
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">Sin repuestos seleccionados. Usá “Administrar repuestos”.</td></tr>';
+          repCount.textContent = '0 ítems';
+          repTotal.textContent = fmtARS(0);
+          return;
         }
 
-        if (badge) {
-          if (rows.length > 0) {
-            badge.style.display = 'inline-block';
-            badge.textContent = String(rows.length);
-          } else {
-            badge.style.display = 'none';
-          }
-        }
+        let total = 0;
+        const html = rows.map(r => {
+          const cant = Number(r?.cantidad || 0);
+          // <<< USAR SIEMPRE EL NUMÉRICO DEL API (precio_unit_num)
+          const unit = Number(r?.precio_unit_num ?? parsePrecioARS(r?.precio ?? r?.precio_unit_al_momento ?? null));
+          const sub = unit * cant;
+          total += sub;
+          const comp = String(r?.componente || '');
+          const id = Number(r?.repuesto_id || 0);
 
-        if (resumen) {
-          if (rows.length > 0) {
-            const itemsTxt = rows.length === 1 ? 'ítem' : 'ítems';
-            const totalTxt = '$' + fmt(totalPrecio);
-            resumen.textContent = `${rows.length} ${itemsTxt} · ${totalTxt}`;
-          } else {
-            resumen.textContent = 'Sin repuestos seleccionados';
-          }
-        }
+          return `
+            <tr data-id="${id}">
+              <td class="fw-semibold">${id}</td>
+              <td>${comp}</td>
+              <td>${cant}</td>
+              <td>${fmtARS(unit)}</td>
+              <td>${fmtARS(sub)}</td>
+              <td class="text-end" style="width:70px;">
+                <button type="button" class="btn btn-outline-danger btn-sm btnEliminar" title="Eliminar">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
 
-        if (help) {
-          help.style.display = rows.length > 0 ? 'inline' : 'none';
-          help.textContent = rows.length > 0 ? 'Seleccionados para este presupuesto' : '';
-        }
+        tbody.innerHTML = html;
+        repCount.textContent = `${rows.length} ${rows.length === 1 ? 'ítem' : 'ítems'}`;
+        repTotal.textContent = fmtARS(total);
+
+        // wire eliminar
+        tbody.querySelectorAll('.btnEliminar').forEach(btn => {
+          btn.addEventListener('click', onEliminarClick);
+        });
+
       } catch(e) {
-        console.warn('No se pudo cargar el resumen de repuestos', e);
+        console.warn('No se pudo cargar los repuestos seleccionados', e);
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-danger">Error al cargar los repuestos seleccionados.</td></tr>';
+        repCount.textContent = '—';
+        repTotal.textContent = '—';
       }
     }
 
-    cargarResumen();
+    async function onEliminarClick(e) {
+      const tr = e.currentTarget.closest('tr');
+      const repuestoId = Number(tr?.getAttribute('data-id') || '0');
+      if (!repuestoId) return;
+
+      if (!confirm('¿Eliminar este repuesto del presupuesto?')) return;
+
+      const restantes = cacheRows
+        .filter(r => Number(r?.repuesto_id) !== repuestoId)
+        .map(r => ({ repuesto_id: Number(r.repuesto_id), cantidad: Number(r.cantidad || 1) }));
+
+      try {
+        const res = await fetch('/api/presupuestoItems', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticket_id: ticketId, items: restantes })
+        });
+        const out = await res.json();
+
+        if (res.ok && out.ok) {
+          await cargarSeleccion();
+        } else {
+          alert('No se pudo eliminar: ' + (out.error || res.statusText));
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al eliminar.');
+      }
+    }
+
+    cargarSeleccion();
   </script>
 </BasePrivateLayout>

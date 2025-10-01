@@ -2,26 +2,36 @@ import type { APIRoute } from 'astro'
 import { supabaseServer } from '../../lib/supabaseServer'
 
 /**
- * Lista repuestos con filtros (q, categoría, estado), orden por ID y paginación.
+ * Lista repuestos con filtros (q, categoría, estado), orden por columna/dir y paginación.
  * Devuelve filas normalizadas para la UI.
  */
 export const GET: APIRoute = async ({ url }) => {
   try {
-    // Filtros desde querystring
     const q = (url.searchParams.get('q') || '').trim()
     const categoria = (url.searchParams.get('categoria') || '').trim()
     const estado = (url.searchParams.get('estado') || '').trim().toLowerCase()
 
-    // Paginación y orden
     const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10))
     const pageSize = 30
     const sortDirParam = (url.searchParams.get('sortDir') || 'asc').toLowerCase()
     const ascending = sortDirParam !== 'desc'
+    const sortByParam = (url.searchParams.get('sortBy') || 'id').toLowerCase()
+
+    // Mapeo seguro de columnas visibles -> columnas reales en DB
+    const SORT_MAP: Record<string, string> = {
+      id: 'id',
+      componente: 'Componentes presupuestados',
+      stock: 'Stock',
+      categoria: 'categoria',
+      precio: 'Precio',
+      activo: 'activo',
+      actualizado_en: 'actualizado_en',
+    }
+    const sortColumn = SORT_MAP[sortByParam] ?? 'id'
 
     const from = (page - 1) * pageSize
     const to = from + pageSize - 1
 
-    // Construcción de la query a Supabase
     let query = supabaseServer
       .from('repuestos_csv')
       .select('id,"Componentes presupuestados","Stock",categoria,"Precio",activo,actualizado_en', { count: 'exact' })
@@ -31,12 +41,13 @@ export const GET: APIRoute = async ({ url }) => {
     if (estado === 'activo') query = query.eq('activo', true)
     if (estado === 'inactivo') query = query.eq('activo', false)
 
-    query = query.order('id', { ascending }).range(from, to)
+    query = query.order(sortColumn, { ascending }).range(from, to)
 
     const { data, count, error } = await query
     if (error) throw error
 
-    // Normalización de columnas con nombres con espacios
+    const toYmd = (iso?: string | null) => (iso ? String(iso).slice(0, 10) : null)
+
     const rows = (data ?? []).map((r: any) => ({
       id: r.id,
       componente: r['Componentes presupuestados'],
@@ -44,7 +55,7 @@ export const GET: APIRoute = async ({ url }) => {
       categoria: r.categoria,
       precio: r['Precio'],
       activo: r.activo,
-      actualizado_en: r.actualizado_en ? String(r.actualizado_en).slice(0, 10) : null, // yyyy-mm-dd
+      actualizado_en: toYmd(r.actualizado_en),
     }))
 
     return new Response(JSON.stringify({ rows, total: count ?? 0, page, pageSize }), {

@@ -1,12 +1,9 @@
 ---
 import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
-
-// id dinámico del ticket para inyectar al DOM
 const ticketId = Astro.params.id;
 ---
 
 <BasePrivateLayout>
-  <!-- data-ticket-id para que el script lo lea -->
   <div id="repuestos-root" class="container mt-5" data-ticket-id={ticketId}>
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h2 class="mb-0">
@@ -19,7 +16,6 @@ const ticketId = Astro.params.id;
       </div>
     </div>
 
-    <!-- Filtros -->
     <div class="card mb-3">
       <div class="card-body">
         <div class="row g-2">
@@ -48,7 +44,6 @@ const ticketId = Astro.params.id;
       </div>
     </div>
 
-    <!-- Tabla -->
     <div class="card">
       <div class="card-header d-flex justify-content-between">
         <span>Seleccionar repuestos</span>
@@ -60,16 +55,25 @@ const ticketId = Astro.params.id;
             <tr>
               <th style="width:44px;"><input type="checkbox" id="chkAll" /></th>
 
-              <!-- Encabezado ID con orden asc/desc -->
-              <th id="thId" style="cursor:pointer; white-space:nowrap;">
-                ID <span id="sortIcon" class="ms-1 text-muted">↕</span>
+              <!-- Cabeceras sortables -->
+              <th class="th-sortable" data-field="id" style="white-space:nowrap; cursor:pointer;">
+                ID <span class="sort-icon text-muted">↕</span>
               </th>
-
-              <th>Componente</th>
-              <th>Stock</th>
-              <th>Categoría</th>
-              <th>Precio</th>
-              <th>Activo</th>
+              <th class="th-sortable" data-field="componente" style="cursor:pointer;">
+                Componente <span class="sort-icon text-muted">↕</span>
+              </th>
+              <th class="th-sortable" data-field="stock" style="cursor:pointer;">
+                Stock <span class="sort-icon text-muted">↕</span>
+              </th>
+              <th class="th-sortable" data-field="categoria" style="cursor:pointer;">
+                Categoría <span class="sort-icon text-muted">↕</span>
+              </th>
+              <th class="th-sortable" data-field="precio" style="cursor:pointer;">
+                Precio <span class="sort-icon text-muted">↕</span>
+              </th>
+              <th class="th-sortable" data-field="activo" style="cursor:pointer;">
+                Activo <span class="sort-icon text-muted">↕</span>
+              </th>
             </tr>
           </thead>
           <tbody id="tbody-repuestos">
@@ -92,7 +96,7 @@ const ticketId = Astro.params.id;
     </div>
   </div>
 
-  <!-- Modal de confirmación/edición -->
+  <!-- Modal confirmación -->
   <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content">
@@ -112,14 +116,15 @@ const ticketId = Astro.params.id;
                   <th style="width:100px;">Stock</th>
                   <th style="width:140px;">Precio unitario</th>
                   <th style="width:140px;">Subtotal</th>
+                  <th style="width:160px;">Estado</th>
                   <th style="width:60px;"></th>
                 </tr>
               </thead>
               <tbody id="tbody-confirm"></tbody>
             </table>
           </div>
-          <div id="stockAlert" class="alert alert-warning py-2 px-3" style="display:none;">
-            Hay cantidades que superan el stock disponible (o stock = 0). Corregí para poder guardar.
+          <div id="ruleAlert" class="alert alert-warning py-2 px-3" style="display:none;">
+            Hay repuestos <strong>inactivos</strong> o cantidades que superan el stock. Corregí para poder guardar.
           </div>
         </div>
         <div class="modal-footer d-flex justify-content-end gap-3">
@@ -133,7 +138,6 @@ const ticketId = Astro.params.id;
     </div>
   </div>
 
-  <!-- Script de listado/selección + modal -->
   <script type="module">
     const root = document.getElementById('repuestos-root');
     const ticketId = Number(root?.dataset.ticketId || 0);
@@ -150,12 +154,10 @@ const ticketId = Astro.params.id;
     const chkAll = document.getElementById('chkAll');
     const btnAgregar = document.getElementById('btnAgregar');
 
-    const thId = document.getElementById('thId');
-    const sortIcon = document.getElementById('sortIcon');
+    const thSortables = Array.from(document.querySelectorAll('.th-sortable'));
 
-    // Modal
     const confirmModalEl = document.getElementById('confirmModal');
-    const stockAlert = document.getElementById('stockAlert');
+    const ruleAlert = document.getElementById('ruleAlert');
     const tbodyConfirm = document.getElementById('tbody-confirm');
     const btnGuardar = document.getElementById('btnGuardar');
     const totalEstimadoEl = document.getElementById('totalEstimado');
@@ -163,34 +165,27 @@ const ticketId = Astro.params.id;
 
     let page = 1;
     const pageSize = 30;
-    let sortDir = 'asc'; // asc | desc
+    let sortBy = 'id';
+    let sortDir = 'asc';
 
-    // ===== Selección global que persiste entre cambios de sección/página =====
-    // id -> { id, comp, stock, unitPrice, cantidad }
-    const seleccion = new Map();
+    // === selección global persistente
+    const seleccion = new Map(); // id -> { id, comp, stock, unitPrice, cantidad, activo }
 
-    /* ===== Utils ===== */
-    const fmtMoney = (n) => {
-      const x = Number(n) || 0;
-      return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(x);
-    };
+    // ====== utilidades ======
+    const fmtARS = (n) =>
+      new Intl.NumberFormat('es-AR', { style:'currency', currency:'ARS', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(n)||0);
 
-    function updateSortIcon() {
-      sortIcon.textContent = sortDir === 'asc' ? '↑' : '↓';
-      sortIcon.classList.remove('text-muted');
+    function parsePrecioARS(v){
+      if (v == null || v === '') return 0;
+      if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+      const s = String(v).trim();
+      const sDigits = s.replace(/[^0-9]/g,'');
+      const n = Number(sDigits);
+      return Number.isFinite(n) ? n : 0;
     }
-    thId.addEventListener('click', () => {
-      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-      updateSortIcon();
-      page = 1;
-      cargar();
-    });
-    updateSortIcon();
 
-    function toggleClearBtn() {
-      btnClearQ.style.display = (q.value ?? '').trim() ? 'block' : 'none';
-    }
-    q.addEventListener('input', toggleClearBtn);
+    function toggleClearBtn(){ btnClearQ.style.display = (q.value ?? '').trim() ? 'block' : 'none'; }
+    q.addEventListener('input', () => { toggleClearBtn(); refetch(); });
     btnClearQ.addEventListener('click', () => { q.value=''; toggleClearBtn(); page=1; cargar(); });
     toggleClearBtn();
 
@@ -201,34 +196,41 @@ const ticketId = Astro.params.id;
         const cats = Array.isArray(out?.categorias) ? out.categorias : [];
         categoria.innerHTML = '<option value="">Todas las categorías</option>' +
           cats.map(c => `<option value="${c.replaceAll('"','&quot;')}">${c}</option>`).join('');
-      } catch (e) { console.error('No se pudieron cargar categorías', e); }
+      } catch {}
     }
 
-    function setLoading() {
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3">Cargando...</td></tr>';
-    }
+    function setLoading(){ tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3">Cargando...</td></tr>'; }
 
-    function wireRowCheckboxes() {
-      // Re-marca checkboxes según la selección global y escucha cambios
-      document.querySelectorAll('.chkItem').forEach((el) => {
+    function wireRowCheckboxes(){
+      document.querySelectorAll('.chkItem').forEach((el)=>{
+        if (el.disabled) return; // inactivos no son seleccionables
         const id = Number(el.getAttribute('data-id'));
         const comp = String(el.getAttribute('data-comp') || '');
         const stock = Number(el.getAttribute('data-stock') || '0');
         const unitPrice = Number(el.getAttribute('data-precio') || '0');
+        const activo = el.getAttribute('data-activo') === '1';
 
-        // set estado checked desde selección global
         el.checked = seleccion.has(id);
-
-        el.addEventListener('change', () => {
+        el.onchange = () => {
           if (el.checked) {
-            // si ya existía, conservo cantidad previa; si no, arranco en 1
             const prev = seleccion.get(id);
             const cantidad = prev?.cantidad ?? 1;
-            seleccion.set(id, { id, comp, stock, unitPrice, cantidad });
+            seleccion.set(id, { id, comp, stock, unitPrice, cantidad, activo: true });
           } else {
             seleccion.delete(id);
           }
-        });
+        };
+      });
+    }
+
+    function updateSortUI() {
+      thSortables.forEach(th => {
+        const f = th.getAttribute('data-field');
+        const icon = th.querySelector('.sort-icon');
+        const active = f === sortBy;
+        th.classList.toggle('fw-semibold', active);
+        if (icon) icon.textContent = active ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
+        if (icon) icon.classList.toggle('text-muted', !active);
       });
     }
 
@@ -241,12 +243,11 @@ const ticketId = Astro.params.id;
           q: (q.value ?? '').trim(),
           categoria: (categoria.value ?? '').trim(),
           estado: (estado.value ?? '').trim(),
+          sortBy,
           sortDir,
         });
         const res = await fetch('/api/listarRepuestos?' + params.toString());
         const out = await res.json();
-        if (!res.ok) throw new Error(out?.error || 'Error al listar');
-
         const data = out.rows || [];
         const total = out.total || 0;
         const maxPage = total ? Math.ceil(total / pageSize) : 1;
@@ -256,41 +257,45 @@ const ticketId = Astro.params.id;
           tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">Sin resultados.</td></tr>';
         } else {
           tbody.innerHTML = data.map(r => {
-            const stockNum = Number(String(r.stock ?? '0').replace(/[^0-9.-]/g,'')) || 0;
-            const unitPrice = Number(String(r.precio ?? '').replace(/[^0-9]/g,'')) || 0;
+            const stockNum  = Number(String(r.stock ?? '0').replace(/[^0-9.-]/g,'')) || 0;
+            const unitPrice = parsePrecioARS(r.precio ?? '');
+            const isActive  = !!r.activo;
+
+            // checkbox disabled si está inactivo
+            const chk = `
+              <input type="checkbox" class="chkItem"
+                data-id="${r.id}"
+                data-comp="${(r.componente ?? '').toString().replace(/"/g,'&quot;')}"
+                data-stock="${stockNum}"
+                data-precio="${unitPrice}"
+                data-activo="${isActive ? '1' : '0'}"
+                ${isActive ? '' : 'disabled title="Inactivo — no se puede seleccionar"'}
+              />
+            `;
 
             return `
-              <tr>
-                <td>
-                  <input type="checkbox" class="chkItem"
-                    data-id="${r.id}"
-                    data-comp="${(r.componente ?? '').toString().replace(/"/g,'&quot;')}"
-                    data-stock="${stockNum}"
-                    data-precio="${unitPrice}"
-                  />
-                </td>
+              <tr class="${isActive ? '' : 'table-secondary'}">
+                <td>${chk}</td>
                 <td>${r.id}</td>
                 <td>${r.componente ?? ''}</td>
                 <td>${r.stock ?? ''}</td>
                 <td>${r.categoria ?? ''}</td>
                 <td>${r.precio ?? ''}</td>
-                <td>${r.activo ? 'Sí' : 'No'}</td>
+                <td>${isActive ? 'Sí' : '<span class="text-danger fw-semibold">No</span>'}</td>
               </tr>
             `;
           }).join('');
         }
 
         const from = total ? (page-1)*pageSize + 1 : 0;
-        const to = total ? Math.min(page*pageSize, total) : 0;
+        const to   = total ? Math.min(page*pageSize, total) : 0;
         resumen.textContent = total ? `Total: ${total}` : '';
         paginacionInfo.textContent = total ? `Mostrando ${from}-${to} de ${total}` : '';
-        prevPageBtn.disabled = page <= 1;
-        nextPageBtn.disabled = (page*pageSize) >= total;
 
-        // Master checkbox comportamiento "visibles"
         chkAll.checked = false;
         chkAll.onchange = () => {
-          document.querySelectorAll('.chkItem').forEach((el) => {
+          // solo checkboxes habilitados (activos)
+          document.querySelectorAll('.chkItem:not([disabled])').forEach((el)=>{
             const id = Number(el.getAttribute('data-id'));
             const comp = String(el.getAttribute('data-comp') || '');
             const stock = Number(el.getAttribute('data-stock') || '0');
@@ -300,69 +305,75 @@ const ticketId = Astro.params.id;
             if (chkAll.checked) {
               const prev = seleccion.get(id);
               const cantidad = prev?.cantidad ?? 1;
-              seleccion.set(id, { id, comp, stock, unitPrice, cantidad });
+              seleccion.set(id, { id, comp, stock, unitPrice, cantidad, activo: true });
             } else {
-              // deselecciono solo los visibles
               seleccion.delete(id);
             }
           });
         };
 
-        // re-marca y escucha cambios individuales
         wireRowCheckboxes();
 
+        prevPageBtn.disabled = page <= 1;
+        nextPageBtn.disabled = (page*pageSize) >= total;
+
+        updateSortUI();
       } catch (e) {
-        console.error(e);
         tbody.innerHTML = '<tr><td colspan="7" class="text-danger text-center py-3">Error al cargar.</td></tr>';
         resumen.textContent = '';
         paginacionInfo.textContent = '';
       }
     }
 
-    // Filtros y paginación
-    const refetch = (() => { let t; return () => { clearTimeout(t); t=setTimeout(()=>{ page=1; cargar(); }, 250);} })();
-    q.addEventListener('input', refetch);
-    q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); page=1; cargar(); } });
-    categoria.addEventListener('change', () => { page=1; cargar(); });
-    estado.addEventListener('change', () => { page=1; cargar(); });
-    prevPageBtn.addEventListener('click', () => { if (page>1) { page--; cargar(); } });
-    nextPageBtn.addEventListener('click', () => { page++; cargar(); });
+    // Debounce de búsqueda
+    const refetch = (()=>{ let t; return ()=>{ clearTimeout(t); t=setTimeout(()=>{ page=1; cargar(); }, 250);} })();
+    q.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); }});
+    categoria.addEventListener('change', ()=>{ page=1; cargar(); });
+    estado.addEventListener('change', ()=>{ page=1; cargar(); });
+    prevPageBtn.addEventListener('click', ()=>{ if(page>1){ page--; cargar(); }});
+    nextPageBtn.addEventListener('click', ()=>{ page++; cargar(); });
 
-    /* ========== Modal ========== */
-
-    function renderConfirmTableFromSelection(){
-      const items = Array.from(seleccion.values());
-      tbodyConfirm.innerHTML = items.map((it, idx) => `
-        <tr data-row="${idx}" data-id="${it.id}">
-          <td class="fw-semibold">${it.id}</td>
-          <td>${it.comp || ''}</td>
-          <td>
-            <input type="number" class="form-control form-control-sm inpCant" value="${it.cantidad ?? 1}" min="1" step="1" style="max-width:110px;" />
-          </td>
-          <td><span class="badge text-bg-light badgeStock">${it.stock}</span></td>
-          <td><span class="precioUnit" data-punit="${it.unitPrice}">${fmtMoney(it.unitPrice)}</span></td>
-          <td><span class="subtotal">${fmtMoney((it.unitPrice)*(it.cantidad ?? 1))}</span></td>
-          <td class="text-end">
-            <button type="button" class="btn btn-outline-danger btn-sm btnQuitar">
-              <i class="bi bi-x-lg"></i>
-            </button>
-          </td>
-        </tr>
-      `).join('');
-
-      tbodyConfirm.querySelectorAll('.inpCant').forEach((inp) => {
-        inp.addEventListener('input', actualizarSubtotalesYValidar);
+    // Click en cabeceras para ordenar
+    thSortables.forEach(th=>{
+      th.addEventListener('click', ()=>{
+        const f = th.getAttribute('data-field');
+        if (!f) return;
+        if (sortBy === f) {
+          sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
+        } else {
+          sortBy = f;
+          sortDir = 'asc';
+        }
+        page = 1;
+        cargar();
       });
-      tbodyConfirm.querySelectorAll('.btnQuitar').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          const tr = e.currentTarget.closest('tr');
-          const id = Number(tr?.getAttribute('data-id') || '0');
-          tr?.remove();
-          // también deselecciono globalmente para que no reaparezca
-          if (id) seleccion.delete(id);
+    });
+
+    // ===== Modal =====
+    function renderConfirmTable(items){
+      tbodyConfirm.innerHTML = items.map((it, idx) => {
+        const estadoHtml = it.activo
+          ? '<span class="badge text-bg-success">Activo</span>'
+          : '<span class="badge text-bg-danger">Inactivo — no se puede usar</span>';
+        return `
+          <tr data-row="${idx}" data-activo="${it.activo ? '1' : '0'}">
+            <td class="fw-semibold">${it.id}</td>
+            <td>${it.comp || ''}</td>
+            <td><input type="number" class="form-control form-control-sm inpCant" value="${it.cantidad}" min="1" step="1" style="max-width:110px;" ${it.activo ? '' : 'disabled'} /></td>
+            <td><span class="badge text-bg-light badgeStock">${it.stock}</span></td>
+            <td><span class="precioUnit" data-punit="${it.unitPrice}">${fmtARS(it.unitPrice)}</span></td>
+            <td><span class="subtotal">${fmtARS(it.unitPrice * it.cantidad)}</span></td>
+            <td>${estadoHtml}</td>
+            <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm btnQuitar"><i class="bi bi-x-lg"></i></button></td>
+          </tr>
+        `;
+      }).join('');
+
+      tbodyConfirm.querySelectorAll('.inpCant').forEach(inp => inp.addEventListener('input', actualizarSubtotalesYValidar));
+      tbodyConfirm.querySelectorAll('.btnQuitar').forEach(btn => {
+        btn.addEventListener('click', (e)=>{
+          e.currentTarget.closest('tr')?.remove();
           actualizarSubtotalesYValidar();
-          // re-sincronizo los checkboxes visibles
-          wireRowCheckboxes();
         });
       });
 
@@ -370,81 +381,84 @@ const ticketId = Astro.params.id;
     }
 
     function actualizarSubtotalesYValidar(){
-      let ok = true;
-      let total = 0;
-
+      let ok = true, total = 0;
       const rows = Array.from(tbodyConfirm.querySelectorAll('tr'));
-      rows.forEach((tr) => {
-        const id = Number(tr.getAttribute('data-id') || '0');
+      rows.forEach((tr)=>{
+        const activo = tr.getAttribute('data-activo') === '1';
         const stock = Number(tr.querySelector('.badgeStock')?.textContent || '0');
-        const cant = Math.max(1, Number(tr.querySelector('.inpCant')?.value || '1'));
-        const unit = Number(tr.querySelector('.precioUnit')?.getAttribute('data-punit') || '0');
-
-        // subtotal
+        const cant  = Math.max(1, Number(tr.querySelector('.inpCant')?.value || '1'));
+        const unit  = Number(tr.querySelector('.precioUnit')?.getAttribute('data-punit') || '0');
         const sub = unit * cant;
-        tr.querySelector('.subtotal').textContent = fmtMoney(sub);
+        const subtotalEl = tr.querySelector('.subtotal');
+        if (subtotalEl) subtotalEl.textContent = fmtARS(sub);
         total += sub;
 
-        // inválido si stock===0 y cant>0, o si cant>stock cuando stock>0
-        const invalido = (stock === 0 && cant > 0) || (stock > 0 && cant > stock);
+        const superaStock = (stock === 0 && cant > 0) || (stock > 0 && cant > stock);
+        const invalido = !activo || superaStock;
         tr.classList.toggle('table-warning', invalido);
         if (invalido) ok = false;
-
-        // guardo cantidad en selección global para persistirla
-        const item = seleccion.get(id);
-        if (item) item.cantidad = cant;
       });
-
-      totalEstimadoEl.textContent = fmtMoney(total);
-      stockAlert.style.display = ok ? 'none' : 'block';
+      totalEstimadoEl.textContent = fmtARS(total);
+      ruleAlert.style.display = ok ? 'none' : 'block';
       btnGuardar.disabled = !ok || rows.length === 0;
     }
 
-    // Abrir modal con selección global
     btnAgregar.addEventListener('click', () => {
-      if (seleccion.size === 0) { alert('Seleccioná al menos un repuesto.'); return; }
-      // Render del modal desde la selección actual
-      renderConfirmTableFromSelection();
+      const items = Array.from(document.querySelectorAll('.chkItem'))
+        .filter(el => el.checked)
+        .map(el => ({
+          id: Number(el.getAttribute('data-id')),
+          comp: String(el.getAttribute('data-comp')||''),
+          stock: Number(el.getAttribute('data-stock')||'0'),
+          unitPrice: Number(el.getAttribute('data-precio')||'0'),
+          activo: el.getAttribute('data-activo') === '1',
+          cantidad: (seleccion.get(Number(el.getAttribute('data-id')))?.cantidad) ?? 1,
+        }));
 
-      // Bootstrap Modal
+      if (!items.length) { alert('Seleccioná al menos un repuesto.'); return; }
+
+      // Blindar por si algo quedó cacheado: si hay inactivos, igual los mostramos como "no se puede usar"
+      items.forEach(it => seleccion.set(it.id, it));
+      renderConfirmTable(items);
+
       // @ts-ignore
       bsModal = new bootstrap.Modal(confirmModalEl);
       bsModal.show();
     });
 
-    // Guardar (POST)
-    btnGuardar.addEventListener('click', async () => {
+    btnGuardar.addEventListener('click', async ()=>{
       if (!ticketId) { alert('ticket_id inválido'); return; }
 
-      // payload desde lo que quedó en el modal (más fiel)
+      // Validación final: no permitir inactivos
       const rows = Array.from(tbodyConfirm.querySelectorAll('tr'));
-      const payloadItems = rows.map((tr) => {
-        const id = Number(tr.getAttribute('data-id') || '0');
+      const payloadItems = rows.map(tr=>{
+        const activo = tr.getAttribute('data-activo') === '1';
+        if (!activo) return null;
+        const id = Number(tr.querySelector('td')?.textContent?.trim() || '0');
         const cantidad = Math.max(1, Number(tr.querySelector('.inpCant')?.value || '1'));
         return { repuesto_id: id, cantidad };
-      }).filter(x => x.repuesto_id > 0);
+      }).filter(Boolean);
+
+      if (payloadItems.length === 0) {
+        alert('No hay ítems válidos para guardar (hay inactivos o cantidades inválidas).');
+        return;
+      }
 
       try {
         const res = await fetch('/api/presupuestoItems', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ ticket_id: ticketId, items: payloadItems })
         });
         const out = await res.json();
-
         if (res.ok && out.ok) {
           bsModal?.hide();
           window.location.href = `/presupuesto/${ticketId}`;
         } else {
           alert('Error al guardar: ' + (out.error || res.statusText));
         }
-      } catch (err) {
-        console.error(err);
-        alert('Error de red al guardar.');
-      }
+      } catch (err) { alert('Error de red al guardar.'); }
     });
 
-    // Init
     await cargarCategorias();
     cargar();
   </script>

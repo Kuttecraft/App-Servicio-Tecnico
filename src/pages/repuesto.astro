@@ -11,13 +11,11 @@ import Sidebar from '../components/Sidebar.astro';
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
     <style>
-      /* Layout básico con sidebar */
       :root { --sidebar-w: 240px; }
       @media (min-width: 768px) { .page { margin-left: var(--sidebar-w); } }
       .page { padding: 24px; background:#f7f7f9; }
       .content { max-width: 1200px; margin: 0 auto; }
 
-      /* Tabla con header sticky y columna ID “pegada” a la izquierda */
       .table-wrap { max-height: 520px; overflow: auto; border-top: 1px solid #dee2e6; }
       .table thead th { position: sticky; top: 0; background: #f8f9fa; z-index: 2; }
       .table tbody tr:hover td { background: #f5f7fb; }
@@ -27,25 +25,23 @@ import Sidebar from '../components/Sidebar.astro';
       th.col-id, td.col-id { width: 90px; text-align: right; }
       th.col-acciones, td.col-acciones { width: 96px; text-align: right; }
 
-      .th-id-toggle { cursor: pointer; user-select: none; white-space: nowrap; }
-      .th-id-toggle i { opacity: .7; }
+      .th-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+      .th-sortable .arrow { opacity: .6; margin-left: .25rem; }
+      .th-sortable.active { font-weight: 600; }
+      .th-sortable:not(.active) .arrow { opacity: .2; }
 
-      /* Acciones por fila visibles solo al hacer hover */
       .actions { opacity: .0; transition: opacity .15s ease; white-space: nowrap; }
       tbody tr:hover .actions { opacity: 1; }
       .actions .btn { padding: .15rem .4rem; line-height: 1; }
 
-      /* Toolbar de filtros */
       .toolbar { gap: .5rem; flex-wrap: wrap; }
       .toolbar .form-control, .toolbar .form-select { min-width: 220px; }
 
-      /* Botonera del formulario (cambia color si está en modo edición) */
       #btnSubmit { background: #0d6efd; border-color: #0d6efd; }
       #btnCancel { display:none; }
       .editing #btnSubmit { background:#198754; border-color:#198754; }
       .editing #btnCancel { display:inline-block; }
 
-      /* Estados de mensajes */
       #status { font-size: .9rem; }
       #status.ok { color: #198754; }
       #status.err { color: #dc3545; }
@@ -68,7 +64,6 @@ import Sidebar from '../components/Sidebar.astro';
           </div>
           <div class="card-body">
             <form id="repuestoForm" class="row g-3">
-              <!-- Campo oculto para ID cuando se edita -->
               <input type="hidden" name="id" />
               <div class="col-12 col-md-6">
                 <label class="form-label">Componente</label>
@@ -106,33 +101,26 @@ import Sidebar from '../components/Sidebar.astro';
           </div>
         </div>
 
-        <!-- ====== Toolbar de búsqueda/filtros (debajo del formulario) ====== -->
+        <!-- ====== Toolbar de búsqueda/filtros ====== -->
         <div class="card mb-4">
           <div class="card-body toolbar">
             <div class="row g-2">
-              <!-- Buscador: input + botón X propio -->
               <div class="col-12">
                 <div class="input-group">
                   <span class="input-group-text" title="Buscar por nombre de componente">
                     <i class="bi bi-search"></i>
                   </span>
-                  <!-- type="text" para evitar la X nativa de los inputs search -->
                   <input id="q" type="text" class="form-control" placeholder="Buscar componente..." aria-label="Buscar componente" />
-                  <!-- La X propia se muestra solo si hay texto -->
                   <button id="btnClearQ" class="btn btn-outline-secondary" type="button" title="Limpiar búsqueda" style="display:none;">
                     <i class="bi bi-x-lg"></i>
                   </button>
                 </div>
               </div>
-
-              <!-- Select categoría (se llena desde la API con las categorías existentes) -->
               <div class="col-6 col-md-6">
                 <select id="categoria" class="form-select" title="Filtrar por categoría">
                   <option value="">Todas las categorías</option>
                 </select>
               </div>
-
-              <!-- Select estado: Todos / Activo / No activo -->
               <div class="col-6 col-md-6">
                 <select id="estado" class="form-select" title="Filtrar por estado">
                   <option value="">Todos los estados</option>
@@ -154,18 +142,17 @@ import Sidebar from '../components/Sidebar.astro';
             <table class="table table-sm table-striped mb-0">
               <thead class="table-light">
                 <tr>
-                  <th class="col-id"><span id="th-id" class="th-id-toggle">ID <i id="id-arrow" class="bi bi-arrow-up"></i></span></th>
-                  <th>Componente</th>
-                  <th>Stock</th>
-                  <th>Categoría</th>
-                  <th>Precio</th>
-                  <th>Activo</th>
-                  <th>Actualizado</th>
+                  <th class="col-id th-sortable" data-field="id"><span>ID</span><i class="arrow bi"></i></th>
+                  <th class="th-sortable" data-field="componente"><span>Componente</span><i class="arrow bi"></i></th>
+                  <th class="th-sortable" data-field="stock"><span>Stock</span><i class="arrow bi"></i></th>
+                  <th class="th-sortable" data-field="categoria"><span>Categoría</span><i class="arrow bi"></i></th>
+                  <th class="th-sortable" data-field="precio"><span>Precio</span><i class="arrow bi"></i></th>
+                  <th class="th-sortable" data-field="activo"><span>Activo</span><i class="arrow bi"></i></th>
+                  <th class="th-sortable" data-field="actualizado_en"><span>Actualizado</span><i class="arrow bi"></i></th>
                   <th class="col-acciones"></th>
                 </tr>
               </thead>
               <tbody id="tbody-repuestos">
-                <!-- Estado inicial -->
                 <tr><td colspan="8" class="text-center py-3">Cargando...</td></tr>
               </tbody>
             </table>
@@ -182,7 +169,7 @@ import Sidebar from '../components/Sidebar.astro';
     </main>
 
     <script type="module">
-      /* ---------- Referencias a elementos del DOM ---------- */
+      /* ---------- Refs ---------- */
       const q = document.getElementById('q');
       const btnClearQ = document.getElementById('btnClearQ');
       const categoria = document.getElementById('categoria');
@@ -202,48 +189,259 @@ import Sidebar from '../components/Sidebar.astro';
       const formTitle = document.getElementById('formTitle');
       const formHint = document.getElementById('formHint');
 
-      const thId = document.getElementById('th-id');
-      const idArrow = document.getElementById('id-arrow');
+      const thSortables = Array.from(document.querySelectorAll('.th-sortable'));
 
-      /* ---------- Estado de la paginación/orden ---------- */
+      /* ---------- Estado ---------- */
       let page = 1;
       const pageSize = 30;
+      let sortBy = 'id';
       let sortDir = 'asc';
 
-      /* ---------- Mostrar/ocultar la X de limpiar búsqueda ---------- */
+      /* ---------- Helpers ---------- */
+      const debounce = (fn, ms=250) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
       function toggleClearBtn() {
         btnClearQ?.style && (btnClearQ.style.display = (q?.value ?? '').trim() ? 'block' : 'none');
       }
-      q?.addEventListener('input', toggleClearBtn);
-      toggleClearBtn();
-
-      btnClearQ?.addEventListener('click', () => {
-        if (!q) return;
-        q.value = '';
-        toggleClearBtn();
-        page = 1;   // reinicia a primera página
-        cargar();
-      });
-
-      /* ---------- Helpers de mensajes breves ---------- */
-      let statusTimer = null;
       function setStatus(text = '', kind = 'info', ms = 2200) {
         statusEl.classList.remove('ok','err','info');
         if (!text) { statusEl.textContent = ''; return; }
         statusEl.textContent = text;
         statusEl.classList.add(kind);
-        if (statusTimer) clearTimeout(statusTimer);
-        statusTimer = setTimeout(() => {
+        if (window._statusTimer) clearTimeout(window._statusTimer);
+        window._statusTimer = setTimeout(() => {
           statusEl.textContent = '';
           statusEl.classList.remove('ok','err','info');
-          statusTimer = null;
+          window._statusTimer = null;
         }, ms);
       }
+      function esc(s) {
+        return String(s ?? '')
+          .replaceAll('&','&amp;')
+          .replaceAll('<','&lt;')
+          .replaceAll('>','&gt;')
+          .replaceAll('"','&quot;')
+          .replaceAll("'",'&#39;');
+      }
+      function setLoadingRows() {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-3">Cargando...</td></tr>';
+        setStatus('');
+      }
+      function updateSortUI() {
+        thSortables.forEach(th => {
+          const field = th.getAttribute('data-field');
+          const arrow = th.querySelector('.arrow');
+          const active = field === sortBy;
+          th.classList.toggle('active', active);
+          if (arrow) {
+            arrow.className = 'arrow bi ' + (active
+              ? (sortDir === 'asc' ? 'bi-arrow-up' : 'bi-arrow-down')
+              : 'bi-arrow-down');
+          }
+        });
+      }
 
-      /* ---------- Formateo visual del precio en ARS (sin redondeo) ---------- */
+      /* ---------- Cargar ---------- */
+      async function cargar() {
+        setLoadingRows();
+        try {
+          const params = new URLSearchParams({
+            page: String(page),
+            pageSize: String(pageSize),
+            q: (q?.value ?? '').trim(),
+            categoria: (categoria?.value ?? '').trim(),
+            estado: (estado?.value ?? '').trim(),
+            sortBy,
+            sortDir,
+          });
+
+          const res = await fetch('/api/listarRepuestos?' + params.toString());
+          const out = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(out?.error || `HTTP ${res.status}`);
+
+          const data = out.rows || [];
+          const total = out.total || 0;
+
+          const maxPage = total ? Math.ceil(total / pageSize) : 1;
+          if (total > 0 && page > maxPage) { page = maxPage; return cargar(); }
+
+          if (!Array.isArray(data) || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Sin resultados.</td></tr>';
+          } else {
+            tbody.innerHTML = data.map(r => `
+              <tr data-id="${r.id}" style="cursor:pointer">
+                <td class="col-id">${r.id}</td>
+                <td>${esc(r.componente)}</td>
+                <td>${esc(r.stock)}</td>
+                <td>${esc(r.categoria)}</td>
+                <td>${esc(r.precio)}</td>
+                <td>${r.activo ? 'Sí' : 'No'}</td>
+                <td>${esc(r.actualizado_en)}</td>
+                <td class="col-acciones">
+                  <div class="actions">
+                    <button class="btn btn-outline-primary btn-sm btn-row-editar" title="Editar"><i class="bi bi-pencil-square"></i></button>
+                    <button class="btn btn-outline-danger  btn-sm btn-row-borrar"  title="Borrar"><i class="bi bi-trash"></i></button>
+                  </div>
+                </td>
+              </tr>
+            `).join('');
+          }
+
+          const from = total ? (page - 1) * pageSize + 1 : 0;
+          const to = total ? Math.min(page * pageSize, total) : 0;
+          resumen.textContent = total ? `Total: ${total}` : '';
+          paginacionInfo.textContent = total ? `Mostrando ${from}-${to} de ${total}` : '';
+          prevPageBtn.disabled = page <= 1;
+          nextPageBtn.disabled = (page * pageSize) >= total;
+
+          updateSortUI();
+        } catch (e) {
+          console.error(e);
+          tbody.innerHTML = '<tr><td colspan="8" class="text-danger text-center py-3">Error al cargar.</td></tr>';
+          resumen.textContent = '';
+          paginacionInfo.textContent = '';
+          setStatus('Error al cargar: ' + (e?.message || 'desconocido'), 'err', 4500);
+        }
+      }
+
+      /* ---------- Categorías (auto-aplica si cambia la selección) ---------- */
+      async function cargarCategorias(keepSelected = true) {
+        const selectedBefore = keepSelected ? (categoria?.value ?? '') : '';
+        const prevValue = categoria.value ?? '';
+        try {
+          const res = await fetch('/api/categoriasRepuestos');
+          const out = await res.json();
+          const cats = Array.isArray(out?.categorias) ? out.categorias : [];
+
+          categoria.innerHTML = '';
+          const defaultOpt = document.createElement('option');
+          defaultOpt.value = '';
+          defaultOpt.textContent = 'Todas las categorías';
+          categoria.appendChild(defaultOpt);
+          for (const c of cats) {
+            const opt = document.createElement('option');
+            opt.value = c;
+            opt.textContent = c;
+            categoria.appendChild(opt);
+          }
+
+          const newValue = (keepSelected && selectedBefore && cats.includes(selectedBefore)) ? selectedBefore : '';
+          const changed = prevValue !== newValue;
+          categoria.value = newValue;
+
+          // si cambió la selección efectiva (por ejemplo, desapareció la única categoría) => aplicar YA
+          if (changed) { page = 1; await cargar(); }
+          return categoria.value;
+        } catch (e) {
+          console.error('No se pudieron cargar categorías', e);
+          const changed = (categoria.value ?? '') !== '';
+          categoria.innerHTML = '<option value="">Todas las categorías</option>';
+          categoria.value = '';
+          if (changed) { page = 1; await cargar(); }
+          return '';
+        }
+      }
+
+      /* ---------- Orden por encabezado ---------- */
+      thSortables.forEach(th => {
+        th.addEventListener('click', () => {
+          const field = th.getAttribute('data-field');
+          if (!field) return;
+          if (sortBy === field) sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
+          else { sortBy = field; sortDir = 'asc'; }
+          page = 1;
+          cargar(); // auto-aplica
+        });
+      });
+
+      /* ---------- Listeners (auto-aplican) ---------- */
+      const autoSearch = debounce(() => { page = 1; cargar(); }, 250);
+      q?.addEventListener('input', () => { toggleClearBtn(); autoSearch(); });
+      q?.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+      toggleClearBtn();
+      btnClearQ?.addEventListener('click', () => {
+        q.value = '';
+        toggleClearBtn();
+        page = 1;
+        cargar();
+      });
+
+      categoria?.addEventListener('change', () => { page = 1; cargar(); });
+      estado?.addEventListener('change',   () => { page = 1; cargar(); });
+
+      prevPageBtn?.addEventListener('click', () => { if (page>1) { page--; cargar(); } });
+      nextPageBtn?.addEventListener('click', () => { page++; cargar(); } );
+
+      /* ---------- Editar / Borrar ---------- */
+      tbody.addEventListener('click', async (e) => {
+        const btnEdit = e.target.closest('.btn-row-editar');
+        const btnDel  = e.target.closest('.btn-row-borrar');
+        const tr = e.target.closest('tr[data-id]');
+        if (!tr) return;
+
+        const idStr = tr.dataset.id || '';
+        const idNum = Number(idStr);
+        if (!idNum) { setStatus('ID inválido', 'err', 2500); return; }
+
+        const tds = tr.querySelectorAll('td');
+
+        // EDITAR
+        if (btnEdit) {
+          form.elements['id'].value           = String(idNum);
+          form.elements['componente'].value   = tds[1].textContent.trim();
+          form.elements['stock'].value        = tds[2].textContent.trim();
+          form.elements['categoria'].value    = tds[3].textContent.trim();
+          form.elements['precio'].value       = tds[4].textContent.trim();
+          form.elements['activo'].value       = (tds[5].textContent.includes('Sí')).toString();
+          cardForm.classList.add('editing');
+          btnSubmitText.textContent = 'Guardar cambios';
+          formTitle.textContent = 'Editar repuesto';
+          formHint.textContent = `ID #${idNum}`;
+          document.getElementById('cardForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          form.elements['componente'].focus();
+          return;
+        }
+
+        // BORRAR
+        if (btnDel) {
+          if (!confirm(`¿Borrar repuesto #${idNum}?`)) return;
+          try {
+            const res = await fetch('/api/borrarRepuesto', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: idNum }),
+            });
+            const out = await res.json().catch(() => ({}));
+            if (!res.ok || !out.ok) {
+              throw new Error(out?.error || `No se pudo borrar (HTTP ${res.status})`);
+            }
+
+            // si estaba editándose este ID, salir de edición
+            if (String(form.elements['id'].value || '') === String(idNum)) setCreateMode();
+
+            // 1) reconstruir categorías primero (si desaparece la única, queda "todas" y auto-aplica)
+            await cargarCategorias(false);
+
+            // 2) limpiar búsqueda/estado y recargar (auto)
+            q.value = '';
+            toggleClearBtn();
+            estado.value = '';
+            page = 1;
+            await cargar();
+
+            setStatus(out.mode === 'hard' ? 'Borrado ✔'
+                    : out.mode === 'soft_linked' ? 'Desactivado (usado en presupuestos) ✔'
+                    : 'Desactivado ✔', 'ok');
+          } catch (err) {
+            console.error(err);
+            setStatus('No se pudo borrar', 'err', 2500);
+          }
+        }
+      });
+
+      /* ---------- Guardar ---------- */
       const precioInput = form.elements['precio'];
       function formatPrecioVisual(raw) {
-        const digits = String(raw ?? '').replace(/[^\d]/g, ''); // deja solo dígitos
+        const digits = String(raw ?? '').replace(/[^\d]/g, '');
         if (!digits) return '';
         const pesos = Number(digits);
         const numero = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
@@ -252,7 +450,6 @@ import Sidebar from '../components/Sidebar.astro';
       }
       precioInput.addEventListener('blur', () => { precioInput.value = formatPrecioVisual(precioInput.value); });
 
-      /* ---------- Modo crear/editar ---------- */
       function setCreateMode() {
         form.reset();
         cardForm.classList.remove('editing');
@@ -263,7 +460,6 @@ import Sidebar from '../components/Sidebar.astro';
         setStatus('');
       }
 
-      /* Lee y normaliza el payload desde el formulario */
       function getPayloadFromForm(requireId=false) {
         const fd = new FormData(form);
         const idStr = String(fd.get('id') || '').trim();
@@ -279,161 +475,6 @@ import Sidebar from '../components/Sidebar.astro';
         };
       }
 
-      /* ---------- Lista “Cargando…” mientras se trae la data ---------- */
-      function setLoadingRows() {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-3">Cargando...</td></tr>';
-        setStatus('');
-      }
-
-      /* ---------- Cargar tabla con filtros/paginación ---------- */
-      async function cargar() {
-        setLoadingRows();
-        try {
-          // Params seguros (evita crashear por .value en null)
-          const params = new URLSearchParams({
-            page: String(page),
-            pageSize: String(pageSize),
-            q: (q?.value ?? '').trim(),
-            categoria: (categoria?.value ?? '').trim(),
-            estado: (estado?.value ?? '').trim(),
-            sortDir,
-          });
-
-          const res = await fetch('/api/listarRepuestos?' + params.toString());
-          const out = await res.json();
-          if (!res.ok) throw new Error(out?.error || 'Error al listar');
-
-          const data = out.rows || [];
-          const total = out.total || 0;
-
-          // Si estoy en una página que ya no existe (p.ej. tras borrar), salto a la última válida y reintento
-          const maxPage = total ? Math.ceil(total / pageSize) : 1;
-          if (total > 0 && page > maxPage) {
-            page = maxPage;
-            return cargar();
-          }
-
-          // Render de filas o estado “Sin resultados”
-          if (!Array.isArray(data) || data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Sin resultados.</td></tr>';
-          } else {
-            tbody.innerHTML = data.map(r => `
-              <tr data-id="${r.id}" style="cursor:pointer">
-                <td class="col-id">${r.id}</td>
-                <td>${r.componente ?? ''}</td>
-                <td>${r.stock ?? ''}</td>
-                <td>${r.categoria ?? ''}</td>
-                <td>${r.precio ?? ''}</td>
-                <td>${r.activo ? 'Sí' : 'No'}</td>
-                <td>${r.actualizado_en ?? ''}</td>
-                <td class="col-acciones">
-                  <div class="actions">
-                    <button class="btn btn-outline-primary btn-sm btn-row-editar" title="Editar"><i class="bi bi-pencil-square"></i></button>
-                    <button class="btn btn-outline-danger  btn-sm btn-row-borrar" title="Borrar"><i class="bi bi-trash"></i></button>
-                  </div>
-                </td>
-              </tr>
-            `).join('');
-          }
-
-          // Resumen + estado de paginación
-          const from = total ? (page - 1) * pageSize + 1 : 0;
-          const to = total ? Math.min(page * pageSize, total) : 0;
-          resumen.textContent = total ? `Total: ${total}` : '';
-          paginacionInfo.textContent = total ? `Mostrando ${from}-${to} de ${total}` : '';
-          prevPageBtn.disabled = page <= 1;
-          nextPageBtn.disabled = (page * pageSize) >= total;
-
-        } catch (e) {
-          console.error(e);
-          tbody.innerHTML = '<tr><td colspan="8" class="text-danger text-center py-3">Error al cargar.</td></tr>';
-          resumen.textContent = '';
-          paginacionInfo.textContent = '';
-          setStatus('Error al cargar', 'err', 2500);
-        }
-      }
-
-      /* ---------- Llenado dinámico del select de categorías ---------- */
-      async function cargarCategorias(keepSelected = true) {
-        const selectedBefore = keepSelected ? (categoria?.value ?? '') : '';
-        try {
-          const res = await fetch('/api/categoriasRepuestos');
-          const out = await res.json();
-          const cats = Array.isArray(out?.categorias) ? out.categorias : [];
-
-          const opts = ['<option value="">Todas las categorías</option>']
-            .concat(cats.map(c => `<option value="${c.replaceAll('"','&quot;')}">${c}</option>`));
-          categoria.innerHTML = opts.join('');
-
-          // Restaura la selección si sigue existiendo
-          if (keepSelected && selectedBefore && cats.includes(selectedBefore)) {
-            categoria.value = selectedBefore;
-          }
-        } catch (e) {
-          console.error('No se pudieron cargar categorías', e);
-          categoria.innerHTML = '<option value="">Todas las categorías</option>';
-        }
-      }
-
-      /* ---------- Orden por ID (toggle asc/desc) ---------- */
-      thId?.addEventListener('click', () => {
-        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-        if (idArrow) idArrow.className = sortDir === 'asc' ? 'bi bi-arrow-up' : 'bi bi-arrow-down';
-        page = 1;
-        cargar();
-      });
-
-      /* ---------- Eventos en la tabla: editar / borrar ---------- */
-      tbody.addEventListener('click', async (e) => {
-        const btnEdit = e.target.closest('.btn-row-editar');
-        const btnDel  = e.target.closest('.btn-row-borrar');
-        const tr = e.target.closest('tr[data-id]');
-        if (!tr) return;
-
-        const tds = tr.querySelectorAll('td');
-        const id = tds[0].textContent.trim();
-
-        // Cargar datos de la fila en el formulario para editar
-        if (btnEdit) {
-          form.elements['id'].value           = id;
-          form.elements['componente'].value   = tds[1].textContent.trim();
-          form.elements['stock'].value        = tds[2].textContent.trim();
-          form.elements['categoria'].value    = tds[3].textContent.trim();
-          form.elements['precio'].value       = tds[4].textContent.trim();
-          form.elements['activo'].value       = (tds[5].textContent.includes('Sí')).toString();
-          cardForm.classList.add('editing');
-          btnSubmitText.textContent = 'Guardar cambios';
-          formTitle.textContent = 'Editar repuesto';
-          formHint.textContent = `ID #${id}`;
-          document.getElementById('cardForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
-          form.elements['componente'].focus();
-        }
-
-        // Borrado: intenta hard delete; si RLS no deja, hace soft delete
-        if (btnDel) {
-          if (!confirm(`¿Borrar repuesto #${id}?`)) return;
-          try {
-            const res = await fetch('/api/borrarRepuesto', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: Number(id) }),
-            });
-            const out = await res.json();
-            if (!res.ok || !out.ok) throw new Error(out?.error || 'Error al borrar');
-
-            page = 1;           // tras borrar, volvemos a página 1
-            await cargar();
-            if (form.elements['id'].value === id) setCreateMode();
-            await cargarCategorias();  // refresca set de categorías
-            setStatus('Borrado ✔', 'ok');
-          } catch (err) {
-            console.error(err);
-            setStatus('No se pudo borrar', 'err', 2500);
-          }
-        }
-      });
-
-      /* ---------- Guardar (crear/editar) ---------- */
       btnSubmit.addEventListener('click', async () => {
         const editando = !!form.elements['id'].value;
         btnSubmit.disabled = true;
@@ -448,8 +489,11 @@ import Sidebar from '../components/Sidebar.astro';
           const out = await res.json();
           if (!res.ok) throw new Error(out?.error || 'Error');
           setCreateMode();
+
+          // refrescar categorías (mantener selección si existe) y lista
+          await cargarCategorias(true);
           await cargar();
-          await cargarCategorias(); // por si se creó una categoría nueva
+
           setStatus(editando ? 'Guardado ✔' : 'Creado ✔', 'ok');
         } catch (e) {
           console.error(e);
@@ -459,22 +503,14 @@ import Sidebar from '../components/Sidebar.astro';
         }
       });
 
-      // Cancelar edición → vuelve al modo crear
       btnCancel.addEventListener('click', () => setCreateMode());
 
-      // Filtros + paginación: cuando cambian, recarga desde página 1
-      const refetch = (() => { let t; return () => { clearTimeout(t); t=setTimeout(()=>{ page=1; cargar(); }, 250);} })();
-      q?.addEventListener('input', refetch);
-      q?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); page=1; cargar(); } });
-      categoria?.addEventListener('change', () => { page = 1; cargar(); });
-      estado?.addEventListener('change', () => { page = 1; cargar(); });
-      prevPageBtn?.addEventListener('click', () => { if (page>1) { page--; cargar(); } });
-      nextPageBtn?.addEventListener('click', () => { page++; cargar(); } );
-
-      // Init: resetea form, carga categorías y resultados
+      // Init (categorías -> lista) — cargarCategorias auto-aplica si cambia la selección
       setCreateMode();
-      await cargarCategorias(false); // primera carga sin restaurar selección previa
-      cargar();
+      await cargarCategorias(false);
+      updateSortUI();
+      page = 1;
+      await cargar();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   </body>

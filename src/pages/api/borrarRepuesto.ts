@@ -2,38 +2,69 @@ import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { supabaseServer } from '../../lib/supabaseServer'
 
-/** Cuerpo esperado: { id: number } */
 const Schema = z.object({ id: z.number().int().positive() })
 
 /**
- * Intenta borrar de verdad (DELETE).
- * Si RLS/permiso lo impide, hace soft delete (activo=false).
+ * Borra un repuesto por ID.
+ * - Si el hard delete es posible (y tenés FK con ON DELETE CASCADE), elimina las relaciones automáticamente.
+ * - Si el hard delete falla (RLS/u otra razón), hace soft delete (activo=false).
+ * - 404 si no existe el ID.
  */
 export const POST: APIRoute = async ({ request }) => {
   try {
     const { id } = Schema.parse(await request.json())
 
-    // 1) Hard delete
-    let { error } = await supabaseServer
+    // Intento de HARD DELETE
+    const hard = await supabaseServer
       .from('repuestos_csv')
       .delete()
       .eq('id', id)
+      .select('id') // para verificar filas afectadas
 
-    if (error) {
-      // 2) Fallback: soft delete
-      console.warn('DELETE falló, intentando soft delete:', error?.message || error)
-      const upd = await supabaseServer
+    if (hard.error) {
+      // Fallback: SOFT DELETE
+      const soft = await supabaseServer
         .from('repuestos_csv')
         .update({ activo: false, actualizado_en: new Date().toISOString() })
         .eq('id', id)
+        .select('id')
 
-      if (upd.error) throw upd.error
-      return new Response(JSON.stringify({ ok: true, mode: 'soft' }), { status: 200 })
+      if (soft.error) {
+        return new Response(
+          JSON.stringify({ ok: false, error: hard.error.message || 'No se pudo borrar' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      if (!soft.data?.length) {
+        return new Response(
+          JSON.stringify({ ok: false, error: 'No existe el ID' }),
+          { status: 404, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+
+      return new Response(
+        JSON.stringify({ ok: true, mode: 'soft' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
     }
 
-    return new Response(JSON.stringify({ ok: true, mode: 'hard' }), { status: 200 })
+    // Hard delete sin error: verificar filas afectadas
+    if (!hard.data?.length) {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'No existe el ID' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    return new Response(
+      JSON.stringify({ ok: true, mode: 'hard' }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    )
   } catch (e: any) {
     console.error('borrarRepuesto error:', e?.message || e)
-    return new Response(JSON.stringify({ ok: false, error: e?.message || 'Error' }), { status: 400 })
+    return new Response(
+      JSON.stringify({ ok: false, error: e?.message || 'Error' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
+    )
   }
 }

@@ -2,7 +2,6 @@ import type { APIRoute } from 'astro'
 import { z } from 'zod'
 import { supabaseServer } from '../../lib/supabaseServer'
 
-/** Validación del cuerpo (lo que envía la UI) */
 const Schema = z.object({
   id: z.number().int().positive().optional(),
   componente: z.string().min(1),
@@ -12,12 +11,12 @@ const Schema = z.object({
   activo: z.boolean().default(true),
 })
 
-/** Normaliza precio en ARS a "$X.XXX" sin decimales y SIN redondear (solo quita no-dígitos) */
+/** Normaliza precio en ARS a "$X.XXX" sin decimales */
 function normalizarPrecioARS(input?: string | null): string | null {
   if (input == null) return null
-  const digits = String(input).replace(/[^\d]/g, '') // deja solo dígitos
+  const digits = String(input).trim().replace(/[^\d]/g, '')
   if (!digits) return null
-  const pesos = Number(digits) // mantiene el valor exacto
+  const pesos = Number(digits)
   const numero = new Intl.NumberFormat('es-AR', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
@@ -29,24 +28,24 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     const b = Schema.parse(await request.json())
 
-    // Interpreta stock como número (para forzar activo=false cuando stock==0)
+    const componente = b.componente.trim()
+    const categoria  = b.categoria ? b.categoria.trim() : null
+    const stockStr   = b.stock ? b.stock.trim() : null
     const stockNum =
-      b.stock == null || String(b.stock).trim() === ''
+      stockStr == null || stockStr === ''
         ? null
-        : Number(String(b.stock).replace(/[^\d]/g, '')) || 0
+        : Number(stockStr.replace(/[^\d]/g, '')) || 0
+    const stockDigits = stockStr ? stockStr.replace(/[^\d]/g, '') : ''
 
-    // Mapeo a nombres de columnas reales en la tabla (algunas con espacios)
     const payload: any = {
-      'Componentes presupuestados': b.componente,
-      'Stock': b.stock ?? null,
-      categoria: b.categoria ?? null,
+      'Componentes presupuestados': componente,
+      'Stock': stockDigits ? stockDigits : null,
+      categoria,
       'Precio': normalizarPrecioARS(b.precio),
-      // Regla de negocio: si stock === 0 → inactivo
       activo: stockNum === 0 ? false : (b.activo ?? true),
       actualizado_en: new Date().toISOString(),
     }
 
-    // Update o Insert según si viene ID
     let resp
     if (b.id) {
       resp = await supabaseServer
@@ -67,7 +66,8 @@ export const POST: APIRoute = async ({ request }) => {
     const { data, error } = resp
     if (error) throw error
 
-    // Respuesta normalizada para la UI
+    const toYmd = (iso?: string | null) => (iso ? String(iso).slice(0, 10) : null)
+
     const out = {
       id: data!.id,
       componente: data!['Componentes presupuestados'],
@@ -75,8 +75,9 @@ export const POST: APIRoute = async ({ request }) => {
       categoria: data!.categoria,
       precio: data!['Precio'],
       activo: data!.activo,
-      actualizado_en: data!.actualizado_en,
+      actualizado_en: toYmd(data!.actualizado_en),
     }
+
     return new Response(JSON.stringify(out), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (e: any) {
     console.error('actualizarRepuesto error:', e?.message || e)

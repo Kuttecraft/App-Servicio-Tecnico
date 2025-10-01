@@ -207,7 +207,7 @@ CREATE TABLE presupuesto_repuestos (
 */
 
 /* Esta es aparte 
--- 9. Permisos de usuario (por técnico)
+-- 10. Permisos de usuario (por técnico)
 CREATE TABLE usuarios_perfil (
     id BIGSERIAL PRIMARY KEY,
     tecnico_id BIGINT NOT NULL REFERENCES tecnicos(id) ON DELETE CASCADE,
