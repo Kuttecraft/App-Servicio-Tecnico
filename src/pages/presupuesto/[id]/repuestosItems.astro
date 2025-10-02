@@ -44,6 +44,21 @@ const ticketId = Astro.params.id;
       </div>
     </div>
 
+    <!-- Resumen mejorado -->
+    <div class="card mb-3" id="card-resumen-sel" style="display:none;">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold"><i class="bi bi-check2-square me-2"></i> Seleccionados previamente</span>
+        <span class="text-muted small">
+          <span id="resumenCount">0 ítems</span>
+          <span class="mx-2">•</span>
+          Total estimado: <span id="resumenTotal">$0</span>
+        </span>
+      </div>
+      <div class="card-body py-3">
+        <div id="resumenLista" class="sel-grid"></div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header d-flex justify-content-between">
         <span>Seleccionar repuestos</span>
@@ -54,8 +69,6 @@ const ticketId = Astro.params.id;
           <thead class="table-light">
             <tr>
               <th style="width:44px;"><input type="checkbox" id="chkAll" /></th>
-
-              <!-- Cabeceras sortables -->
               <th class="th-sortable" data-field="id" style="white-space:nowrap; cursor:pointer;">
                 ID <span class="sort-icon text-muted">↕</span>
               </th>
@@ -74,10 +87,11 @@ const ticketId = Astro.params.id;
               <th class="th-sortable" data-field="activo" style="cursor:pointer;">
                 Activo <span class="sort-icon text-muted">↕</span>
               </th>
+              <th style="width:150px;" class="text-end">Selección</th>
             </tr>
           </thead>
           <tbody id="tbody-repuestos">
-            <tr><td colspan="7" class="text-center py-3">Cargando...</td></tr>
+            <tr><td colspan="8" class="text-center py-3">Cargando...</td></tr>
           </tbody>
         </table>
       </div>
@@ -138,6 +152,31 @@ const ticketId = Astro.params.id;
     </div>
   </div>
 
+  <!-- Modal para editar cantidad -->
+  <div class="modal fade" id="editQtyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i> Editar cantidad</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Cantidad</label>
+            <input id="editQtyInput" type="number" min="1" step="1" class="form-control" />
+            <div class="form-text">Ingresá un entero mayor o igual a 1.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button id="editQtySave" type="button" class="btn btn-primary">
+            <i class="bi bi-check2 me-1"></i> Guardar cambios
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     const root = document.getElementById('repuestos-root');
     const ticketId = Number(root?.dataset.ticketId || 0);
@@ -161,19 +200,39 @@ const ticketId = Astro.params.id;
     const tbodyConfirm = document.getElementById('tbody-confirm');
     const btnGuardar = document.getElementById('btnGuardar');
     const totalEstimadoEl = document.getElementById('totalEstimado');
+
+    // ===== Modales perezosos =====
+    const editQtyModalEl = document.getElementById('editQtyModal');
+    let bsEditModal = null;
+    let editId = null;
+    function getEditModal() {
+      if (bsEditModal) return bsEditModal;
+      if (typeof window !== 'undefined' && window.bootstrap) {
+        // @ts-ignore
+        bsEditModal = new window.bootstrap.Modal(editQtyModalEl);
+        return bsEditModal;
+      }
+      return null;
+    }
     let bsModal = null;
+    function getConfirmModal() {
+      if (bsModal) return bsModal;
+      if (typeof window !== 'undefined' && window.bootstrap) {
+        // @ts-ignore
+        bsModal = new window.bootstrap.Modal(confirmModalEl);
+        return bsModal;
+      }
+      return null;
+    }
 
-    let page = 1;
-    const pageSize = 30;
-    let sortBy = 'id';
-    let sortDir = 'asc';
-
-    // === selección global persistente
+    // selección persistente
     const seleccion = new Map(); // id -> { id, comp, stock, unitPrice, cantidad, activo }
 
-    // ====== utilidades ======
+    // utilidades
     const fmtARS = (n) =>
-      new Intl.NumberFormat('es-AR', { style:'currency', currency:'ARS', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(n)||0);
+      new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',minimumFractionDigits:0,maximumFractionDigits:2}).format(Number(n)||0);
+    const fmtARS0 = (n) =>
+      new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',minimumFractionDigits:0,maximumFractionDigits:0}).format(Number(n)||0);
 
     function parsePrecioARS(v){
       if (v == null || v === '') return 0;
@@ -184,26 +243,126 @@ const ticketId = Astro.params.id;
       return Number.isFinite(n) ? n : 0;
     }
 
+    // === Precargar selección guardada (usa stock_num y activo del API) ===
+    async function cargarSeleccionAnterior() {
+      if (!ticketId) return;
+      const res = await fetch(`/api/presupuestoItems?ticket_id=${ticketId}`);
+      const out = await res.json();
+      const rows = Array.isArray(out?.rows) ? out.rows : [];
+      rows.forEach(r => {
+        const id = Number(r?.repuesto_id || 0);
+        const cantidad = Math.max(1, Number(r?.cantidad || 1));
+        const unitPrice = Number(r?.precio_unit_num || 0);
+        const stock = Number(r?.stock_num || 0);
+        const activo = !!r?.activo;
+        if (Number.isFinite(id) && id > 0) {
+          seleccion.set(id, {
+            id,
+            comp: String(r?.componente || ''),
+            stock,
+            unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
+            cantidad,
+            activo
+          });
+        }
+      });
+    }
+
+    // ===== Resumen (cards) + acciones =====
+    const cardResumen = document.getElementById('card-resumen-sel');
+    const resumenLista = document.getElementById('resumenLista');
+    const resumenCount = document.getElementById('resumenCount');
+    const resumenTotal = document.getElementById('resumenTotal');
+
+    function renderSeleccionResumen() {
+      const items = Array.from(seleccion.values());
+      const total = items.reduce((acc, it) => acc + (Number(it.unitPrice||0)*Number(it.cantidad||1)), 0);
+
+      if (items.length === 0) {
+        cardResumen.style.display = 'none';
+        resumenLista.innerHTML = '';
+        resumenCount.textContent = '0 ítems';
+        resumenTotal.textContent = fmtARS0(0);
+        return;
+      }
+
+      cardResumen.style.display = 'block';
+      resumenCount.textContent = `${items.length} ${items.length===1?'ítem':'ítems'}`;
+      resumenTotal.textContent = fmtARS0(total);
+
+      // === Botones a la derecha con separación ===
+      resumenLista.innerHTML = items.map(it => {
+        return `
+          <div class="sel-card d-flex align-items-center flex-nowrap" data-id="${it.id}" title="#${it.id} — ${it.comp}">
+            <div class="sel-card__left d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
+              <span class="sel-id">#${it.id}</span>
+              <span class="sel-name text-truncate">${(it.comp||'').toString()}</span>
+              <span class="badge rounded-pill text-bg-primary sel-qty ms-2" title="Cantidad">Cantidad: ${it.cantidad}</span>
+            </div>
+            <div class="sel-card__right ms-auto d-flex align-items-center gap-2">
+              <button class="btn btn-outline-secondary btn-icon btn-edit" title="Editar"><i class="bi bi-pencil"></i></button>
+              <button class="btn btn-outline-danger btn-icon btn-del" title="Borrar"><i class="bi bi-trash"></i></button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Wire acciones
+      resumenLista.querySelectorAll('.btn-edit').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          const card = e.currentTarget.closest('.sel-card');
+          const id = Number(card?.getAttribute('data-id')||'0');
+          if (!id || !seleccion.has(id)) return;
+          editId = id;
+          const curr = seleccion.get(id)?.cantidad ?? 1;
+          document.getElementById('editQtyInput').value = String(curr);
+          getEditModal()?.show();
+        });
+      });
+      resumenLista.querySelectorAll('.btn-del').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          const card = e.currentTarget.closest('.sel-card');
+          const id = Number(card?.getAttribute('data-id')||'0');
+          if (!id) return;
+          if (!confirm('¿Quitar este repuesto de la selección?')) return;
+          seleccion.delete(id);
+          const chk = document.querySelector(`.chkItem[data-id="${id}"]`);
+          if (chk) chk.checked = false;
+          renderSeleccionResumen();
+        });
+      });
+    }
+
+    // Guardar cantidad desde el modal de edición
+    document.getElementById('editQtySave').addEventListener('click', ()=>{
+      const n = Math.max(1, Number(document.getElementById('editQtyInput').value || 1));
+      if (!Number.isFinite(n)) return;
+      if (editId && seleccion.has(editId)) {
+        const prev = seleccion.get(editId);
+        seleccion.set(editId, { ...prev, cantidad: n });
+        renderSeleccionResumen();
+      }
+      getEditModal()?.hide();
+    });
+
     function toggleClearBtn(){ btnClearQ.style.display = (q.value ?? '').trim() ? 'block' : 'none'; }
     q.addEventListener('input', () => { toggleClearBtn(); refetch(); });
     btnClearQ.addEventListener('click', () => { q.value=''; toggleClearBtn(); page=1; cargar(); });
     toggleClearBtn();
 
     async function cargarCategorias() {
-      try {
-        const res = await fetch('/api/categoriasRepuestos');
-        const out = await res.json();
-        const cats = Array.isArray(out?.categorias) ? out.categorias : [];
-        categoria.innerHTML = '<option value="">Todas las categorías</option>' +
-          cats.map(c => `<option value="${c.replaceAll('"','&quot;')}">${c}</option>`).join('');
-      } catch {}
+      const res = await fetch('/api/categoriasRepuestos');
+      const out = await res.json();
+      const cats = Array.isArray(out?.categorias) ? out.categorias : [];
+      categoria.innerHTML = '<option value="">Todas las categorías</option>' +
+        cats.map(c => `<option value="${c.replaceAll('"','&quot;')}">${c}</option>`).join('');
     }
 
-    function setLoading(){ tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3">Cargando...</td></tr>'; }
+    function setLoading(){ tbody.innerHTML = '<tr><td colspan="8" class="text-center py-3">Cargando...</td></tr>'; }
 
     function wireRowCheckboxes(){
       document.querySelectorAll('.chkItem').forEach((el)=>{
-        if (el.disabled) return; // inactivos no son seleccionables
+        if (el.disabled) return;
         const id = Number(el.getAttribute('data-id'));
         const comp = String(el.getAttribute('data-comp') || '');
         const stock = Number(el.getAttribute('data-stock') || '0');
@@ -216,9 +375,15 @@ const ticketId = Astro.params.id;
             const prev = seleccion.get(id);
             const cantidad = prev?.cantidad ?? 1;
             seleccion.set(id, { id, comp, stock, unitPrice, cantidad, activo: true });
+            if (prev) {
+              prev.stock = stock;
+              if (Number.isFinite(unitPrice) && unitPrice>0) prev.unitPrice = unitPrice;
+              prev.activo = activo;
+            }
           } else {
             seleccion.delete(id);
           }
+          renderSeleccionResumen();
         };
       });
     }
@@ -234,98 +399,110 @@ const ticketId = Astro.params.id;
       });
     }
 
+    let page = 1;
+    const pageSize = 30;
+    let sortBy = 'id';
+    let sortDir = 'asc';
+
     async function cargar() {
       setLoading();
-      try {
-        const params = new URLSearchParams({
-          page: String(page),
-          pageSize: String(pageSize),
-          q: (q.value ?? '').trim(),
-          categoria: (categoria.value ?? '').trim(),
-          estado: (estado.value ?? '').trim(),
-          sortBy,
-          sortDir,
-        });
-        const res = await fetch('/api/listarRepuestos?' + params.toString());
-        const out = await res.json();
-        const data = out.rows || [];
-        const total = out.total || 0;
-        const maxPage = total ? Math.ceil(total / pageSize) : 1;
-        if (total > 0 && page > maxPage) { page = maxPage; return cargar(); }
+      const params = new URLSearchParams({
+        page: String(page), pageSize: String(pageSize),
+        q: (q.value ?? '').trim(),
+        categoria: (categoria.value ?? '').trim(),
+        estado: (estado.value ?? '').trim(),
+        sortBy, sortDir,
+      });
+      const res = await fetch('/api/listarRepuestos?' + params.toString());
+      const out = await res.json();
+      const data = out.rows || [];
+      const total = out.total || 0;
+      const maxPage = total ? Math.ceil(total / pageSize) : 1;
+      if (total > 0 && page > maxPage) { page = maxPage; return cargar(); }
 
-        if (data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">Sin resultados.</td></tr>';
-        } else {
-          tbody.innerHTML = data.map(r => {
-            const stockNum  = Number(String(r.stock ?? '0').replace(/[^0-9.-]/g,'')) || 0;
-            const unitPrice = parsePrecioARS(r.precio ?? '');
-            const isActive  = !!r.activo;
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-muted">Sin resultados.</td></tr>';
+      } else {
+        tbody.innerHTML = data.map(r => {
+          const stockNum  = Number(String(r.stock ?? '0').replace(/[^0-9.-]/g,'')) || 0;
+          const unitPrice = parsePrecioARS(r.precio ?? '');
+          const isActive  = !!r.activo;
 
-            // checkbox disabled si está inactivo
-            const chk = `
-              <input type="checkbox" class="chkItem"
-                data-id="${r.id}"
-                data-comp="${(r.componente ?? '').toString().replace(/"/g,'&quot;')}"
-                data-stock="${stockNum}"
-                data-precio="${unitPrice}"
-                data-activo="${isActive ? '1' : '0'}"
-                ${isActive ? '' : 'disabled title="Inactivo — no se puede seleccionar"'}
-              />
-            `;
+          const idNum = Number(r.id);
+          const ya = seleccion.get(idNum);
+          const wasSelected = !!ya;
+          const cantSel = ya?.cantidad ?? 1;
 
-            return `
-              <tr class="${isActive ? '' : 'table-secondary'}">
-                <td>${chk}</td>
-                <td>${r.id}</td>
-                <td>${r.componente ?? ''}</td>
-                <td>${r.stock ?? ''}</td>
-                <td>${r.categoria ?? ''}</td>
-                <td>${r.precio ?? ''}</td>
-                <td>${isActive ? 'Sí' : '<span class="text-danger fw-semibold">No</span>'}</td>
-              </tr>
-            `;
-          }).join('');
-        }
+          const savedBadge = wasSelected
+            ? `<span class="badge text-bg-info" title="Ya está guardado en el presupuesto">Guardado ×${cantSel}</span>`
+            : '';
 
-        const from = total ? (page-1)*pageSize + 1 : 0;
-        const to   = total ? Math.min(page*pageSize, total) : 0;
-        resumen.textContent = total ? `Total: ${total}` : '';
-        paginacionInfo.textContent = total ? `Mostrando ${from}-${to} de ${total}` : '';
+          const chk = `
+            <input type="checkbox" class="chkItem"
+              data-id="${r.id}"
+              data-comp="${(r.componente ?? '').toString().replace(/"/g,'&quot;')}"
+              data-stock="${stockNum}"
+              data-precio="${unitPrice}"
+              data-activo="${isActive ? '1' : '0'}"
+              ${wasSelected && isActive ? 'checked' : ''}
+              ${isActive ? '' : 'disabled title="Inactivo — no se puede seleccionar"'}
+            />
+          `;
 
-        chkAll.checked = false;
-        chkAll.onchange = () => {
-          // solo checkboxes habilitados (activos)
-          document.querySelectorAll('.chkItem:not([disabled])').forEach((el)=>{
-            const id = Number(el.getAttribute('data-id'));
-            const comp = String(el.getAttribute('data-comp') || '');
-            const stock = Number(el.getAttribute('data-stock') || '0');
-            const unitPrice = Number(el.getAttribute('data-precio') || '0');
+          const rowClass = isActive ? (wasSelected ? 'table-info' : '') : 'table-secondary';
 
-            el.checked = chkAll.checked;
-            if (chkAll.checked) {
-              const prev = seleccion.get(id);
-              const cantidad = prev?.cantidad ?? 1;
-              seleccion.set(id, { id, comp, stock, unitPrice, cantidad, activo: true });
-            } else {
-              seleccion.delete(id);
-            }
-          });
-        };
-
-        wireRowCheckboxes();
-
-        prevPageBtn.disabled = page <= 1;
-        nextPageBtn.disabled = (page*pageSize) >= total;
-
-        updateSortUI();
-      } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-danger text-center py-3">Error al cargar.</td></tr>';
-        resumen.textContent = '';
-        paginacionInfo.textContent = '';
+          return `
+            <tr class="${rowClass}">
+              <td>${chk}</td>
+              <td>${r.id}</td>
+              <td>${r.componente ?? ''}</td>
+              <td>${r.stock ?? ''}</td>
+              <td>${r.categoria ?? ''}</td>
+              <td>${r.precio ?? ''}</td>
+              <td>${isActive ? 'Sí' : '<span class="text-danger fw-semibold">No</span>'}</td>
+              <td class="text-end">${savedBadge}</td>
+            </tr>
+          `;
+        }).join('');
       }
+
+      const from = total ? (page-1)*pageSize + 1 : 0;
+      const to   = total ? Math.min(page*pageSize, total) : 0;
+      resumen.textContent = total ? `Total: ${total}` : '';
+      paginacionInfo.textContent = total ? `Mostrando ${from}-${to} de ${total}` : '';
+
+      chkAll.checked = false;
+      chkAll.onchange = () => {
+        document.querySelectorAll('.chkItem:not([disabled])').forEach((el)=>{
+          const id = Number(el.getAttribute('data-id'));
+          const comp = String(el.getAttribute('data-comp') || '');
+          const stock = Number(el.getAttribute('data-stock') || '0');
+          const unitPrice = Number(el.getAttribute('data-precio') || '0');
+
+          el.checked = chkAll.checked;
+          if (chkAll.checked) {
+            const prev = seleccion.get(id);
+            const cantidad = prev?.cantidad ?? 1;
+            seleccion.set(id, { id, comp, stock, unitPrice, cantidad, activo: true });
+            if (prev) {
+              prev.stock = stock;
+              if (Number.isFinite(unitPrice) && unitPrice>0) prev.unitPrice = unitPrice;
+              prev.activo = true;
+            }
+          } else {
+            seleccion.delete(id);
+          }
+        });
+        renderSeleccionResumen();
+      };
+
+      wireRowCheckboxes();
+      prevPageBtn.disabled = page <= 1;
+      nextPageBtn.disabled = (page*pageSize) >= total;
+      updateSortUI();
     }
 
-    // Debounce de búsqueda
+    // Debounce
     const refetch = (()=>{ let t; return ()=>{ clearTimeout(t); t=setTimeout(()=>{ page=1; cargar(); }, 250);} })();
     q.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); }});
     categoria.addEventListener('change', ()=>{ page=1; cargar(); });
@@ -333,23 +510,17 @@ const ticketId = Astro.params.id;
     prevPageBtn.addEventListener('click', ()=>{ if(page>1){ page--; cargar(); }});
     nextPageBtn.addEventListener('click', ()=>{ page++; cargar(); });
 
-    // Click en cabeceras para ordenar
+    // Sort
     thSortables.forEach(th=>{
       th.addEventListener('click', ()=>{
-        const f = th.getAttribute('data-field');
-        if (!f) return;
-        if (sortBy === f) {
-          sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
-        } else {
-          sortBy = f;
-          sortDir = 'asc';
-        }
-        page = 1;
-        cargar();
+        const f = th.getAttribute('data-field'); if (!f) return;
+        if (sortBy === f) sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
+        else { sortBy = f; sortDir = 'asc'; }
+        page = 1; cargar();
       });
     });
 
-    // ===== Modal =====
+    // ====== Modal confirmación ======
     function renderConfirmTable(items){
       tbodyConfirm.innerHTML = items.map((it, idx) => {
         const estadoHtml = it.activo
@@ -368,15 +539,10 @@ const ticketId = Astro.params.id;
           </tr>
         `;
       }).join('');
-
       tbodyConfirm.querySelectorAll('.inpCant').forEach(inp => inp.addEventListener('input', actualizarSubtotalesYValidar));
       tbodyConfirm.querySelectorAll('.btnQuitar').forEach(btn => {
-        btn.addEventListener('click', (e)=>{
-          e.currentTarget.closest('tr')?.remove();
-          actualizarSubtotalesYValidar();
-        });
+        btn.addEventListener('click', (e)=>{ e.currentTarget.closest('tr')?.remove(); actualizarSubtotalesYValidar(); });
       });
-
       actualizarSubtotalesYValidar();
     }
 
@@ -389,10 +555,8 @@ const ticketId = Astro.params.id;
         const cant  = Math.max(1, Number(tr.querySelector('.inpCant')?.value || '1'));
         const unit  = Number(tr.querySelector('.precioUnit')?.getAttribute('data-punit') || '0');
         const sub = unit * cant;
-        const subtotalEl = tr.querySelector('.subtotal');
-        if (subtotalEl) subtotalEl.textContent = fmtARS(sub);
+        const subtotalEl = tr.querySelector('.subtotal'); if (subtotalEl) subtotalEl.textContent = fmtARS(sub);
         total += sub;
-
         const superaStock = (stock === 0 && cant > 0) || (stock > 0 && cant > stock);
         const invalido = !activo || superaStock;
         tr.classList.toggle('table-warning', invalido);
@@ -403,63 +567,100 @@ const ticketId = Astro.params.id;
       btnGuardar.disabled = !ok || rows.length === 0;
     }
 
+    // Abre el modal con TODO lo que está en 'seleccion'
     btnAgregar.addEventListener('click', () => {
-      const items = Array.from(document.querySelectorAll('.chkItem'))
-        .filter(el => el.checked)
-        .map(el => ({
-          id: Number(el.getAttribute('data-id')),
-          comp: String(el.getAttribute('data-comp')||''),
-          stock: Number(el.getAttribute('data-stock')||'0'),
-          unitPrice: Number(el.getAttribute('data-precio')||'0'),
-          activo: el.getAttribute('data-activo') === '1',
-          cantidad: (seleccion.get(Number(el.getAttribute('data-id')))?.cantidad) ?? 1,
-        }));
-
+      const items = Array.from(seleccion.values());
       if (!items.length) { alert('Seleccioná al menos un repuesto.'); return; }
-
-      // Blindar por si algo quedó cacheado: si hay inactivos, igual los mostramos como "no se puede usar"
-      items.forEach(it => seleccion.set(it.id, it));
       renderConfirmTable(items);
-
-      // @ts-ignore
-      bsModal = new bootstrap.Modal(confirmModalEl);
-      bsModal.show();
+      getConfirmModal()?.show();
     });
 
     btnGuardar.addEventListener('click', async ()=>{
       if (!ticketId) { alert('ticket_id inválido'); return; }
-
-      // Validación final: no permitir inactivos
       const rows = Array.from(tbodyConfirm.querySelectorAll('tr'));
       const payloadItems = rows.map(tr=>{
-        const activo = tr.getAttribute('data-activo') === '1';
-        if (!activo) return null;
+        const activo = tr.getAttribute('data-activo') === '1'; if (!activo) return null;
         const id = Number(tr.querySelector('td')?.textContent?.trim() || '0');
         const cantidad = Math.max(1, Number(tr.querySelector('.inpCant')?.value || '1'));
         return { repuesto_id: id, cantidad };
       }).filter(Boolean);
-
-      if (payloadItems.length === 0) {
-        alert('No hay ítems válidos para guardar (hay inactivos o cantidades inválidas).');
-        return;
-      }
-
+      if (payloadItems.length === 0) { alert('No hay ítems válidos para guardar.'); return; }
       try {
         const res = await fetch('/api/presupuestoItems', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ ticket_id: ticketId, items: payloadItems })
         });
         const out = await res.json();
-        if (res.ok && out.ok) {
-          bsModal?.hide();
-          window.location.href = `/presupuesto/${ticketId}`;
-        } else {
-          alert('Error al guardar: ' + (out.error || res.statusText));
-        }
-      } catch (err) { alert('Error de red al guardar.'); }
+        if (res.ok && out.ok) { getConfirmModal()?.hide(); window.location.href = `/presupuesto/${ticketId}`; }
+        else { alert('Error al guardar: ' + (out.error || res.statusText)); }
+      } catch { alert('Error de red al guardar.'); }
     });
 
-    await cargarCategorias();
-    cargar();
+    // ===== Arranque seguro =====
+    async function init() {
+      try { await cargarSeleccionAnterior(); renderSeleccionResumen(); } catch(e){}
+      try { await cargarCategorias(); } catch(e){}
+      try { await cargar(); } catch(e){}
+    }
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   </script>
+
+  <!-- Estilos del resumen (tarjetas + acciones) -->
+  <style><span class="badge rounded-pill text-bg-primary sel-qty ms-2" title="Cantidad">×${it.cantidad}</span>
+
+    .sel-grid{
+      display:flex;            /* o 'block', pero con flex mantenés el gap fácil */
+      flex-direction: column;  /* una debajo de la otra */
+      gap:.75rem;              /* separación vertical entre tarjetas */
+    }
+    .sel-card{
+      width:100%;
+      display:flex;
+      align-items:center;
+      gap:.75rem;
+      padding:.65rem .8rem;
+      border:1px solid var(--bs-border-color);
+      border-radius:.75rem;
+      background:linear-gradient(180deg, var(--bs-body-bg), rgba(0,0,0,.02));
+      box-shadow: 0 1px 0 rgba(0,0,0,.04);
+      transition: transform .08s ease, box-shadow .08s ease, border-color .08s ease;
+      flex-wrap:nowrap;
+    }
+    .sel-card:hover{
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,.06);
+      border-color: rgba(0,0,0,.15);
+    }
+    .sel-card__left{
+      min-width:0;
+      display:flex;
+      align-items:center;
+      gap:.5rem;
+      flex:1 1 auto; /* ocupa todo el espacio disponible */
+    }
+    .sel-id{ font-variant-numeric: tabular-nums; color: var(--bs-secondary-color); }
+    .sel-name{
+      max-width: 40ch;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-weight: 500;
+    }
+    .sel-card__right{
+      margin-left:auto;  /* empuja al extremo derecho */
+      display:flex;
+      align-items:center;
+      gap:.6rem;        /* separación entre Editar y Borrar */
+      flex:0 0 auto;
+    }
+    .btn-icon{
+      --bs-btn-padding-y: .25rem;
+      --bs-btn-padding-x: .45rem;
+      --bs-btn-font-size: .85rem;
+      line-height: 1;
+      display:inline-flex; align-items:center; justify-content:center;
+    }
+  </style>
 </BasePrivateLayout>

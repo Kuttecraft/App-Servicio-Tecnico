@@ -8,14 +8,7 @@ function toInt(v: unknown): number {
   return Number.isFinite(n) ? Math.trunc(n) : NaN;
 }
 
-/** Convierte un string de precio a ENTERO ARS (miles con punto, sin decimales).
- * Reglas:
- * "$7.510" -> 7510
- * "7,51"   -> 7510
- * "7.51"   -> 7510
- * "12.345" -> 12345
- * "12,3"   -> 12300
- */
+/** Convierte un string de precio a ENTERO ARS (miles con punto, sin decimales). */
 function parseEnteroARS(s?: string | null): number | null {
   if (!s) return null;
   const raw = String(s).trim();
@@ -63,6 +56,14 @@ function parseEnteroARS(s?: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Limpia stock a número (si viene como texto) */
+function parseStockNum(s?: string | null): number {
+  if (s == null) return 0;
+  const d = String(s).replace(/[^\d-]/g, '');
+  const n = Number(d);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /** Busca (o crea) un presupuesto y devuelve su id */
 async function getOrCreatePresupuestoId(ticket_id: number): Promise<number> {
   const { data: found, error: errFind } = await supabase
@@ -84,10 +85,7 @@ async function getOrCreatePresupuestoId(ticket_id: number): Promise<number> {
   return created!.id as number;
 }
 
-/** ================= GET =================
- * Devuelve ítems desde presupuesto_repuestos + info de repuesto,
- * siempre con precio_unit_num como ENTERO ARS.
- */
+/** ================= GET ================= */
 export const GET: APIRoute = async ({ url }) => {
   try {
     const ticketId = toInt(url.searchParams.get('ticket_id'));
@@ -114,17 +112,26 @@ export const GET: APIRoute = async ({ url }) => {
     const ids = Array.from(new Set(items.map((r: any) => r.repuesto_id)));
     const { data: repRaw, error: errRep } = await supabase
       .from('repuestos_csv')
-      .select('id, "Componentes presupuestados", "Precio"')
+      .select('id, "Componentes presupuestados", "Precio", "Stock", categoria, activo')
       .in('id', ids);
     if (errRep) throw errRep;
 
-    type RepRow = { id: number; ['Componentes presupuestados']?: string | null; ['Precio']?: string | null };
+    type RepRow = {
+      id: number;
+      ['Componentes presupuestados']?: string | null;
+      ['Precio']?: string | null;
+      ['Stock']?: string | null;
+      categoria?: string | null;
+      activo?: boolean | null;
+    };
+
     const repuestos: RepRow[] = Array.isArray(repRaw) ? (repRaw as RepRow[]) : [];
     const byId: Record<number, RepRow> = {};
     for (const r of repuestos) byId[r.id] = r;
 
     const rows = items.map((it: any) => {
-      const preferStr = byId[it.repuesto_id]?.['Precio'] ?? null;
+      const meta = byId[it.repuesto_id] || ({} as RepRow);
+      const preferStr = meta?.['Precio'] ?? null;
       const preferNum =
         it?.precio_unit != null && Number.isFinite(Number(it.precio_unit))
           ? Number(it.precio_unit)
@@ -133,10 +140,14 @@ export const GET: APIRoute = async ({ url }) => {
       return {
         repuesto_id: it.repuesto_id,
         cantidad: it.cantidad,
-        componente: byId[it.repuesto_id]?.['Componentes presupuestados'] ?? '',
+        componente: meta?.['Componentes presupuestados'] ?? '',
         precio: preferStr ?? '',
         precio_unit_al_momento: it?.precio_unit ?? null,
-        precio_unit_num: preferNum ?? 0, // ENTERO ARS
+        precio_unit_num: preferNum ?? 0,
+        stock: meta?.['Stock'] ?? null,
+        stock_num: parseStockNum(meta?.['Stock']),
+        categoria: meta?.categoria ?? null,
+        activo: !!meta?.activo,
       };
     });
 
@@ -150,10 +161,7 @@ export const GET: APIRoute = async ({ url }) => {
   }
 };
 
-/** ================= POST =================
- * Reemplaza ítems del presupuesto y guarda snapshot del precio como ENTERO ARS.
- * No permite repuestos inactivos.
- */
+/** ================= POST ================= */
 export const POST: APIRoute = async ({ request }) => {
   try {
     const body = (await request.json()) as { ticket_id?: unknown; items?: Array<{ repuesto_id: unknown; cantidad?: unknown }> };
@@ -176,7 +184,6 @@ export const POST: APIRoute = async ({ request }) => {
 
     const presupuesto_id = await getOrCreatePresupuestoId(ticket_id);
 
-    // Traigo estado + precio actual (string) de los repuestos
     const ids = Array.from(new Set(clean.map((x) => x.repuesto_id)));
     const { data: repRaw, error: errRep } = await supabase
       .from('repuestos_csv')
