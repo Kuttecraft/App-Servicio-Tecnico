@@ -1,7 +1,15 @@
 ---
 import Sidebar from '../components/Sidebar.astro';
----
 
+type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
+const perfil = (Astro.locals as any)?.perfil as Perfil | undefined;
+const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
+
+// 🔐 Si NO es admin, redirigimos temprano a la página de no autorizado.
+if (!isAdmin) {
+  return Astro.redirect('/no-autorizado', 302);
+}
+---
 <html lang="es">
   <head>
     <meta charset="utf-8" />
@@ -328,7 +336,6 @@ import Sidebar from '../components/Sidebar.astro';
           const changed = prevValue !== newValue;
           categoria.value = newValue;
 
-          // si cambió la selección efectiva (por ejemplo, desapareció la única categoría) => aplicar YA
           if (changed) { page = 1; await cargar(); }
           return categoria.value;
         } catch (e) {
@@ -349,7 +356,7 @@ import Sidebar from '../components/Sidebar.astro';
           if (sortBy === field) sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
           else { sortBy = field; sortDir = 'asc'; }
           page = 1;
-          cargar(); // auto-aplica
+          cargar();
         });
       });
 
@@ -415,13 +422,9 @@ import Sidebar from '../components/Sidebar.astro';
               throw new Error(out?.error || `No se pudo borrar (HTTP ${res.status})`);
             }
 
-            // si estaba editándose este ID, salir de edición
             if (String(form.elements['id'].value || '') === String(idNum)) setCreateMode();
 
-            // 1) reconstruir categorías primero (si desaparece la única, queda "todas" y auto-aplica)
             await cargarCategorias(false);
-
-            // 2) limpiar búsqueda/estado y recargar (auto)
             q.value = '';
             toggleClearBtn();
             estado.value = '';
@@ -490,7 +493,6 @@ import Sidebar from '../components/Sidebar.astro';
           if (!res.ok) throw new Error(out?.error || 'Error');
           setCreateMode();
 
-          // refrescar categorías (mantener selección si existe) y lista
           await cargarCategorias(true);
           await cargar();
 
@@ -505,7 +507,7 @@ import Sidebar from '../components/Sidebar.astro';
 
       btnCancel.addEventListener('click', () => setCreateMode());
 
-      // Init (categorías -> lista) — cargarCategorias auto-aplica si cambia la selección
+      // Init (categorías -> lista)
       setCreateMode();
       await cargarCategorias(false);
       updateSortUI();
