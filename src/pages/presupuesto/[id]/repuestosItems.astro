@@ -1,10 +1,22 @@
 ---
 import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
+
+// 🔐 Detectar rol para mostrar/ocultar precios
+type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
+const perfil = (Astro.locals as any)?.perfil as Perfil | undefined;
+const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
+const showPrices = isAdmin;
+
 const ticketId = Astro.params.id;
 ---
 
 <BasePrivateLayout>
-  <div id="repuestos-root" class="container mt-5" data-ticket-id={ticketId}>
+  <div
+    id="repuestos-root"
+    class="container mt-5"
+    data-ticket-id={ticketId}
+    data-show-prices={String(showPrices)}
+  >
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h2 class="mb-0">
         <i class="bi bi-box-seam me-2"></i> Repuestos necesarios
@@ -50,8 +62,12 @@ const ticketId = Astro.params.id;
         <span class="fw-semibold"><i class="bi bi-check2-square me-2"></i> Seleccionados previamente</span>
         <span class="text-muted small">
           <span id="resumenCount">0 ítems</span>
-          <span class="mx-2">•</span>
-          Total estimado: <span id="resumenTotal">$0</span>
+          {showPrices && (
+            <>
+              <span class="mx-2">•</span>
+              Total estimado: <span id="resumenTotal">$0</span>
+            </>
+          )}
         </span>
       </div>
       <div class="card-body py-3">
@@ -81,9 +97,11 @@ const ticketId = Astro.params.id;
               <th class="th-sortable" data-field="categoria" style="cursor:pointer;">
                 Categoría <span class="sort-icon text-muted">↕</span>
               </th>
-              <th class="th-sortable" data-field="precio" style="cursor:pointer;">
-                Precio <span class="sort-icon text-muted">↕</span>
-              </th>
+              {showPrices && (
+                <th class="th-sortable" data-field="precio" style="cursor:pointer;">
+                  Precio <span class="sort-icon text-muted">↕</span>
+                </th>
+              )}
               <th class="th-sortable" data-field="activo" style="cursor:pointer;">
                 Activo <span class="sort-icon text-muted">↕</span>
               </th>
@@ -91,7 +109,9 @@ const ticketId = Astro.params.id;
             </tr>
           </thead>
           <tbody id="tbody-repuestos">
-            <tr><td colspan="8" class="text-center py-3">Cargando...</td></tr>
+            <tr>
+              <td colspan={showPrices ? 8 : 7} class="text-center py-3">Cargando...</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -128,8 +148,8 @@ const ticketId = Astro.params.id;
                   <th>Componente</th>
                   <th style="width:120px;">Cantidad</th>
                   <th style="width:100px;">Stock</th>
-                  <th style="width:140px;">Precio unitario</th>
-                  <th style="width:140px;">Subtotal</th>
+                  {showPrices && <th style="width:140px;">Precio unitario</th>}
+                  {showPrices && <th style="width:140px;">Subtotal</th>}
                   <th style="width:160px;">Estado</th>
                   <th style="width:60px;"></th>
                 </tr>
@@ -142,7 +162,7 @@ const ticketId = Astro.params.id;
           </div>
         </div>
         <div class="modal-footer d-flex justify-content-end gap-3">
-          <div class="fw-semibold me-auto">Total estimado: <span id="totalEstimado">$0</span></div>
+          {showPrices && <div class="fw-semibold me-auto">Total estimado: <span id="totalEstimado">$0</span></div>}
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
           <button id="btnGuardar" type="button" class="btn btn-primary" disabled>
             <i class="bi bi-save me-1"></i> Guardar
@@ -180,6 +200,8 @@ const ticketId = Astro.params.id;
   <script type="module">
     const root = document.getElementById('repuestos-root');
     const ticketId = Number(root?.dataset.ticketId || 0);
+    const showPrices = (root?.dataset.showPrices || 'false') === 'true';
+    const colCount = showPrices ? 8 : 7;
 
     const q = document.getElementById('q');
     const btnClearQ = document.getElementById('btnClearQ');
@@ -282,13 +304,13 @@ const ticketId = Astro.params.id;
         cardResumen.style.display = 'none';
         resumenLista.innerHTML = '';
         resumenCount.textContent = '0 ítems';
-        resumenTotal.textContent = fmtARS0(0);
+        if (resumenTotal) resumenTotal.textContent = fmtARS0(0);
         return;
       }
 
       cardResumen.style.display = 'block';
       resumenCount.textContent = `${items.length} ${items.length===1?'ítem':'ítems'}`;
-      resumenTotal.textContent = fmtARS0(total);
+      if (showPrices && resumenTotal) resumenTotal.textContent = fmtARS0(total);
 
       // === Botones a la derecha con separación ===
       resumenLista.innerHTML = items.map(it => {
@@ -358,7 +380,9 @@ const ticketId = Astro.params.id;
         cats.map(c => `<option value="${c.replaceAll('"','&quot;')}">${c}</option>`).join('');
     }
 
-    function setLoading(){ tbody.innerHTML = '<tr><td colspan="8" class="text-center py-3">Cargando...</td></tr>'; }
+    function setLoading(){
+      tbody.innerHTML = `<tr><td colspan="${colCount}" class="text-center py-3">Cargando...</td></tr>`;
+    }
 
     function wireRowCheckboxes(){
       document.querySelectorAll('.chkItem').forEach((el)=>{
@@ -421,7 +445,7 @@ const ticketId = Astro.params.id;
       if (total > 0 && page > maxPage) { page = maxPage; return cargar(); }
 
       if (data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-muted">Sin resultados.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="${colCount}" class="text-center py-3 text-muted">Sin resultados.</td></tr>`;
       } else {
         tbody.innerHTML = data.map(r => {
           const stockNum  = Number(String(r.stock ?? '0').replace(/[^0-9.-]/g,'')) || 0;
@@ -458,7 +482,7 @@ const ticketId = Astro.params.id;
               <td>${r.componente ?? ''}</td>
               <td>${r.stock ?? ''}</td>
               <td>${r.categoria ?? ''}</td>
-              <td>${r.precio ?? ''}</td>
+              ${showPrices ? `<td>${r.precio ?? ''}</td>` : ''}
               <td>${isActive ? 'Sí' : '<span class="text-danger fw-semibold">No</span>'}</td>
               <td class="text-end">${savedBadge}</td>
             </tr>
@@ -532,8 +556,8 @@ const ticketId = Astro.params.id;
             <td>${it.comp || ''}</td>
             <td><input type="number" class="form-control form-control-sm inpCant" value="${it.cantidad}" min="1" step="1" style="max-width:110px;" ${it.activo ? '' : 'disabled'} /></td>
             <td><span class="badge text-bg-light badgeStock">${it.stock}</span></td>
-            <td><span class="precioUnit" data-punit="${it.unitPrice}">${fmtARS(it.unitPrice)}</span></td>
-            <td><span class="subtotal">${fmtARS(it.unitPrice * it.cantidad)}</span></td>
+            ${showPrices ? `<td><span class="precioUnit" data-punit="${it.unitPrice}">${fmtARS(it.unitPrice)}</span></td>` : ''}
+            ${showPrices ? `<td><span class="subtotal">${fmtARS(it.unitPrice * it.cantidad)}</span></td>` : ''}
             <td>${estadoHtml}</td>
             <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm btnQuitar"><i class="bi bi-x-lg"></i></button></td>
           </tr>
@@ -553,16 +577,22 @@ const ticketId = Astro.params.id;
         const activo = tr.getAttribute('data-activo') === '1';
         const stock = Number(tr.querySelector('.badgeStock')?.textContent || '0');
         const cant  = Math.max(1, Number(tr.querySelector('.inpCant')?.value || '1'));
-        const unit  = Number(tr.querySelector('.precioUnit')?.getAttribute('data-punit') || '0');
-        const sub = unit * cant;
-        const subtotalEl = tr.querySelector('.subtotal'); if (subtotalEl) subtotalEl.textContent = fmtARS(sub);
-        total += sub;
+
+        // Solo admins ven/calc precios
+        if (showPrices) {
+          const unit  = Number(tr.querySelector('.precioUnit')?.getAttribute('data-punit') || '0');
+          const sub = unit * cant;
+          const subtotalEl = tr.querySelector('.subtotal'); if (subtotalEl) subtotalEl.textContent = fmtARS(sub);
+          total += sub;
+        }
+
         const superaStock = (stock === 0 && cant > 0) || (stock > 0 && cant > stock);
         const invalido = !activo || superaStock;
         tr.classList.toggle('table-warning', invalido);
         if (invalido) ok = false;
       });
-      totalEstimadoEl.textContent = fmtARS(total);
+
+      if (showPrices && totalEstimadoEl) totalEstimadoEl.textContent = fmtARS(total);
       ruleAlert.style.display = ok ? 'none' : 'block';
       btnGuardar.disabled = !ok || rows.length === 0;
     }
@@ -610,12 +640,11 @@ const ticketId = Astro.params.id;
   </script>
 
   <!-- Estilos del resumen (tarjetas + acciones) -->
-  <style><span class="badge rounded-pill text-bg-primary sel-qty ms-2" title="Cantidad">×${it.cantidad}</span>
-
+  <style>
     .sel-grid{
-      display:flex;            /* o 'block', pero con flex mantenés el gap fácil */
-      flex-direction: column;  /* una debajo de la otra */
-      gap:.75rem;              /* separación vertical entre tarjetas */
+      display:flex;
+      flex-direction: column;
+      gap:.75rem;
     }
     .sel-card{
       width:100%;
@@ -640,7 +669,7 @@ const ticketId = Astro.params.id;
       display:flex;
       align-items:center;
       gap:.5rem;
-      flex:1 1 auto; /* ocupa todo el espacio disponible */
+      flex:1 1 auto;
     }
     .sel-id{ font-variant-numeric: tabular-nums; color: var(--bs-secondary-color); }
     .sel-name{
@@ -649,10 +678,10 @@ const ticketId = Astro.params.id;
       font-weight: 500;
     }
     .sel-card__right{
-      margin-left:auto;  /* empuja al extremo derecho */
+      margin-left:auto;
       display:flex;
       align-items:center;
-      gap:.6rem;        /* separación entre Editar y Borrar */
+      gap:.6rem;
       flex:0 0 auto;
     }
     .btn-icon{
