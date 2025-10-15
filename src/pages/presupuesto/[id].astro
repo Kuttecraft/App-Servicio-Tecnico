@@ -1,6 +1,8 @@
 ---
 /**
  * Página de Presupuesto de un ticket.
+ * Técnicos: sin precios (ni columnas ni totales).
+ * Admin: ve todo como siempre.
  */
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import PresupuestoForm from '../../components/PresupuestoForm.astro';
@@ -11,6 +13,7 @@ type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
 const perfil = (Astro.locals as any).perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
+const showPrices = isAdmin; // <<< ÚNICA FUENTE DE VERDAD
 
 const { id } = Astro.params as { id: string };
 
@@ -69,7 +72,12 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
 ---
 
 <BasePrivateLayout>
-  <div id="presupuesto-root" class="container mt-5" data-ticket-id={id}>
+  <div
+    id="presupuesto-root"
+    class="container mt-5"
+    data-ticket-id={id}
+    data-show-prices={String(showPrices)}
+  >
     <!-- Encabezado -->
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h2 class="mb-0">
@@ -159,8 +167,12 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
             <div class="d-flex align-items-center gap-3 ms-auto">
               <div class="small text-muted">
                 <span id="repCount">0 ítems</span>
-                <span class="mx-2">•</span>
-                Total: <span id="repTotal">$0</span>
+                {showPrices && (
+                  <>
+                    <span class="mx-2">•</span>
+                    <span id="totalWrap">Total: <span id="repTotal">$0</span></span>
+                  </>
+                )}
               </div>
               <a id="btnRepuestos" class="btn btn-primary btn-sm" href={repsPath}>
                 <i class="bi bi-box-seam me-1"></i> Administrar repuestos
@@ -170,20 +182,23 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
 
           <div class="card-body p-0">
             <div class="table-responsive">
-              <!-- quitamos text-end global: alineamos por columna -->
               <table class="table table-sm mb-0 align-middle">
                 <thead class="table-light">
                   <tr>
                     <th style="width:90px;" class="text-start">ID</th>
                     <th class="text-start">Componente</th>
                     <th style="width:120px;" class="text-end">Cantidad</th>
-                    <th style="width:160px;" class="text-end">Precio unitario</th>
-                    <th style="width:160px;" class="text-end">Subtotal</th>
+                    {showPrices && <th style="width:160px;" class="text-end">Precio unitario</th>}
+                    {showPrices && <th style="width:160px;" class="text-end">Subtotal</th>}
                     <th style="width:70px;" class="text-center"></th>
                   </tr>
                 </thead>
                 <tbody id="tbody-sel">
-                  <tr><td colspan="6" class="text-center py-3 text-muted">Cargando…</td></tr>
+                  <tr>
+                    <td colspan={showPrices ? 6 : 4} class="text-center py-3 text-muted">
+                      Cargando…
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -195,45 +210,37 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
     )}
   </div>
 
-  <!-- Script: usa precio_unit_num del API (entero ARS), alinea columnas y AUTOCARGA el Monto -->
+  <!-- Script: respeta data-show-prices (admin=true / técnico=false) -->
   <script type="module">
     const root = document.getElementById('presupuesto-root');
     const ticketId = Number(root?.dataset.ticketId || 0);
+    const showPrices = (root?.dataset.showPrices || 'false') === 'true';
 
     const tbody = document.getElementById('tbody-sel');
     const repCount = document.getElementById('repCount');
     const repTotal = document.getElementById('repTotal');
+    const totalWrap = document.getElementById('totalWrap');
 
     // Formato ARS sin decimales (enteros con punto de miles)
     const fmtARS0 = (n) =>
-      new Intl.NumberFormat('es-AR', {
-        style: 'currency',
-        currency: 'ARS',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      }).format(Number(n) || 0);
+      new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 })
+        .format(Number(n) || 0);
 
-    // --- AUTOFILL DEL MONTO (editable, sin pisar cambios del usuario) ---
+    // Solo admins: AUTOFILL DEL MONTO con el total de repuestos
     function setMontoFromRepuestos(totalEnteroARS) {
-      // Solo si existe el formulario (modo admin)
+      if (!showPrices) return; // técnicos no ven ni tocamos monto automáticamente
       const inp = document.querySelector('#presupuesto-form input[name="monto"]');
       if (!inp) return;
-
-      // Último valor auto-asignado
       const lastAuto = Number(inp.dataset.autofillTotal || '0');
-
-      // ¿El usuario ya escribió algo distinto al último autofill?
       const digits = String(inp.value || '').replace(/\D/g, '');
       const currNum = Number(digits || '0');
       const userEdited = (currNum !== 0 && currNum !== lastAuto);
-
-      if (userEdited) return; // no lo piso
-
+      if (userEdited) return;
       inp.value = fmtARS0(totalEnteroARS);
       inp.dataset.autofillTotal = String(totalEnteroARS);
     }
 
-    // Fallback por si algún item no trae precio_unit_num (de string -> entero ARS)
+    // Normalizador usado si falta precio numérico
     const parseEnteroARS = (s) => {
       if (!s) return 0;
       const raw = String(s).trim();
@@ -285,10 +292,10 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
         cacheRows = rows;
 
         if (rows.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">Sin repuestos seleccionados. Usá “Administrar repuestos”.</td></tr>';
+          tbody.innerHTML = `<tr><td colspan="${showPrices ? 6 : 4}" class="text-center py-3 text-muted">Sin repuestos seleccionados. Usá “Administrar repuestos”.</td></tr>`;
           repCount.textContent = '0 ítems';
-          repTotal.textContent = fmtARS0(0);
-          setMontoFromRepuestos(0); // también reflejamos que no hay repuestos
+          if (showPrices && repTotal) repTotal.textContent = fmtARS0(0);
+          setMontoFromRepuestos(0);
           return;
         }
 
@@ -296,47 +303,59 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
         const html = rows.map(r => {
           const cant = Number(r?.cantidad || 0);
 
-          // preferimos el número del API; si no está, calculamos del string
-          let unit = Number(r?.precio_unit_num);
-          if (!Number.isFinite(unit) || unit <= 0) {
-            unit = parseEnteroARS(r?.precio ?? r?.precio_unit_al_momento ?? '');
+          // Si el admin ve precios, los calculamos; si no, omitimos cols
+          if (showPrices) {
+            let unit = Number(r?.precio_unit_num);
+            if (!Number.isFinite(unit) || unit <= 0) {
+              unit = parseEnteroARS(r?.precio ?? r?.precio_unit_al_momento ?? '');
+            } else {
+              const fromStr = parseEnteroARS(r?.precio ?? r?.precio_unit_al_momento ?? '');
+              if (fromStr > unit && unit < 1000) unit = fromStr;
+            }
+            const sub = unit * cant;
+            total += sub;
+
+            return `
+              <tr data-id="${r.repuesto_id}">
+                <td class="fw-semibold text-start">${r.repuesto_id}</td>
+                <td class="text-start">${r.componente || ''}</td>
+                <td class="text-end">${cant}</td>
+                <td class="text-end">${fmtARS0(unit)}</td>
+                <td class="text-end">${fmtARS0(sub)}</td>
+                <td class="text-center" style="width:70px;">
+                  <button type="button" class="btn btn-outline-danger btn-sm btnEliminar" title="Eliminar">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            `;
           } else {
-            // si vino muy chico (ej 7.51), corroboro con el string
-            const fromStr = parseEnteroARS(r?.precio ?? r?.precio_unit_al_momento ?? '');
-            if (fromStr > unit && unit < 1000) unit = fromStr;
+            // Técnico: sin precios
+            return `
+              <tr data-id="${r.repuesto_id}">
+                <td class="fw-semibold text-start">${r.repuesto_id}</td>
+                <td class="text-start">${r.componente || ''}</td>
+                <td class="text-end">${cant}</td>
+                <td class="text-center" style="width:70px;">
+                  <button type="button" class="btn btn-outline-danger btn-sm btnEliminar" title="Eliminar">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            `;
           }
-
-          const sub = unit * cant;
-          total += sub;
-
-          return `
-            <tr data-id="${r.repuesto_id}">
-              <td class="fw-semibold text-start">${r.repuesto_id}</td>
-              <td class="text-start">${r.componente || ''}</td>
-              <td class="text-end">${cant}</td>
-              <td class="text-end">${fmtARS0(unit)}</td>
-              <td class="text-end">${fmtARS0(sub)}</td>
-              <td class="text-center" style="width:70px;">
-                <button type="button" class="btn btn-outline-danger btn-sm btnEliminar" title="Eliminar">
-                  <i class="bi bi-trash"></i>
-                </button>
-              </td>
-            </tr>
-          `;
         }).join('');
 
         tbody.innerHTML = html;
         repCount.textContent = `${rows.length} ${rows.length === 1 ? 'ítem' : 'ítems'}`;
-        repTotal.textContent = fmtARS0(total);
-
-        // --- volcamos el total de repuestos al campo Monto (sin pisar cambios manuales) ---
+        if (showPrices && repTotal) repTotal.textContent = fmtARS0(total);
         setMontoFromRepuestos(total);
 
         tbody.querySelectorAll('.btnEliminar').forEach(btn => btn.addEventListener('click', onEliminarClick));
       } catch(e) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-danger">Error al cargar los repuestos seleccionados.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="${showPrices ? 6 : 4}" class="text-center py-3 text-danger">Error al cargar los repuestos seleccionados.</td></tr>`;
         repCount.textContent = '—';
-        repTotal.textContent = '—';
+        if (showPrices && repTotal) repTotal.textContent = '—';
       }
     }
 
