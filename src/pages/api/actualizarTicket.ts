@@ -178,6 +178,12 @@ const boolShow = (v: string | boolean | null | undefined) =>
     ? 'No'
     : '—';
 
+// 🚩 NUEVO: flag para NO registrar el diff duplicado "modelo/máquina"
+const REGISTRAR_CAMBIO_MAQUINA_REPARADA = false;
+
+// 🆕 Helper para mostrar estado de imagen en el diff
+const imgShow = (v: any) => (v ? 'Cargada' : '—');
+
 /**
  * Handler principal POST de Astro para actualizar un ticket.
  * - Lee y valida el ID del ticket desde varios orígenes.
@@ -239,10 +245,15 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     // ---------- Leer fila actual del ticket (datos base para comparar) ----------
     const { data: tRow, error: tErr } = await supabase
       .from('tickets_mian')
-      .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion, estado, maquina_reparada, tecnico_id, notas_del_tecnico, notas_del_cliente')
+      .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion, estado, maquina_reparada, tecnico_id, notas_del_tecnico, notas_del_cliente, imagen, imagen_ticket, imagen_extra') // 🆕 sumo campos de imagen
       .eq('id', idNum)
       .single();
     if (tErr || !tRow) return jsonError(`No se pudo obtener el ticket (id=${String(id)})`, 500);
+
+    // 🆕 Estados previos de imágenes (para armar el diff)
+    const prevImgMain   = tRow.imagen ?? null;
+    const prevImgTicket = tRow.imagen_ticket ?? null;
+    const prevImgExtra  = tRow.imagen_extra ?? null;
 
     // Cargar datos actuales de tablas relacionadas (solo si las vamos a tocar)
     let clienteOld: any = null;
@@ -317,7 +328,10 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     pushCambio('fecha formulario', tRow.marca_temporal, datosTicketsMian.marca_temporal);
     pushCambio('fecha listo', tRow.fecha_de_reparacion, datosTicketsMian.fecha_de_reparacion);
     pushCambio('nota técnico', tRow.notas_del_tecnico, datosTicketsMian.notas_del_tecnico);
-    pushCambio('modelo/máquina', tRow.maquina_reparada, datosTicketsMian.maquina_reparada);
+    // 🔒 NO registrar “modelo/máquina” para evitar duplicado con “máquina (modelo)”
+    if (REGISTRAR_CAMBIO_MAQUINA_REPARADA) {
+      pushCambio('modelo/máquina', tRow.maquina_reparada, datosTicketsMian.maquina_reparada);
+    }
 
     // Guardar “Detalle del problema” en notas_del_cliente del ticket, si viene
     if (typeof fields.detalleCliente === 'string') {
@@ -649,6 +663,15 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     const nombreArchivoExtra = `public/${idNum}_extra.webp`;
     if (imagenExtraArchivo && imagenExtraArchivo.size > 0) await subirImagen(imagenExtraArchivo, nombreArchivoExtra, 'imagen_extra');
     else if (mustDelete(borrarImagenExtra))                 await borrarImagenCampo(nombreArchivoExtra, 'imagen_extra');
+
+    // 🆕 Registrar diffs de imágenes (después de aplicar uploads/borrados)
+    const afterImgMain   = (datosTicketsMian as any).imagen        ?? prevImgMain;
+    const afterImgTicket = (datosTicketsMian as any).imagen_ticket ?? prevImgTicket;
+    const afterImgExtra  = (datosTicketsMian as any).imagen_extra  ?? prevImgExtra;
+
+    pushCambio('imagen principal', prevImgMain,   afterImgMain,   imgShow);
+    pushCambio('imagen del ticket', prevImgTicket, afterImgTicket, imgShow);
+    pushCambio('imagen extra',     prevImgExtra,  afterImgExtra,  imgShow);
 
     // Guardar los cambios acumulados del ticket (tickets_mian)
     {
