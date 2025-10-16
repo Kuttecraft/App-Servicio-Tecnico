@@ -4,7 +4,7 @@
  * - Verifica rol admin desde Astro.locals y redirige si no corresponde.
  * - Muestra selector de mes (YYYY-MM) y agrupación (modelo | estado | técnico).
  * - Renderiza un gráfico de torta (Chart.js) + tabla con TOP 10 + paneles de IDs por grupo.
- * - Se alimenta desde /api/estadisticas (ya implementado).
+ * - Se alimenta desde /api/estadisticas.
  */
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 
@@ -77,19 +77,19 @@ const defaultMonth = `${yyyy}-${mm}`;
           No hay datos para el mes seleccionado.
         </div>
 
-        <!-- IDs por estado (solo visible cuando group === 'estado') -->
+        <!-- IDs por estado -->
         <div id="ids-estado-wrap" class="mt-4 d-none">
           <h3 class="h6 mb-2">ID de las máquinas según estado</h3>
           <div id="ids-estado-list" class="small"></div>
         </div>
 
-        <!-- IDs por modelo (solo visible cuando group === 'modelo') -->
+        <!-- IDs por modelo -->
         <div id="ids-modelo-wrap" class="mt-4 d-none">
           <h3 class="h6 mb-2">ID de las máquinas según modelo</h3>
           <div id="ids-modelo-list" class="small"></div>
         </div>
 
-        <!-- IDs por técnico (solo visible cuando group === 'tecnico') -->
+        <!-- IDs por técnico -->
         <div id="ids-tecnico-wrap" class="mt-4 d-none">
           <h3 class="h6 mb-2">ID de las máquinas según técnico</h3>
           <div id="ids-tecnico-list" class="small"></div>
@@ -98,26 +98,38 @@ const defaultMonth = `${yyyy}-${mm}`;
     </div>
   </div>
 
-  <!-- Estilos locales: chips de ID y “dots” de color -->
+  <!-- Estilos locales: chips de ID, cliente y “dots” de color -->
   <style is:inline>
     /* chips/links de IDs clickeables */
-    #ids-estado-list .id-link,
-    #ids-modelo-list .id-link,
-    #ids-tecnico-list .id-link {
+    #ids-estado-list .id-chip,
+    #ids-modelo-list .id-chip,
+    #ids-tecnico-list .id-chip {
       text-decoration: none;
       border: 1px solid rgba(0,0,0,.08);
       padding: 0 .35rem;
       border-radius: .35rem;
-      margin-right: .25rem;
-      display: inline-block;
+      margin-right: .35rem;
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      white-space: nowrap;
     }
-    #ids-estado-list .id-link:hover,
-    #ids-modelo-list .id-link:hover,
-    #ids-tecnico-list .id-link:hover {
+    #ids-estado-list .id-chip:hover,
+    #ids-modelo-list .id-chip:hover,
+    #ids-tecnico-list .id-chip:hover {
       background: rgba(13,110,253,.08);
     }
 
-    /* puntito de color al lado del estado/modelo/tec (cuando corresponda) */
+    .cliente-badge {
+      font-size: .72rem;
+      border: 1px solid rgba(0,0,0,.08);
+      background: #f8f9fa;
+      color: #333;
+      padding: .05rem .35rem;
+      border-radius: .35rem;
+    }
+
+    /* puntito de color al lado del estado (cuando corresponda) */
     .dot {
       display: inline-block;
       width: .75rem;
@@ -135,7 +147,7 @@ const defaultMonth = `${yyyy}-${mm}`;
   <!-- Lógica de la vista -->
   <script is:inline>
     (function () {
-      // 🎨 Colores oficiales por estado (coinciden con lo usado en otras vistas)
+      // 🎨 Colores oficiales por estado
       var ESTADO_COLORS = {
         "Nuevo": "#E2FFF6",
         "Retirar": "#FFE9CC",
@@ -154,16 +166,14 @@ const defaultMonth = `${yyyy}-${mm}`;
       // Paleta fallback para modelo/técnico (rotativa)
       var FALLBACK = ["#cfe8ff","#ffe0cc","#e4ffd6","#f8d5ff","#ffefbf","#d7f3ff","#ffd7e0","#e0f7f1","#e6e6e6","#dcd0ff","#ffdcdc","#d0ffd0"];
 
-      // Helper: devuelve color por etiqueta según el grupo
       function colorsFor(labels, group) {
         if (group === 'estado') {
           return labels.map(function (l) { return ESTADO_COLORS[l] || '#e9ecef'; });
         }
-        // Para modelo/tecnico: ciclo por paleta fallback
         return labels.map(function (_, i) { return FALLBACK[i % FALLBACK.length]; });
       }
 
-      // Referencias UI
+      // Refs UI
       var chart;
       var $mes = document.getElementById('mes');
       var $group = document.getElementById('group');
@@ -175,7 +185,6 @@ const defaultMonth = `${yyyy}-${mm}`;
       var $chartTitle = document.getElementById('chartTitle');
       var $thLabel = document.getElementById('thLabel');
 
-      // contenedores de IDs
       var $idsEstadoWrap = document.getElementById('ids-estado-wrap');
       var $idsEstadoList = document.getElementById('ids-estado-list');
       var $idsModeloWrap = document.getElementById('ids-modelo-wrap');
@@ -183,7 +192,6 @@ const defaultMonth = `${yyyy}-${mm}`;
       var $idsTecnicoWrap = document.getElementById('ids-tecnico-wrap');
       var $idsTecnicoList = document.getElementById('ids-tecnico-list');
 
-      // Llama a la API de estadísticas con filtros
       function fetchDatos(year, month, group) {
         var url = '/api/estadisticas?year=' + year + '&month=' + month + '&group=' + encodeURIComponent(group);
         return fetch(url).then(function (res) {
@@ -192,12 +200,10 @@ const defaultMonth = `${yyyy}-${mm}`;
         });
       }
 
-      // Render de la tabla (TOP 10)
       function renderTabla(items, total, campoLabel, group) {
         $tbody.innerHTML = '';
         $thLabel.textContent = campoLabel;
 
-        // Paleta para dots si el group es 'estado'
         var labels = items.map(function(i){ return i.label; });
         var bg = colorsFor(labels, group);
 
@@ -232,7 +238,6 @@ const defaultMonth = `${yyyy}-${mm}`;
         $tabla.style.display = items.length ? '' : 'none';
       }
 
-      // Render del gráfico de torta
       function renderChart(labels, data, group) {
         var ctx = document.getElementById('chartModelos');
         if (chart) chart.destroy();
@@ -255,7 +260,6 @@ const defaultMonth = `${yyyy}-${mm}`;
               legend: { position: 'bottom' },
               tooltip: {
                 callbacks: {
-                  // Tooltip con cantidad + porcentaje calculado al vuelo
                   label: function (context) {
                     var label = context.label || '';
                     var value = context.parsed || 0;
@@ -270,123 +274,66 @@ const defaultMonth = `${yyyy}-${mm}`;
         });
       }
 
-      // Renderiza panel "IDs por estado"
-      function renderIdsByEstado(idsByEstado) {
-        if (!idsByEstado || Object.keys(idsByEstado).length === 0) {
-          $idsEstadoWrap.classList.add('d-none');
-          $idsEstadoList.innerHTML = '';
+      // Helper: limpia contenedores de IDs
+      function clearIdsPanels() {
+        $idsEstadoWrap.classList.add('d-none'); $idsEstadoList.innerHTML = '';
+        $idsModeloWrap.classList.add('d-none'); $idsModeloList.innerHTML = '';
+        $idsTecnicoWrap.classList.add('d-none'); $idsTecnicoList.innerHTML = '';
+      }
+
+      // Render de listas de IDs con cliente (acepta arrays de {id, cliente} o número)
+      function renderIdsList($wrap, $list, data, withDotsByEstado) {
+        if (!data || Object.keys(data).length === 0) {
+          $wrap.classList.add('d-none');
+          $list.innerHTML = '';
           return;
         }
-        var estados = Object.keys(idsByEstado).sort(function (a, b) {
+        var keys = Object.keys(data).sort(function (a, b) {
           return a.localeCompare(b, 'es', { sensitivity: 'base' });
         });
-        $idsEstadoList.innerHTML = '';
-        estados.forEach(function (est) {
-          var ids = idsByEstado[est] || [];
+        $list.innerHTML = '';
+        keys.forEach(function (k) {
+          var arr = data[k] || [];
           var line = document.createElement('div');
           line.className = 'mb-1';
 
-          // dot color al lado del estado (usa paleta por estado)
-          var dot = document.createElement('span');
-          dot.className = 'dot';
-          dot.style.background = (ESTADO_COLORS[est] || '#e9ecef');
-          line.appendChild(dot);
+          if (withDotsByEstado) {
+            var dot = document.createElement('span');
+            dot.className = 'dot';
+            dot.style.background = (ESTADO_COLORS[k] || '#e9ecef');
+            line.appendChild(dot);
+          }
 
           var strong = document.createElement('strong');
-          strong.textContent = est + ': ';
+          strong.textContent = k + ': ';
           line.appendChild(strong);
 
-          if (ids.length === 0) {
+          if (!arr.length) {
             line.appendChild(document.createTextNode('—'));
           } else {
-            ids.forEach(function (id, idx) {
+            arr.forEach(function (obj, idx) {
+              var id = (typeof obj === 'number') ? obj : obj.id;
+              var cli = (typeof obj === 'number') ? '' : (obj.cliente || '');
               var a = document.createElement('a');
               a.href = '/detalle/' + id;
-              a.className = 'id-link';
+              a.className = 'id-chip';
               a.title = 'Ver ticket ' + id;
               a.textContent = String(id);
+              if (cli) {
+                var badge = document.createElement('span');
+                badge.className = 'cliente-badge';
+                badge.textContent = cli;
+                a.appendChild(badge);
+              }
               line.appendChild(a);
-              if (idx < ids.length - 1) line.appendChild(document.createTextNode(', '));
+              if (idx < arr.length - 1) line.appendChild(document.createTextNode(' '));
             });
           }
-          $idsEstadoList.appendChild(line);
+          $list.appendChild(line);
         });
-        $idsEstadoWrap.classList.remove('d-none');
+        $wrap.classList.remove('d-none');
       }
 
-      // Renderiza panel "IDs por modelo"
-      function renderIdsByModelo(idsByModelo) {
-        if (!idsByModelo || Object.keys(idsByModelo).length === 0) {
-          $idsModeloWrap.classList.add('d-none');
-          $idsModeloList.innerHTML = '';
-          return;
-        }
-        var modelos = Object.keys(idsByModelo).sort(function (a, b) {
-          return a.localeCompare(b, 'es', { sensitivity: 'base' });
-        });
-        $idsModeloList.innerHTML = '';
-        modelos.forEach(function (modelo) {
-          var ids = idsByModelo[modelo] || [];
-          var line = document.createElement('div');
-          line.className = 'mb-1';
-          var strong = document.createElement('strong');
-          strong.textContent = modelo + ': ';
-          line.appendChild(strong);
-          if (ids.length === 0) {
-            line.appendChild(document.createTextNode('—'));
-          } else {
-            ids.forEach(function (id, idx) {
-              var a = document.createElement('a');
-              a.href = '/detalle/' + id;
-              a.className = 'id-link';
-              a.title = 'Ver ticket ' + id;
-              a.textContent = String(id);
-              line.appendChild(a);
-              if (idx < ids.length - 1) line.appendChild(document.createTextNode(', '));
-            });
-          }
-          $idsModeloList.appendChild(line);
-        });
-        $idsModeloWrap.classList.remove('d-none');
-      }
-
-      // Renderiza panel "IDs por técnico"
-      function renderIdsByTecnico(idsByTecnico) {
-        if (!idsByTecnico || Object.keys(idsByTecnico).length === 0) {
-          $idsTecnicoWrap.classList.add('d-none');
-          $idsTecnicoList.innerHTML = '';
-          return;
-        }
-        var tecnicos = Object.keys(idsByTecnico).sort(function (a, b) {
-          return a.localeCompare(b, 'es', { sensitivity: 'base' });
-        });
-        $idsTecnicoList.innerHTML = '';
-        tecnicos.forEach(function (tec) {
-          var ids = idsByTecnico[tec] || [];
-          var line = document.createElement('div');
-          line.className = 'mb-1';
-          var strong = document.createElement('strong');
-          strong.textContent = tec + ': ';
-          line.appendChild(strong);
-          if (ids.length === 0) {
-            line.appendChild(document.createTextNode('—'));
-          } else {
-            ids.forEach(function (id, idx) {
-              var a = document.createElement('a');
-              a.href = '/detalle/' + id;
-              a.className = 'id-link';
-              a.title = 'Ver ticket ' + id;
-              a.textContent = String(id);
-              line.appendChild(a);
-              if (idx < ids.length - 1) line.appendChild(document.createTextNode(', '));
-            });
-          }
-          $idsTecnicoList.appendChild(line);
-        });
-        $idsTecnicoWrap.classList.remove('d-none');
-      }
-
-      // Carga datos desde la API y renderiza todo
       async function cargar() {
         try {
           var val = $mes.value; // yyyy-mm
@@ -395,63 +342,50 @@ const defaultMonth = `${yyyy}-${mm}`;
           var month = parseInt(parts[1], 10);
           var group = $group.value; // 'modelo' | 'estado' | 'tecnico'
 
-          // Títulos dinámicos
+          // Títulos
           var campoLabel = group === 'estado' ? 'Estado' : (group === 'tecnico' ? 'Técnico' : 'Modelo');
           $chartTitle.textContent = group;
           $thLabel.textContent = campoLabel;
 
-          // Fetch
           var resp = await fetchDatos(year, month, group);
           var total = resp.total || 0;
           var items = resp.items || [];
 
-          // Mapas de IDs (opcionales)
-          var idsByEstado = resp.idsByEstado || null;
-          var idsByModelo = resp.idsByModelo || null;
-          var idsByTecnico = resp.idsByTecnico || null;
+          // Mapas de IDs con cliente (cuando están presentes)
+          var idsByEstado = resp.idsByEstado || null; // { estado: [{id,cliente}] }
+          var idsByModelo = resp.idsByModelo || null; // { modelo: [{id,cliente}] }
+          var idsByTecnico = resp.idsByTecnico || null; // { tec: [{id,cliente}] }
 
-          // Sin datos → resetea UI
           if (!total) {
             $sinDatos.classList.remove('d-none');
             renderTabla([], 0, campoLabel, group);
             if (chart) chart.destroy();
-            renderIdsByEstado(null);
-            renderIdsByModelo(null);
-            renderIdsByTecnico(null);
+            clearIdsPanels();
             return;
           } else {
             $sinDatos.classList.add('d-none');
           }
 
-          // Ordenar y preparar datasets
           items.sort(function (a, b) { return b.count - a.count; });
           var labels = items.map(function (i) { return i.label; });
           var data = items.map(function (i) { return i.count; });
 
-          // Pintar tabla + gráfico
           renderTabla(items, total, campoLabel, group);
           renderChart(labels, data, group);
 
           // Paneles de IDs según el grupo activo
+          clearIdsPanels();
           if (group === 'estado') {
-            renderIdsByEstado(idsByEstado);
-            renderIdsByModelo(null);
-            renderIdsByTecnico(null);
+            renderIdsList($idsEstadoWrap, $idsEstadoList, idsByEstado, true);
           } else if (group === 'modelo') {
-            renderIdsByModelo(idsByModelo);
-            renderIdsByEstado(null);
-            renderIdsByTecnico(null);
+            renderIdsList($idsModeloWrap, $idsModeloList, idsByModelo, false);
           } else {
-            renderIdsByTecnico(idsByTecnico);
-            renderIdsByEstado(null);
-            renderIdsByModelo(null);
+            renderIdsList($idsTecnicoWrap, $idsTecnicoList, idsByTecnico, false);
           }
         } catch (e) {
           console.error(e);
           $sinDatos.classList.remove('d-none');
-          renderIdsByEstado(null);
-          renderIdsByModelo(null);
-          renderIdsByTecnico(null);
+          clearIdsPanels();
         }
       }
 
