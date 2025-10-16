@@ -5,7 +5,7 @@ import { supabaseServer } from '../../lib/supabaseServer'
 const Schema = z.object({
   id: z.number().int().positive().optional(),
   componente: z.string().min(1),
-  stock: z.string().nullable().optional(),
+  stock: z.string().nullable().optional(),   // puede venir "∞" para servicio
   categoria: z.string().nullable().optional(),
   precio: z.string().nullable().optional(),
   activo: z.boolean().default(true),
@@ -24,25 +24,36 @@ function normalizarPrecioARS(input?: string | null): string | null {
   return '$' + numero
 }
 
+function esInfinitoStock(s?: string | null): boolean {
+  if (s == null) return false
+  const t = String(s).trim()
+  if (!t) return false
+  return t === '∞' || /^inf/i.test(t)
+}
+
 export const POST: APIRoute = async ({ request }) => {
   try {
     const b = Schema.parse(await request.json())
 
     const componente = b.componente.trim()
     const categoria  = b.categoria ? b.categoria.trim() : null
-    const stockStr   = b.stock ? b.stock.trim() : null
+    const stockStrRaw = (b.stock ?? '').toString().trim()
+
+    const infinito = esInfinitoStock(stockStrRaw)
+    const stockDigits = stockStrRaw.replace(/[^\d-]/g, '')
     const stockNum =
-      stockStr == null || stockStr === ''
-        ? null
-        : Number(stockStr.replace(/[^\d]/g, '')) || 0
-    const stockDigits = stockStr ? stockStr.replace(/[^\d]/g, '') : ''
+      !infinito && stockStrRaw !== '' && stockDigits !== ''
+        ? (Number(stockDigits) || 0)
+        : null
 
     const payload: any = {
       'Componentes presupuestados': componente,
-      'Stock': stockDigits ? stockDigits : null,
+      // si es servicio, guardamos "∞" literal para señalizar infinito
+      'Stock': infinito ? '∞' : (stockDigits ? stockDigits : null),
       categoria,
       'Precio': normalizarPrecioARS(b.precio),
-      activo: stockNum === 0 ? false : (b.activo ?? true),
+      // solo apagamos por stock 0 si NO es servicio
+      activo: (!infinito && stockNum === 0) ? false : (b.activo ?? true),
       actualizado_en: new Date().toISOString(),
     }
 
@@ -71,7 +82,7 @@ export const POST: APIRoute = async ({ request }) => {
     const out = {
       id: data!.id,
       componente: data!['Componentes presupuestados'],
-      stock: data!['Stock'],
+      stock: data!['Stock'],              // puede ser "∞"
       categoria: data!.categoria,
       precio: data!['Precio'],
       activo: data!.activo,

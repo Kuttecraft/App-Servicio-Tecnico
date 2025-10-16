@@ -11,6 +11,14 @@ function parseIntSafe(v?: string | null): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** ¿El stock representa “servicio / infinito”? */
+function esServicioStock(s?: string | null): boolean {
+  if (s == null) return false;
+  const t = String(s).trim();
+  // Tratamos como servicio si es "∞", comienza con "inf" o es un texto sin dígitos (p.ej. "servicio")
+  return t === '∞' || /^inf/i.test(t) || (t !== '' && !/\d/.test(t));
+}
+
 /** Fecha YYYY-MM-DD (zona del server) */
 function hoyAR(): string {
   const now = new Date();
@@ -102,7 +110,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
         }
 
         const byId = new Map<number, { id: number; Stock: string | null; activo: boolean | null }>();
-        for (const r of repRows ?? []) byId.set(Number(r.id), { id: r.id, Stock: (r as any)['Stock'], activo: (r as any).activo });
+        for (const r of repRows ?? []) {
+          byId.set(Number(r.id), { id: r.id, Stock: (r as any)['Stock'], activo: (r as any).activo });
+        }
 
         // 3.4 Validar inactivos (defensa en profundidad)
         const inactivos: number[] = [];
@@ -124,6 +134,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
         for (const [rid, cant] of agregados) {
           const meta = byId.get(rid);
           if (!meta) continue;
+
+          // ⛔ Servicio/infinito: NO descuenta ni cambia "activo"
+          if (esServicioStock(meta.Stock)) continue;
+
           const stockActual = parseIntSafe(meta.Stock);
           const nuevoStock = stockActual - cant;      // 👈 puede ser negativo
           if (nuevoStock < 0) huboNegativos = true;

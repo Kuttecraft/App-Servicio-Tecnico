@@ -5,7 +5,7 @@ type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
 const perfil = (Astro.locals as any)?.perfil as Perfil | undefined;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 
-// 🔐 Si NO es admin, redirigimos temprano a la página de no autorizado.
+// 🔐 Solo admin
 if (!isAdmin) {
   return Astro.redirect('/no-autorizado', 302);
 }
@@ -54,6 +54,11 @@ if (!isAdmin) {
       #status.ok { color: #198754; }
       #status.err { color: #dc3545; }
       #status.info { color: #6c757d; }
+
+      .badge-infinito { vertical-align: middle; }
+      .input-group-text { min-width: 2.2rem; justify-content: center; }
+      .label-inline { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+      .label-inline .small-note { font-size:.8rem; color: var(--bs-secondary-color); }
     </style>
   </head>
   <body>
@@ -70,34 +75,56 @@ if (!isAdmin) {
             <span id="formTitle">Crear repuesto</span>
             <small class="text-muted" id="formHint"></small>
           </div>
+
           <div class="card-body">
             <form id="repuestoForm" class="row g-3">
               <input type="hidden" name="id" />
+
+              <!-- Fila 1: Componente | Stock (+ Controla stock) | Categoría -->
               <div class="col-12 col-md-6">
                 <label class="form-label">Componente</label>
                 <input required name="componente" type="text" class="form-control" />
               </div>
-              <div class="col-6 col-md-3">
-                <label class="form-label">Stock</label>
-                <input name="stock" type="text" class="form-control" />
+
+              <div class="col-12 col-md-3">
+                <label class="form-label label-inline">
+                  <span>Stock</span>
+                  <!-- Toggle Controla stock -->
+                  <span class="d-inline-flex align-items-center gap-2">
+                    <span class="small-note">Controla stock</span>
+                    <div class="form-check form-switch m-0">
+                      <input class="form-check-input" type="checkbox" id="chkControlaStock" checked />
+                    </div>
+                  </span>
+                </label>
+                <input name="stock" type="text" class="form-control" placeholder="Ej: 25" />
               </div>
-              <div class="col-6 col-md-3">
+
+              <div class="col-12 col-md-3">
                 <label class="form-label">Categoría</label>
                 <input name="categoria" type="text" class="form-control" />
               </div>
-              <div class="col-6 col-md-3">
+
+              <!-- Fila 2: Precio | Activo -->
+              <div class="col-12 col-md-3">
                 <label class="form-label">Precio</label>
-                <input name="precio" type="text" class="form-control" placeholder="$0" />
+                <div class="input-group">
+                  <span class="input-group-text">$</span>
+                  <input name="precio" type="text" class="form-control" placeholder="0" />
+                </div>
               </div>
-              <div class="col-6 col-md-3">
+
+              <div class="col-12 col-md-3">
                 <label class="form-label">Activo</label>
                 <select name="activo" class="form-select">
                   <option value="true">Sí</option>
                   <option value="false">No</option>
                 </select>
               </div>
+
+              <!-- Botones -->
               <div class="col-12 d-flex gap-2 align-items-center">
-                <button type="button" id="btnSubmit"  class="btn btn-primary">
+                <button type="button" id="btnSubmit" class="btn btn-primary">
                   <i class="bi bi-check2-circle"></i> <span id="btnSubmitText">Crear</span>
                 </button>
                 <button type="button" id="btnCancel" class="btn btn-outline-secondary">
@@ -199,6 +226,10 @@ if (!isAdmin) {
 
       const thSortables = Array.from(document.querySelectorAll('.th-sortable'));
 
+      // Toggle + input stock
+      const chkControlaStock = document.getElementById('chkControlaStock');
+      const stockInput = form.elements['stock'];
+
       /* ---------- Estado ---------- */
       let page = 1;
       const pageSize = 30;
@@ -248,7 +279,29 @@ if (!isAdmin) {
         });
       }
 
-      /* ---------- Cargar ---------- */
+      // === Controla stock: UI/estado ===
+      function applyControlaStockUI(fromInit=false) {
+        const controla = chkControlaStock.checked;
+        if (controla) {
+          stockInput.removeAttribute('disabled');
+          if (!fromInit && (stockInput.value.trim() === '∞' || /^inf/i.test(stockInput.value.trim()))) {
+            stockInput.value = '';
+          }
+        } else {
+          stockInput.value = '∞';
+          stockInput.setAttribute('disabled','true');
+        }
+      }
+      function inferInitialControlaStock() {
+        const v = (stockInput.value || '').trim();
+        const hasDigits = /\d/.test(v);
+        const isInf = v === '∞' || /^inf/i.test(v);
+        chkControlaStock.checked = hasDigits && !isInf; // si muestra número => controla
+        applyControlaStockUI(true);
+      }
+      chkControlaStock.addEventListener('change', () => applyControlaStockUI());
+
+      /* ---------- Cargar listado ---------- */
       async function cargar() {
         setLoadingRows();
         try {
@@ -275,23 +328,30 @@ if (!isAdmin) {
           if (!Array.isArray(data) || data.length === 0) {
             tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Sin resultados.</td></tr>';
           } else {
-            tbody.innerHTML = data.map(r => `
-              <tr data-id="${r.id}" style="cursor:pointer">
-                <td class="col-id">${r.id}</td>
-                <td>${esc(r.componente)}</td>
-                <td>${esc(r.stock)}</td>
-                <td>${esc(r.categoria)}</td>
-                <td>${esc(r.precio)}</td>
-                <td>${r.activo ? 'Sí' : 'No'}</td>
-                <td>${esc(r.actualizado_en)}</td>
-                <td class="col-acciones">
-                  <div class="actions">
-                    <button class="btn btn-outline-primary btn-sm btn-row-editar" title="Editar"><i class="bi bi-pencil-square"></i></button>
-                    <button class="btn btn-outline-danger  btn-sm btn-row-borrar"  title="Borrar"><i class="bi bi-trash"></i></button>
-                  </div>
-                </td>
-              </tr>
-            `).join('');
+            tbody.innerHTML = data.map(r => {
+              const stock = String(r.stock ?? '');
+              const esServicio = stock === '∞' || /^inf/i.test(stock);
+              const stockHtml = esServicio
+                ? `<span class="badge text-bg-secondary">Servicio (∞)</span>`
+                : esc(stock);
+              return `
+                <tr data-id="${r.id}" style="cursor:pointer">
+                  <td class="col-id">${r.id}</td>
+                  <td>${esc(r.componente)}</td>
+                  <td>${stockHtml}</td>
+                  <td>${esc(r.categoria)}</td>
+                  <td>${esc(r.precio)}</td>
+                  <td>${r.activo ? 'Sí' : 'No'}</td>
+                  <td>${esc(r.actualizado_en)}</td>
+                  <td class="col-acciones">
+                    <div class="actions">
+                      <button class="btn btn-outline-primary btn-sm btn-row-editar" title="Editar"><i class="bi bi-pencil-square"></i></button>
+                      <button class="btn btn-outline-danger  btn-sm btn-row-borrar"  title="Borrar"><i class="bi bi-trash"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join('');
           }
 
           const from = total ? (page - 1) * pageSize + 1 : 0;
@@ -311,7 +371,7 @@ if (!isAdmin) {
         }
       }
 
-      /* ---------- Categorías (auto-aplica si cambia la selección) ---------- */
+      /* ---------- Categorías ---------- */
       async function cargarCategorias(keepSelected = true) {
         const selectedBefore = keepSelected ? (categoria?.value ?? '') : '';
         const prevValue = categoria.value ?? '';
@@ -348,19 +408,18 @@ if (!isAdmin) {
         }
       }
 
-      /* ---------- Orden por encabezado ---------- */
+      /* ---------- Orden ---------- */
       thSortables.forEach(th => {
         th.addEventListener('click', () => {
           const field = th.getAttribute('data-field');
           if (!field) return;
           if (sortBy === field) sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
           else { sortBy = field; sortDir = 'asc'; }
-          page = 1;
-          cargar();
+          page = 1; cargar();
         });
       });
 
-      /* ---------- Listeners (auto-aplican) ---------- */
+      /* ---------- Listeners ---------- */
       const autoSearch = debounce(() => { page = 1; cargar(); }, 250);
       q?.addEventListener('input', () => { toggleClearBtn(); autoSearch(); });
       q?.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
@@ -395,7 +454,7 @@ if (!isAdmin) {
         if (btnEdit) {
           form.elements['id'].value           = String(idNum);
           form.elements['componente'].value   = tds[1].textContent.trim();
-          form.elements['stock'].value        = tds[2].textContent.trim();
+          form.elements['stock'].value        = tds[2].textContent.replace('Servicio (∞)','∞').trim();
           form.elements['categoria'].value    = tds[3].textContent.trim();
           form.elements['precio'].value       = tds[4].textContent.trim();
           form.elements['activo'].value       = (tds[5].textContent.includes('Sí')).toString();
@@ -405,6 +464,9 @@ if (!isAdmin) {
           formHint.textContent = `ID #${idNum}`;
           document.getElementById('cardForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
           form.elements['componente'].focus();
+
+          // ajustar UI de controla stock según valor actual
+          inferInitialControlaStock();
           return;
         }
 
@@ -461,24 +523,32 @@ if (!isAdmin) {
         formHint.textContent = '';
         form.elements['id'].value = '';
         setStatus('');
+        // por defecto: controla stock (producto)
+        chkControlaStock.checked = true;
+        applyControlaStockUI(true);
       }
 
       function getPayloadFromForm(requireId=false) {
         const fd = new FormData(form);
         const idStr = String(fd.get('id') || '').trim();
         const id = idStr ? Number(idStr) : undefined;
-        if (requireId && !id) throw new Error('Seleccioná un repuesto (clic en una fila)');
+
+        // stock según toggle
+        const controla = chkControlaStock.checked;
+        const stockRaw = String(fd.get('stock') || '').trim();
+        const stock = controla ? (stockRaw || null) : '∞';
+
         return {
           id,
           componente: String(fd.get('componente') || '').trim(),
-          stock: String(fd.get('stock') || '').trim() || null,
+          stock,
           categoria: String(fd.get('categoria') || '').trim() || null,
           precio: String(fd.get('precio') || '').trim() || null,
           activo: String(fd.get('activo')) === 'true',
         };
       }
 
-      btnSubmit.addEventListener('click', async () => {
+      const btnSubmitHandler = async () => {
         const editando = !!form.elements['id'].value;
         btnSubmit.disabled = true;
         try {
@@ -503,11 +573,11 @@ if (!isAdmin) {
         } finally {
           btnSubmit.disabled = false;
         }
-      });
-
+      };
+      btnSubmit.addEventListener('click', btnSubmitHandler);
       btnCancel.addEventListener('click', () => setCreateMode());
 
-      // Init (categorías -> lista)
+      // Init
       setCreateMode();
       await cargarCategorias(false);
       updateSortUI();
