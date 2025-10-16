@@ -15,22 +15,25 @@ const defaultMonth = `${yyyy}-${mm}`;
 ---
 
 <BasePrivateLayout>
-  <div class="container mt-4" style="max-width: 980px;">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+  <div class="container mt-4" style="max-width: 1200px;"> <!-- ⬆️ más ancho -->
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
       <h1 class="h5 m-0">Mis estadísticas (técnico)</h1>
-
       <div class="d-flex align-items-center gap-2 flex-wrap">
         <label for="mes" class="form-label m-0">Mes</label>
-        <input id="mes" type="month" class="form-control" style="min-width: 180px;" value={defaultMonth} />
+        <input id="mes" type="month" class="form-control" style="min-width: 200px;" value={defaultMonth} />
         <button id="btn-actualizar" class="btn btn-primary">Actualizar</button>
       </div>
     </div>
 
+    <!-- Card -->
     <div class="card shadow-sm">
       <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between">
-          <h2 class="h6 text-muted mb-3">Técnico: <code>{tecnicoLocal}</code></h2>
-          <div id="badge-reparadas" class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:.9rem;">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h2 class="h6 text-muted m-0">Técnico: <code>{tecnicoLocal}</code></h2>
+          <div id="badge-reparadas"
+               class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2"
+               style="font-size:.9rem;">
             Cargando…
           </div>
         </div>
@@ -38,14 +41,16 @@ const defaultMonth = `${yyyy}-${mm}`;
         <div id="sin-datos" class="alert alert-warning d-none">No hay datos para mostrar.</div>
 
         <div class="table-responsive">
-          <table class="table table-sm align-middle">
-            <thead>
+          <table class="table table-sm table-striped table-hover table-compact align-middle mb-0">
+            <thead class="table-light">
               <tr>
-                <th>ID / Cliente</th> <!-- 👈 ahora combinados -->
-                <th>Modelo</th>
-                <th>Estado</th>
-                <th>Fecha</th>
-                <th class="text-center">¿Reparada?</th>
+                <th class="col-id">ID / Cliente</th>
+                <th style="width: 20%;">Modelo</th>
+                <th class="d-none d-sm-table-cell" style="width:12%;">Estado</th>
+                <th class="col-date d-none d-md-table-cell" style="width:12%;">Fecha presupuesto</th>
+                <th class="col-date d-none d-md-table-cell" style="width:12%;">Fecha lista</th>
+                <th class="col-num text-end" style="width:10%;">Tardanza (días)</th>
+                <th class="col-check text-center" style="width:8%;">¿Reparada?</th>
               </tr>
             </thead>
             <tbody id="tbody"></tbody>
@@ -62,18 +67,39 @@ const defaultMonth = `${yyyy}-${mm}`;
   </div>
 
   <style is:inline>
+    /* --- Layout general --- */
     code { background:#f6f8fa; padding:.1rem .35rem; border-radius:.25rem; }
-    .badge { padding:.35rem .5rem; }
+    .badge { padding:.35rem .6rem; }
+
+    /* --- Tabla más cómoda --- */
+    .table-compact :is(th,td) {
+      padding:.55rem .7rem;
+      vertical-align: middle;
+    }
+    .table thead th {
+      font-weight:600;
+      white-space: nowrap;
+    }
+    .col-id{ white-space:nowrap; width:1%; }
+    .col-date{ font-variant-numeric: tabular-nums; white-space:nowrap; }
+    .col-num{ font-variant-numeric: tabular-nums; }
+    .col-check{ width:6rem; text-align:center; }
+
+    /* --- Chip ID + cliente --- */
     .id-cell { white-space: nowrap; }
     .id-chip {
       font-variant-numeric: tabular-nums;
-      margin-right: .5rem;
+      margin-right: .35rem;
     }
     .cliente-badge {
       font-size: .75rem;
       border: 1px solid rgba(0,0,0,.08);
+      background:#f8f9fa;
+      color:#333;
     }
-    @media (max-width: 576px) {
+    .id-wrap{ gap:.35rem; display:inline-flex; align-items:center; }
+
+    @media (max-width: 768px) {
       .id-wrap { flex-direction: column; align-items: flex-start; gap:.25rem; }
     }
   </style>
@@ -93,7 +119,6 @@ const defaultMonth = `${yyyy}-${mm}`;
           const $sin = document.getElementById('sin-datos');
           const $badge = document.getElementById('badge-reparadas');
           const $totalFooter = document.getElementById('total-reparadas');
-
           $tbody.innerHTML = '';
 
           if (!data.items || !data.items.length) {
@@ -107,19 +132,21 @@ const defaultMonth = `${yyyy}-${mm}`;
 
           data.items.forEach((r) => {
             const tr = document.createElement('tr');
-
-            // ID + Cliente en la misma celda
             const cliente = (r.cliente || '—').toString();
+            const tardanza = (typeof r.tardanza_dias === 'number') ? r.tardanza_dias : '—';
+
             tr.innerHTML = `
               <td class="id-cell">
-                <div class="d-flex align-items-center gap-2 id-wrap">
-                  <a class="id-chip" href="/detalle/${r.id}" title="Ver ticket ${r.id}">${r.id}</a>
+                <div class="id-wrap">
+                  <a class="id-chip fw-semibold text-decoration-none" href="/detalle/${r.id}" title="Ver ticket ${r.id}">${r.id}</a>
                   <span class="badge bg-light text-dark cliente-badge" title="Cliente">${cliente}</span>
                 </div>
               </td>
               <td>${r.modelo}</td>
-              <td>${r.estado}</td>
-              <td>${r.fecha || '—'}</td>
+              <td class="d-none d-sm-table-cell">${r.estado}</td>
+              <td class="d-none d-md-table-cell">${r.fecha_presupuesto || '—'}</td>
+              <td class="d-none d-md-table-cell">${r.fecha_lista || '—'}</td>
+              <td class="text-end">${tardanza}</td>
               <td class="text-center">${r.reparada ? '✅' : '—'}</td>
             `;
             $tbody.appendChild(tr);

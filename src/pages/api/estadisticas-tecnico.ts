@@ -1,4 +1,3 @@
-// src/pages/api/estadisticas-tecnico.ts
 import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
 
@@ -19,7 +18,7 @@ type Row = {
   tecnicos?: any[] | { email?: string | null } | null;
 
   cliente_id?: number | null;
-  clientes?: any[] | { cliente?: string | null } | null; // 👈 join cliente
+  clientes?: any[] | { cliente?: string | null } | null;
 };
 
 /** Estados que consideramos como “impresora reparada” */
@@ -65,6 +64,47 @@ function patronesMes(year: number, month: number) {
   return patterns.map((p) => `marca_temporal.ilike.${p}`).join(',');
 }
 
+/** Normaliza varias formas de fecha a 'YYYY-MM-DD' (best-effort) */
+function normDateLite(value?: string | null): string | null {
+  if (!value) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  const onlyDate = s.split('T')[0].split(' ')[0];
+  let m = onlyDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = onlyDate.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m = onlyDate.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (m) {
+    const a = parseInt(m[1],10), b = parseInt(m[2],10), yyyy = m[3];
+    let dd:number, mm:number;
+    if (b > 12 && a <= 12) { mm = a; dd = b; }
+    else if (a > 12 && b <= 12) { dd = a; mm = b; }
+    else { mm = a; dd = b; }
+    return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+  }
+  const d = new Date(onlyDate);
+  if (!isNaN(d.getTime())) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return null;
+}
+
+/** Diferencia en días de calendario entre dos fechas 'YYYY-MM-DD' (cuenta fines de semana) */
+function diffDays(ymdStart?: string | null, ymdEnd?: string | null): number | null {
+  if (!ymdStart || !ymdEnd) return null;
+  const [y1,m1,d1] = ymdStart.split('-').map(Number);
+  const [y2,m2,d2] = ymdEnd.split('-').map(Number);
+  const a = new Date(Date.UTC(y1, m1-1, d1));
+  const b = new Date(Date.UTC(y2, m2-1, d2));
+  const ms = b.getTime() - a.getTime();
+  if (!Number.isFinite(ms)) return null;
+  return Math.round(ms / 86400000); // días de calendario (puede ser 0 o negativo si fuera el caso)
+}
+
 /** Consulta tickets con joins a impresoras, tecnicos y clientes */
 async function fetchTickets(orFecha: string | null) {
   let qb = supabase
@@ -88,6 +128,25 @@ async function fetchTickets(orFecha: string | null) {
   const { data, error } = await qb;
   if (error) throw new Error(error.message);
   return (data as Row[]) || [];
+}
+
+/** Trae el último presupuesto por ticket (por id desc) y retorna mapa ticket_id->fecha_presupuesto */
+async function fetchUltimosPresupuestos(ticketIds: number[]) {
+  if (!ticketIds.length) return new Map<number, string | null>();
+  const { data, error } = await supabase
+    .from('presupuestos')
+    .select('id, ticket_id, fecha_presupuesto')
+    .in('ticket_id', ticketIds)
+    .order('id', { ascending: false });
+  if (error) throw new Error(error.message);
+  const map = new Map<number, string | null>();
+  for (const row of (data || [])) {
+    const tid = Number((row as any).ticket_id);
+    if (!map.has(tid)) {
+      map.set(tid, (row as any).fecha_presupuesto ?? null); // primer registro (id más alto)
+    }
+  }
+  return map;
 }
 
 /**
@@ -127,7 +186,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
       year = now.getFullYear(); month = now.getMonth() + 1;
     }
 
-    // 3) Fetch
+    // 3) Fetch tickets
     let rows: Row[] = [];
     let intento = 'mes';
     if (!all) {
@@ -138,37 +197,49 @@ export const GET: APIRoute = async ({ url, locals }) => {
       intento = 'historico(force)';
     }
 
-    // 4) Filtrar por técnico (local-part del email del join `tecnicos`)
+    // 4) Filtrar por técnico
     const filasDelTecnico = rows.filter((r) => {
       const tec = normalizeJoin(r.tecnicos) as any;
       const email = tec?.email || null;
       return localPart(email) === tecnicoLocal;
     });
 
-    // 5) Quedarnos con filas que refieren a impresora
+    // 5) Filtrar impresoras
     const filasImpresoras = filasDelTecnico.filter(esImpresora);
 
-    // 6) Map a estructura simple (agregamos `cliente`)
+    // 6) Traer último presupuesto por ticket (para fecha_presupuesto)
+    const ids = filasImpresoras.map(r => r.id);
+    const mapPres = await fetchUltimosPresupuestos(ids);
+
+    // 7) Map a estructura simple con fechas y tardanza
     const items = filasImpresoras.map((r) => {
       const imp = normalizeJoin(r.impresoras) as any;
       const cli = normalizeJoin(r.clientes) as any;
       const modelo = imp?.modelo || r.maquina_reparada || 'Sin modelo';
       const cliente = cli?.cliente || '—';
+
+      const fechaPresRaw = mapPres.get(r.id) ?? null;
+      const fechaPres = normDateLite(fechaPresRaw);
+      const fechaLista = normDateLite(r.fecha_de_reparacion || null);
+      const tardanzaDias = (fechaPres && fechaLista) ? diffDays(fechaPres, fechaLista) : null;
+
       return {
         id: r.id,
         modelo,
         estado: r.estado || 'Sin estado',
-        fecha: r.marca_temporal || '',
+        fecha_presupuesto: fechaPres,     // 👈 nueva
+        fecha_lista: fechaLista,          // 👈 nueva
+        tardanza_dias: tardanzaDias,      // 👈 nueva (cuenta fines)
         reparada: esReparada(r),
-        cliente, // 👈 agregado
+        cliente,
       };
     });
 
-    // 7) Agregados
+    // 8) Agregados
     const totalImpresoras = items.length;
     const totalImpresorasReparadas = items.filter((i) => i.reparada).length;
 
-    // 8) Respuesta
+    // 9) Respuesta
     return new Response(JSON.stringify({
       tecnico: tecnicoLocal,
       year: (!all && intento === 'mes') ? year : null,
@@ -189,7 +260,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
             marca_temporal: r.marca_temporal,
             estado: r.estado,
             impresora_id: r.impresora_id,
-            maquina_reparada: r.maquina_reparada
+            maquina_reparada: r.maquina_reparada,
+            fecha_de_reparacion: r.fecha_de_reparacion
           }))
         }
       } : {})
