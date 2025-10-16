@@ -1,40 +1,54 @@
 // src/pages/api/maquinaLista.ts
 import type { APIRoute } from 'astro';
+import { supabaseServer } from '../../lib/supabaseServer';
 import { supabase } from '../../lib/supabase';
 import { resolverAutor } from '../../lib/resolverAutor';
 
+/** Convierte string "123" o "1.234" a número entero seguro */
+function parseIntSafe(v?: string | null): number {
+  if (!v) return 0;
+  const num = Number(String(v).replace(/[^\d-]/g, ''));
+  return Number.isFinite(num) ? num : 0;
+}
+
+/** Fecha YYYY-MM-DD en zona AR */
+function hoyAR(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export const POST: APIRoute = async ({ request, locals }) => {
   try {
-    // Parseamos el querystring para obtener el id del ticket (?id=123)
+    // === 0) Obtener ID de ticket ===
     const url = new URL(request.url);
     const id = url.searchParams.get('id');
-
     if (!id) {
-      // Sin ID no podemos continuar
       return new Response(JSON.stringify({ error: 'Falta parámetro id' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
     }
+    const ticketId = Number(id);
 
-    // 0) Resolver el técnico actual desde `locals` (inyectado por tu auth/middleware)
+    // === 1) Resolver técnico actual ===
     const autor = await resolverAutor(locals);
     if (!autor) {
-      // Si no tenemos un autor autenticado, denegamos
       return new Response(JSON.stringify({ error: 'No se pudo determinar el técnico actual' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       });
     }
     if (autor.activo === false) {
-      // Bloqueamos técnicos inactivos
       return new Response(JSON.stringify({ error: 'El técnico actual no está activo' }), {
         status: 403,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    // 1) Confirmamos datos del técnico en BD (para obtener email/nombre reales)
+    // === 2) Confirmar técnico en BD ===
     const { data: tecRow, error: tecErr } = await supabase
       .from('tecnicos')
       .select('id, email, nombre, apellido')
@@ -48,51 +62,112 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
     }
 
-    // Derivamos un "display name" corto a partir del email (local-part)
-    const email = String(tecRow.email || '').trim();
-    const localPart = email.includes('@')
-      ? email.split('@')[0]
-      : (String(tecRow.nombre || '').trim() || 'tecnico');
+    // === 3) Buscar presupuesto más reciente del ticket ===
+    const { data: presu, error: presErr } = await supabaseServer
+      .from('presupuestos')
+      .select('id')
+      .eq('ticket_id', ticketId)
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    // Fecha/hora actual en ISO (se guardará en fecha_de_reparacion)
-    const nowIso = new Date().toISOString();
+    if (presErr) {
+      return new Response(JSON.stringify({ error: presErr.message }), { status: 500 });
+    }
 
-    // 2) Actualizar el ticket:
-    //    - estado → 'Lista'
-    //    - fecha_de_reparacion → ahora (ISO)
-    //    - tecnico_id → id del técnico que ejecuta la acción
+    if (presu?.id) {
+      const presupuestoId = presu.id;
+
+      // === 4) Obtener ítems de repuestos de ese presupuesto ===
+      const { data: items, error: itemsErr } = await supabaseServer
+        .from('presupuesto_repuestos')
+        .select('repuesto_id, cantidad')
+        .eq('presupuesto_id', presupuestoId);
+
+      if (itemsErr) {
+        return new Response(JSON.stringify({ error: itemsErr.message }), { status: 500 });
+      }
+
+      if (Array.isArray(items) && items.length > 0) {
+        // Agrupar cantidades por repuesto_id
+        const agregados = new Map<number, number>();
+        for (const it of items) {
+          const rid = Number(it.repuesto_id);
+          const cant = Number(it.cantidad) || 1;
+          agregados.set(rid, (agregados.get(rid) ?? 0) + cant);
+        }
+
+        // === 5) Descontar stock uno por uno ===
+        for (const [repuestoId, cantidad] of agregados) {
+          const { data: repRow, error: repErr } = await supabaseServer
+            .from('repuestos_csv')
+            .select('id, "Stock", activo')
+            .eq('id', repuestoId)
+            .maybeSingle();
+
+          if (repErr || !repRow) continue;
+
+          const stockActual = parseIntSafe(repRow['Stock']);
+          const nuevoStock = Math.max(0, stockActual - cantidad);
+
+          // Evitar negativos
+          if (stockActual < cantidad) {
+            return new Response(
+              JSON.stringify({
+                error: `Stock insuficiente para repuesto ID ${repuestoId} (stock actual ${stockActual}, necesita ${cantidad})`,
+              }),
+              { status: 409, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+
+          await supabaseServer
+            .from('repuestos_csv')
+            .update({
+              Stock: String(nuevoStock),
+              activo: nuevoStock > 0 ? repRow.activo : false,
+              actualizado_en: new Date().toISOString(),
+            })
+            .eq('id', repuestoId);
+        }
+      }
+    }
+
+    // === 6) Actualizar ticket a "Lista" ===
+    const fechaHoy = hoyAR();
     const { error: updErr } = await supabase
       .from('tickets_mian')
       .update({
         estado: 'Lista',
-        fecha_de_reparacion: nowIso,
+        fecha_de_reparacion: fechaHoy,
         tecnico_id: tecRow.id,
       })
-      .eq('id', id);
+      .eq('id', ticketId);
 
     if (updErr) {
-      // Si falló la actualización, devolvemos 500 con el mensaje de error
       return new Response(JSON.stringify({ error: updErr.message }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    // 3) Agregar comentario automático (best-effort: si falla, no bloquea el flujo)
+    // === 7) Registrar comentario automático (no bloqueante) ===
+    const email = String(tecRow.email || '').trim();
+    const localPart = email.includes('@')
+      ? email.split('@')[0]
+      : (tecRow.nombre || 'tecnico');
     try {
       await supabase.from('ticket_comentarios').insert({
-        ticket_id: Number(id),
+        ticket_id: ticketId,
         autor_id: tecRow.id,
         mensaje: `${localPart} marcó Máquina Lista`,
       });
     } catch {
-      /* no bloquear en caso de error al comentar */
+      /* no bloquear si falla */
     }
 
-    // 4) Redirigir al detalle del ticket
-    return new Response(null, { status: 303, headers: { Location: `/detalle/${id}` } });
+    // === 8) Redirigir ===
+    return new Response(null, { status: 303, headers: { Location: `/detalle/${ticketId}` } });
   } catch (e: any) {
-    // Fallback de error inesperado
     return new Response(JSON.stringify({ error: e?.message || String(e) }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
