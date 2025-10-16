@@ -1,25 +1,13 @@
 ---
-/**
- * Página: estadisticas-tecnico.astro
- * Muestra las estadísticas del técnico logueado (basadas en /api/estadisticas-tecnico).
- * - Requiere sesión: si no hay email en locals → redirige a /no-autorizado.
- * - Toma el local-part del email (antes de @) como identificador del técnico.
- * - Renderiza tabla con items (id, modelo, estado, fecha, reparada).
- * - Badge y pie indican total de impresoras reparadas.
- * - Selector de mes visible (UI), aunque el fetch usa all=true (histórico).
- */
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 
-// ⚠️ Requiere sesión (si no hay email, redirige)
 const perfil = (Astro.locals as any)?.perfil || {};
 const email: string | undefined = perfil?.email || (Astro.locals as any)?.user?.email;
 if (!email) {
   return Astro.redirect('/no-autorizado');
 }
-// local-part del email en minúsculas → técnico
 const tecnicoLocal = String(email).split('@')[0].toLowerCase();
 
-// Valor inicial para el <input type="month"> (solo visual)
 const now = new Date();
 const yyyy = now.getFullYear();
 const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -28,7 +16,6 @@ const defaultMonth = `${yyyy}-${mm}`;
 
 <BasePrivateLayout>
   <div class="container mt-4" style="max-width: 980px;">
-    <!-- Encabezado con selector de mes y botón actualizar -->
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
       <h1 class="h5 m-0">Mis estadísticas (técnico)</h1>
 
@@ -39,28 +26,22 @@ const defaultMonth = `${yyyy}-${mm}`;
       </div>
     </div>
 
-    <!-- Tarjeta contenedora de la tabla/estado -->
     <div class="card shadow-sm">
       <div class="card-body">
         <div class="d-flex align-items-center justify-content-between">
           <h2 class="h6 text-muted mb-3">Técnico: <code>{tecnicoLocal}</code></h2>
-          <!-- Badge total reparadas (se actualiza por JS) -->
           <div id="badge-reparadas" class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:.9rem;">
             Cargando…
           </div>
         </div>
 
-        <!-- Mensaje sin datos (lo muestra JS si la API responde vacío) -->
-        <div id="sin-datos" class="alert alert-warning d-none">
-          No hay datos para mostrar.
-        </div>
+        <div id="sin-datos" class="alert alert-warning d-none">No hay datos para mostrar.</div>
 
-        <!-- Tabla de resultados -->
         <div class="table-responsive">
           <table class="table table-sm align-middle">
             <thead>
               <tr>
-                <th>ID</th>
+                <th>ID / Cliente</th> <!-- 👈 ahora combinados -->
                 <th>Modelo</th>
                 <th>Estado</th>
                 <th>Fecha</th>
@@ -71,7 +52,6 @@ const defaultMonth = `${yyyy}-${mm}`;
           </table>
         </div>
 
-        <!-- Pie con total de impresoras reparadas -->
         <footer id="footer" class="mt-3 pt-3 border-top small">
           <strong>Pie de página:</strong>
           &nbsp;Total de <em>impresoras</em> reparadas por <code>{tecnicoLocal}</code>:
@@ -81,30 +61,29 @@ const defaultMonth = `${yyyy}-${mm}`;
     </div>
   </div>
 
-  <!-- Estilos mínimos para código/badges -->
   <style is:inline>
     code { background:#f6f8fa; padding:.1rem .35rem; border-radius:.25rem; }
-    .badge { padding:.4rem .6rem; }
+    .badge { padding:.35rem .5rem; }
+    .id-cell { white-space: nowrap; }
+    .id-chip {
+      font-variant-numeric: tabular-nums;
+      margin-right: .5rem;
+    }
+    .cliente-badge {
+      font-size: .75rem;
+      border: 1px solid rgba(0,0,0,.08);
+    }
+    @media (max-width: 576px) {
+      .id-wrap { flex-direction: column; align-items: flex-start; gap:.25rem; }
+    }
   </style>
 
-  <!--
-    Script inline:
-    - Lee el técnico desde data-atributo (evita problemas de TS con variables del scope).
-    - Llama a /api/estadisticas-tecnico?tecnico=:localPart&all=true
-    - Pinta filas en la tabla, actualiza badge y pie.
-    - El selector de mes/botón “Actualizar” simplemente re-dispara la carga (hoy no filtra por mes).
-  -->
-  <script
-    is:inline
-    data-tecnico={tecnicoLocal}
-  >
+  <script is:inline data-tecnico={tecnicoLocal}>
     (function () {
-      // Técnico recibido desde el atributo data-tecnico
       const tecnico = (document.currentScript?.dataset?.tecnico || '').toString();
 
       async function cargar() {
         try {
-          // Histórico completo (all=true). Si querés filtrar por mes, podés extender la API.
           const url = `/api/estadisticas-tecnico?tecnico=${encodeURIComponent(tecnico)}&all=true`;
           const res = await fetch(url);
           if (!res.ok) throw new Error('Error consultando estadísticas del técnico');
@@ -117,7 +96,6 @@ const defaultMonth = `${yyyy}-${mm}`;
 
           $tbody.innerHTML = '';
 
-          // Sin datos → mostrar alerta y resetear contadores
           if (!data.items || !data.items.length) {
             $sin.classList.remove('d-none');
             $badge.textContent = '0 reparadas';
@@ -127,11 +105,18 @@ const defaultMonth = `${yyyy}-${mm}`;
             $sin.classList.add('d-none');
           }
 
-          // Render de filas
           data.items.forEach((r) => {
             const tr = document.createElement('tr');
+
+            // ID + Cliente en la misma celda
+            const cliente = (r.cliente || '—').toString();
             tr.innerHTML = `
-              <td><a href="/detalle/${r.id}" title="Ver ticket ${r.id}">${r.id}</a></td>
+              <td class="id-cell">
+                <div class="d-flex align-items-center gap-2 id-wrap">
+                  <a class="id-chip" href="/detalle/${r.id}" title="Ver ticket ${r.id}">${r.id}</a>
+                  <span class="badge bg-light text-dark cliente-badge" title="Cliente">${cliente}</span>
+                </div>
+              </td>
               <td>${r.modelo}</td>
               <td>${r.estado}</td>
               <td>${r.fecha || '—'}</td>
@@ -140,7 +125,6 @@ const defaultMonth = `${yyyy}-${mm}`;
             $tbody.appendChild(tr);
           });
 
-          // Totales / badge
           const totalRep = data.totalImpresorasReparadas || 0;
           $badge.textContent = totalRep + ' reparada' + (totalRep === 1 ? '' : 's');
           $totalFooter.textContent = ' ' + totalRep;
@@ -150,7 +134,6 @@ const defaultMonth = `${yyyy}-${mm}`;
         }
       }
 
-      // Controles: hoy actúan como “refrescar”
       document.getElementById('btn-actualizar')?.addEventListener('click', cargar);
       document.getElementById('mes')?.addEventListener('change', cargar);
       window.addEventListener('DOMContentLoaded', cargar);

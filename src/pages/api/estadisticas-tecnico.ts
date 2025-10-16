@@ -1,11 +1,9 @@
-// src/pages/api/estadisticas-Tecnicos.ts
+// src/pages/api/estadisticas-tecnico.ts
 import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
 
 /**
- * Row: tipo de fila que devuelve el SELECT con joins a impresoras y tecnicos.
- * Notas:
- * - `impresoras` y `tecnicos` pueden venir como array (por el join) o como objeto único.
+ * Row: tipo de fila que devuelve el SELECT con joins a impresoras, tecnicos y clientes.
  */
 type Row = {
   id: number;
@@ -13,38 +11,32 @@ type Row = {
   estado?: string | null;
   fecha_de_reparacion?: string | null;
   maquina_reparada?: string | null;
+
   impresora_id?: number | null;
   impresoras?: any[] | { modelo?: string | null } | null;
+
   tecnico_id?: number | null;
-  tecnicos?: any[] | { email?: string | null } | null; // 👈 join
+  tecnicos?: any[] | { email?: string | null } | null;
+
+  cliente_id?: number | null;
+  clientes?: any[] | { cliente?: string | null } | null; // 👈 join cliente
 };
 
 /** Estados que consideramos como “impresora reparada” */
 const ESTADOS_REPARADA = ['Lista', 'Entregada', 'Archivada'];
 
-/**
- * localPart: toma un email y devuelve la parte local (antes de @).
- * - Limpia caracteres invisibles y espacios raros.
- * - Si no trae '@', devuelve el string tal cual normalizado.
- */
+/** localPart del email */
 const localPart = (email?: string | null) => {
   let e = String(email || '').toLowerCase();
-  // limpia espacios y caracteres invisibles raros
   e = e.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
   return e.includes('@') ? e.split('@')[0] : e;
 };
 
-/**
- * normalizeJoin: algunos joins de Supabase pueden venir como array de 0..n;
- * esta helper normaliza a un único objeto o null.
- */
+/** Normaliza joins (array/objeto) a un objeto o null */
 const normalizeJoin = <T,>(val: T | T[] | null | undefined): T | null =>
   Array.isArray(val) ? ((val[0] ?? null) as any) : ((val as any) ?? null);
 
-/**
- * esImpresora: determina si una fila corresponde a una impresora identificable,
- * ya sea porque el join de `impresoras` trae un modelo o porque hay texto en `maquina_reparada`.
- */
+/** Heurística: fila refiere a una impresora identificable */
 const esImpresora = (row: Row) => {
   const imp = normalizeJoin(row.impresoras) as any;
   const tieneJoin = !!imp?.modelo;
@@ -52,26 +44,14 @@ const esImpresora = (row: Row) => {
   return tieneJoin || tieneTexto;
 };
 
-/**
- * esReparada: heurística para marcar una impresora como reparada.
- * - Si el estado está en ESTADOS_REPARADA → true
- * - Si hay fecha_de_reparacion no vacía → true
- */
+/** Heurística: está reparada por estado o por fecha_de_reparacion */
 const esReparada = (row: Row) => {
   const est = String(row.estado || '').trim();
   if (ESTADOS_REPARADA.includes(est)) return true;
   return !!String(row.fecha_de_reparacion || '').trim();
 };
 
-/**
- * patronesMes: arma una lista de patrones OR para filtrar por `marca_temporal`
- * admitiendo múltiples formatos de fecha:
- * - "M/%/YYYY%" (sin pad) y "MM/%/YYYY%" (con pad) — cuando se guarda como M/D/YYYY
- * - "YYYY-MM-%" — estilo ISO parcial
- * - "YYYY/MM/%" — estilo con barras
- *
- * Devuelve un string para usar en `qb.or(...)` de Supabase (campos con `ilike`).
- */
+/** Patrones para filtrar por mes contra `marca_temporal` (varios formatos) */
 function patronesMes(year: number, month: number) {
   const y = String(year);
   const mNoPad = String(month);
@@ -85,11 +65,7 @@ function patronesMes(year: number, month: number) {
   return patterns.map((p) => `marca_temporal.ilike.${p}`).join(',');
 }
 
-/**
- * fetchTickets: consulta tickets con joins a impresoras y tecnicos.
- * - Si `orFecha` viene con patrones, los aplica via qb.or().
- * - Devuelve la lista tipada como Row[].
- */
+/** Consulta tickets con joins a impresoras, tecnicos y clientes */
 async function fetchTickets(orFecha: string | null) {
   let qb = supabase
     .from('tickets_mian')
@@ -102,7 +78,9 @@ async function fetchTickets(orFecha: string | null) {
       impresora_id,
       impresoras:impresora_id ( modelo ),
       tecnico_id,
-      tecnicos:tecnico_id ( email )
+      tecnicos:tecnico_id ( email ),
+      cliente_id,
+      clientes:cliente_id ( cliente )
     `);
 
   if (orFecha) qb = qb.or(orFecha);
@@ -113,27 +91,17 @@ async function fetchTickets(orFecha: string | null) {
 }
 
 /**
- * GET /api/estadisticas-Tecnicos
- * Parámetros:
- * - tecnico: (opcional) parte local del email del técnico. Si no se envía, se usa el email de la sesión (locals).
- * - all: "true" para ignorar periodo y traer histórico completo.
- * - year, month: numéricos (si no se pasan y no hay 'all', se usa el mes actual).
- * - period: "YYYY-MM" alternativo a (year, month).
- * - debug: "true" para incluir metadatos de depuración.
- *
- * Respuesta:
- * {
- *   tecnico, year?, month?,
- *   totalImpresoras, totalImpresorasReparadas,
- *   items: [{ id, modelo, estado, fecha, reparada }, ...],
- *   debug?: { intento, totRowsRaw, totRowsDelTecnico, sample: [...] }
- * }
+ * GET /api/estadisticas-tecnico
+ * Query:
+ * - tecnico: local-part del email (opcional; si no, toma de la sesión)
+ * - all=true | year, month | period=YYYY-MM
+ * - debug=true para metadata
  */
 export const GET: APIRoute = async ({ url, locals }) => {
   try {
     const debug = (url.searchParams.get('debug') || '').toLowerCase() === 'true';
 
-    // 1) Determinar técnico: querystring `tecnico` o parte local del email de sesión
+    // 1) Técnico (query > sesión)
     const qTec = (url.searchParams.get('tecnico') || '').trim().toLowerCase();
     const perfil = (locals as any)?.perfil || {};
     const emailSesion: string | undefined = perfil?.email || (locals as any)?.user?.email;
@@ -144,24 +112,22 @@ export const GET: APIRoute = async ({ url, locals }) => {
       });
     }
 
-    // 2) Determinar periodo (mes/año) o todo histórico
+    // 2) Periodo
     const all = (url.searchParams.get('all') || '').toLowerCase() === 'true';
     let year = Number(url.searchParams.get('year'));
     let month = Number(url.searchParams.get('month'));
     const period = url.searchParams.get('period');
     const now = new Date();
 
-    // Permite "period=YYYY-MM" como alternativa
     if ((!year || !month) && period && /^\d{4}-\d{2}$/.test(period)) {
       const [y, m] = period.split('-').map(Number);
       year = y; month = m;
     }
-    // Si no es all, y el periodo es inválido, usamos el mes actual
     if (!all && (!year || !month || month < 1 || month > 12)) {
       year = now.getFullYear(); month = now.getMonth() + 1;
     }
 
-    // 3) Fetch: primer intento por mes; si no trae filas, nos vamos a histórico
+    // 3) Fetch
     let rows: Row[] = [];
     let intento = 'mes';
     if (!all) {
@@ -172,34 +138,37 @@ export const GET: APIRoute = async ({ url, locals }) => {
       intento = 'historico(force)';
     }
 
-    // 4) Filtrado por técnico usando el email del join `tecnicos`
+    // 4) Filtrar por técnico (local-part del email del join `tecnicos`)
     const filasDelTecnico = rows.filter((r) => {
       const tec = normalizeJoin(r.tecnicos) as any;
       const email = tec?.email || null;
       return localPart(email) === tecnicoLocal;
     });
 
-    // 5) Filtrar las filas que realmente refieren a una impresora
+    // 5) Quedarnos con filas que refieren a impresora
     const filasImpresoras = filasDelTecnico.filter(esImpresora);
 
-    // Mapeo a estructura compacta para el frontend
+    // 6) Map a estructura simple (agregamos `cliente`)
     const items = filasImpresoras.map((r) => {
       const imp = normalizeJoin(r.impresoras) as any;
+      const cli = normalizeJoin(r.clientes) as any;
       const modelo = imp?.modelo || r.maquina_reparada || 'Sin modelo';
+      const cliente = cli?.cliente || '—';
       return {
         id: r.id,
         modelo,
         estado: r.estado || 'Sin estado',
         fecha: r.marca_temporal || '',
         reparada: esReparada(r),
+        cliente, // 👈 agregado
       };
     });
 
-    // 6) Agregados
+    // 7) Agregados
     const totalImpresoras = items.length;
     const totalImpresorasReparadas = items.filter((i) => i.reparada).length;
 
-    // 7) Respuesta
+    // 8) Respuesta
     return new Response(JSON.stringify({
       tecnico: tecnicoLocal,
       year: (!all && intento === 'mes') ? year : null,
@@ -216,6 +185,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
             id: r.id,
             tecnico_id: r.tecnico_id,
             tecEmail: normalizeJoin(r.tecnicos)?.email || null,
+            cliente: normalizeJoin(r.clientes)?.cliente || null,
             marca_temporal: r.marca_temporal,
             estado: r.estado,
             impresora_id: r.impresora_id,
@@ -225,7 +195,6 @@ export const GET: APIRoute = async ({ url, locals }) => {
       } : {})
     }), { status: 200, headers: { 'Content-Type': 'application/json' }});
   } catch (err: any) {
-    // Manejo de error general
     return new Response(JSON.stringify({ error: err?.message || String(err) }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     });
