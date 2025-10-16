@@ -158,7 +158,9 @@ const ticketId = Astro.params.id;
             </table>
           </div>
           <div id="ruleAlert" class="alert alert-warning py-2 px-3" style="display:none;">
-            Hay repuestos <strong>inactivos</strong> o cantidades que superan el stock. Corregí para poder guardar.
+            Hay repuestos con <strong>cantidad superior al stock disponible</strong>. Podés guardar igual:
+            el stock quedará negativo al marcar <em>Máquina Lista</em>.<br />
+            <strong>Los repuestos inactivos sí impiden guardar.</strong>
           </div>
         </div>
         <div class="modal-footer d-flex justify-content-end gap-3">
@@ -570,15 +572,15 @@ const ticketId = Astro.params.id;
       actualizarSubtotalesYValidar();
     }
 
+    // ✅ Ajustada: no bloquea por superar stock; sí bloquea por inactivo. Muestra alert si hay sobre-selección.
     function actualizarSubtotalesYValidar(){
-      let ok = true, total = 0;
+      let ok = true, total = 0, haySuperaStock = false;
       const rows = Array.from(tbodyConfirm.querySelectorAll('tr'));
       rows.forEach((tr)=>{
         const activo = tr.getAttribute('data-activo') === '1';
         const stock = Number(tr.querySelector('.badgeStock')?.textContent || '0');
         const cant  = Math.max(1, Number(tr.querySelector('.inpCant')?.value || '1'));
 
-        // Solo admins ven/calc precios
         if (showPrices) {
           const unit  = Number(tr.querySelector('.precioUnit')?.getAttribute('data-punit') || '0');
           const sub = unit * cant;
@@ -587,14 +589,18 @@ const ticketId = Astro.params.id;
         }
 
         const superaStock = (stock === 0 && cant > 0) || (stock > 0 && cant > stock);
-        const invalido = !activo || superaStock;
-        tr.classList.toggle('table-warning', invalido);
-        if (invalido) ok = false;
+        haySuperaStock = haySuperaStock || superaStock;
+
+        tr.classList.toggle('table-warning', superaStock); // aviso visual
+        tr.classList.toggle('table-danger', !activo);      // bloqueante
+
+        if (!activo) ok = false; // sólo inactivo bloquea
       });
 
       if (showPrices && totalEstimadoEl) totalEstimadoEl.textContent = fmtARS(total);
-      ruleAlert.style.display = ok ? 'none' : 'block';
-      btnGuardar.disabled = !ok || rows.length === 0;
+
+      ruleAlert.style.display = (haySuperaStock || !ok) ? 'block' : 'none';
+      btnGuardar.disabled = !ok || rows.length === 0; // permitir guardar aunque supere stock
     }
 
     // Abre el modal con TODO lo que está en 'seleccion'
