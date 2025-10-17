@@ -450,7 +450,9 @@ const ticketId = Astro.params.id;
         tbody.innerHTML = `<tr><td colspan="${colCount}" class="text-center py-3 text-muted">Sin resultados.</td></tr>`;
       } else {
         tbody.innerHTML = data.map(r => {
-          const stockNum  = Number(String(r.stock ?? '0').replace(/[^0-9.-]/g,'')) || 0;
+          const stockStr = String(r.stock ?? '').trim();
+          const isInf = stockStr === '∞' || /^inf/i.test(stockStr);
+          const stockNum = isInf ? Infinity : (Number(stockStr.replace(/[^0-9.-]/g, '')) || 0);
           const unitPrice = parsePrecioARS(r.precio ?? '');
           const isActive  = !!r.activo;
 
@@ -557,7 +559,7 @@ const ticketId = Astro.params.id;
             <td class="fw-semibold">${it.id}</td>
             <td>${it.comp || ''}</td>
             <td><input type="number" class="form-control form-control-sm inpCant" value="${it.cantidad}" min="1" step="1" style="max-width:110px;" ${it.activo ? '' : 'disabled'} /></td>
-            <td><span class="badge text-bg-light badgeStock">${it.stock}</span></td>
+            <td><span class="badge text-bg-light badgeStock">${it.stock === Infinity ? '∞' : it.stock}</span></td>
             ${showPrices ? `<td><span class="precioUnit" data-punit="${it.unitPrice}">${fmtARS(it.unitPrice)}</span></td>` : ''}
             ${showPrices ? `<td><span class="subtotal">${fmtARS(it.unitPrice * it.cantidad)}</span></td>` : ''}
             <td>${estadoHtml}</td>
@@ -588,7 +590,7 @@ const ticketId = Astro.params.id;
           total += sub;
         }
 
-        const superaStock = (stock === 0 && cant > 0) || (stock > 0 && cant > stock);
+        const superaStock = (stock !== Infinity) && ((stock === 0 && cant > 0) || (stock > 0 && cant > stock));
         haySuperaStock = haySuperaStock || superaStock;
 
         tr.classList.toggle('table-warning', superaStock); // aviso visual
