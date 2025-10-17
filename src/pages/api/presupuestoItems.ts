@@ -172,6 +172,7 @@ export const POST: APIRoute = async ({ request }) => {
       return new Response(JSON.stringify({ ok: false, error: 'ticket_id inválido' }), { status: 400 });
     }
 
+    // Normalizo datos entrantes
     const clean = incoming
       .map((it) => {
         const repuesto_id = toInt(it?.repuesto_id);
@@ -184,6 +185,17 @@ export const POST: APIRoute = async ({ request }) => {
 
     const presupuesto_id = await getOrCreatePresupuestoId(ticket_id);
 
+    // === Consulto repuestos actualmente guardados (para permitir los inactivos que ya estaban)
+    const { data: actualesRaw, error: errAct } = await supabase
+      .from('presupuesto_repuestos')
+      .select('repuesto_id')
+      .eq('presupuesto_id', presupuesto_id);
+    if (errAct) throw errAct;
+
+    const actuales = Array.isArray(actualesRaw) ? actualesRaw : [];
+    const actualesSet = new Set<number>(actuales.map(r => r.repuesto_id));
+
+    // === Traigo info de los repuestos entrantes
     const ids = Array.from(new Set(clean.map((x) => x.repuesto_id)));
     const { data: repRaw, error: errRep } = await supabase
       .from('repuestos_csv')
@@ -200,13 +212,19 @@ export const POST: APIRoute = async ({ request }) => {
       activeById[r.id] = !!r.activo;
     }
 
-    // Bloqueo inactivos
-    const inactivos = clean.filter(x => activeById[x.repuesto_id] === false).map(x => x.repuesto_id);
-    if (inactivos.length > 0) {
-      return new Response(JSON.stringify({ ok: false, error: `Hay repuestos inactivos: ${inactivos.join(', ')}` }), { status: 400 });
+    // 🚫 Bloquear solo inactivos NUEVOS (no los que ya estaban)
+    const inactivosNuevos = clean
+      .filter(x => activeById[x.repuesto_id] === false && !actualesSet.has(x.repuesto_id))
+      .map(x => x.repuesto_id);
+
+    if (inactivosNuevos.length > 0) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `Hay repuestos inactivos nuevos: ${inactivosNuevos.join(', ')}` }),
+        { status: 400 }
+      );
     }
 
-    // Reemplazo total
+    // 🔁 Reemplazo total del listado
     const del = await supabase.from('presupuesto_repuestos').delete().eq('presupuesto_id', presupuesto_id);
     if (del.error) throw del.error;
 
@@ -214,14 +232,14 @@ export const POST: APIRoute = async ({ request }) => {
       return new Response(JSON.stringify({ ok: true, count: 0 }), { status: 200 });
     }
 
-    // Inserto snapshot con precio ENTERO ARS
+    // 💾 Inserto snapshot con precio numérico
     const payload = clean.map(x => ({
       presupuesto_id,
       repuesto_id: x.repuesto_id,
       cantidad: x.cantidad,
       precio_unit: (() => {
         const parsed = parseEnteroARS(priceById[x.repuesto_id]);
-        return parsed ?? null; // NUMERIC entero en ARS
+        return parsed ?? null;
       })(),
     }));
 
