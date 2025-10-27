@@ -1,6 +1,6 @@
 ---
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase' ;
 
 /** Convierte varias variantes de fecha a "YYYY-MM-DD" (para inputs type="date"). */
 function toISODate(v?: string | null): string {
@@ -227,7 +227,7 @@ const currentTecLabel: string = (() => {
         <input type="hidden" name="ticketId" value={String(equipo.id)} />
         <input type="hidden" name="id"        value={String(equipo.id)} />
 
-        <!-- 1) DATOS DEL TICKET -->
+        {/* 1) DATOS DEL TICKET */}
         <div class="section-card">
           <div class="section-title"><i class="bi bi-ticket-perforated"></i> Datos del ticket</div>
           <div class="grid-2">
@@ -244,7 +244,7 @@ const currentTecLabel: string = (() => {
               </select>
             </div>
 
-            <!-- Técnico dinámico: label = email antes del @ -->
+            {/* Técnico dinámico: label = email antes del @ */}
             <div>
               <label class="form-label">Técnico</label>
               <select
@@ -272,13 +272,13 @@ const currentTecLabel: string = (() => {
           </div>
         </div>
 
-        <!-- 2) DATOS DEL CLIENTE -->
+        {/* 2) DATOS DEL CLIENTE */}
         <div class="section-card">
           <div class="section-title"><i class="bi bi-person-badge"></i> Datos del cliente</div>
           <div class="grid-2">
             <div>
               <label class="form-label">DNI/CUIT</label>
-              <!-- Máximo recomendado: 14 (11 dígitos + guiones) -->
+              {/* Máximo recomendado: 14 (11 dígitos + guiones) */}
               <input
                 name="dniCuit"
                 id="input-dni-cuit"
@@ -302,7 +302,7 @@ const currentTecLabel: string = (() => {
           </div>
         </div>
 
-        <!-- 3) IMPRESORA -->
+        {/* 3) IMPRESORA */}
         <div class="section-card">
           <div class="section-title"><i class="bi bi-printer"></i> Impresora</div>
           <div class="grid-2">
@@ -321,7 +321,7 @@ const currentTecLabel: string = (() => {
           </div>
         </div>
 
-        <!-- 4) PRESUPUESTO -->
+        {/* 4) PRESUPUESTO */}
         <div class="section-card">
           <div class="section-title"><i class="bi bi-receipt"></i> Presupuesto</div>
           <div class="grid-2">
@@ -353,7 +353,7 @@ const currentTecLabel: string = (() => {
           </div>
         </div>
 
-        <!-- 5) DELIVERY -->
+        {/* 5) DELIVERY */}
         <div class="section-card">
           <div class="section-title"><i class="bi bi-truck"></i> Delivery</div>
           <div class="grid-2">
@@ -393,7 +393,7 @@ const currentTecLabel: string = (() => {
           </div>
         </div>
 
-        <!-- 6) NOTAS & COMENTARIOS -->
+        {/* 6) NOTAS & COMENTARIOS */}
         <div class="section-card">
           <div class="section-title"><i class="bi bi-journal-text"></i> Notas & Comentarios</div>
           <div class="grid-2">
@@ -408,7 +408,7 @@ const currentTecLabel: string = (() => {
           </div>
         </div>
 
-        <!-- 7) IMÁGENES -->
+        {/* 7) IMÁGENES */}
         <div class="section-card">
           <div class="section-title center"><i class="bi bi-images"></i> Imágenes</div>
 
@@ -430,7 +430,7 @@ const currentTecLabel: string = (() => {
           </div>
 
           <div class="mb-4">
-            <h6 class="mb-2 text-center">Imagen del ticket</h6>
+            <h6 class="mb-2 text-center">Imagen reparacion (en proceso)</h6>
             <div class="img-row">
               <div class="img-box">
                 <img id="img-ticket-preview" src={urlTicket} alt="Imagen reparacion (en proceso) " onerror="this.onerror=null;this.src='/logo.webp';" loading="lazy" />
@@ -447,7 +447,7 @@ const currentTecLabel: string = (() => {
           </div>
 
           <div>
-            <h6 class="mb-2 text-center">Imagen extra</h6>
+            <h6 class="mb-2 text-center">Imagen final (ya lista para entregar)</h6>
             <div class="img-row">
               <div class="img-box">
                 <img id="img-extra-preview" src={urlExtra} alt="Imagen final (ya lista para entregar) " onerror="this.onerror=null;this.src='/logo.webp';" loading="lazy" />
@@ -478,7 +478,7 @@ const currentTecLabel: string = (() => {
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
   <script src="/scripts/form-mas-imagenes.js?v=1" defer></script>
 
-  <!-- Cargar técnicos dinámicamente desde /api/listarTecnicos (evita duplicados) -->
+  {/* Cargar técnicos dinámicamente desde /api/listarTecnicos (evita duplicados) */}
   <script>
     (async function(){
       const sel  = document.getElementById('select-tecnico');
@@ -494,7 +494,7 @@ const currentTecLabel: string = (() => {
         // Evitar duplicar el option semilla (el actual)
         const ya = new Set(Array.from(sel.options).map(o => Number(o.value) || 0));
 
-        (data.items || []).forEach((it) => {
+        (data.items || []).forEach((it: { id: number | string; label: string }) => {
           const idNum = Number(it.id);
           if (ya.has(idNum)) return; // ya existe (semilla o previo)
           const opt = document.createElement('option');
@@ -512,52 +512,56 @@ const currentTecLabel: string = (() => {
     })();
   </script>
 
-  <!-- Formateo ARS al escribir -->
-    <script>
-      (function(){
-        function parseToNumberLike(s){
-          if(!s) return '';
-          let t=String(s).trim().replace(/[^\d.,-]/g,'');
-          const lastDot=t.lastIndexOf('.'), lastCom=t.lastIndexOf(',');
-          if(lastDot!==-1&&lastCom!==-1){
-            const dec=lastDot>lastCom?'.':','; const mil=dec==='.'?',':'.';
-            t=t.split(mil).join(''); if(dec===',') t=t.replace(',', '.');
-          } else if(lastCom!==-1&&lastDot===-1){
-            t=t.replace(',', '.');
-          }
-          return t;
-        }
-        function formatARSFromStr(s){
-          const n=Number(parseToNumberLike(s));
-          if(!isFinite(n)) return s||'';
-          const dec=(String(s).split('.')[1]||'').length;
-          const d=dec?Math.min(2,dec):0;
-          return '$'+n.toLocaleString('es-AR',{minimumFractionDigits:d, maximumFractionDigits:d});
-        }
-        function onBlurFormat(e){
-          const el = e.target;
-          if (!(el instanceof HTMLInputElement)) return;
-          el.value = formatARSFromStr(el.value);
-        }
-        function onInputClean(e){
-          const el = e.target;
-          if (!(el instanceof HTMLInputElement)) return;
-          el.value = el.value.replace(/[^\d.,$-]/g,'');
-        }
-        document.querySelectorAll('.currency-ars').forEach((node)=>{
-          const input = node instanceof HTMLInputElement ? node : null;
-          if (!input) return;
-          input.addEventListener('blur',  onBlurFormat);
-          input.addEventListener('input', onInputClean);
-        });
-      })();
-    </script>
-
-
-  <!-- Formateo DNI/CUIT en vivo: 8 dígitos -> XX.XXX.XXX | 11 dígitos -> XX-XXXXXXXX-X -->
+  {/* Formateo ARS al escribir */}
   <script>
     (function(){
-      function formatDniCuitLive(raw){
+      function parseToNumberLike(s: string | number | null | undefined){
+        if(!s) return '';
+        let t=String(s).trim().replace(/[^\d.,-]/g,'');
+        const lastDot=t.lastIndexOf('.'), lastCom=t.lastIndexOf(',');
+        if(lastDot!==-1&&lastCom!==-1){
+          const dec=lastDot>lastCom?'.':','; const mil=dec==='.'?',':'.';
+          t=t.split(mil).join('');
+          if(dec===',') t=t.replace(',', '.');
+        } else if(lastCom!==-1&&lastDot===-1){
+          t=t.replace(',', '.');
+        }
+        return t;
+      }
+
+      function formatARSFromStr(s: string | number | null | undefined): string {
+        const n = Number(parseToNumberLike(s));
+        if (!isFinite(n)) return String(s || '');
+        const dec = (String(s).split('.')[1] || '').length;
+        const d = dec ? Math.min(2, dec) : 0;
+        return '$'+n.toLocaleString('es-AR',{minimumFractionDigits:d, maximumFractionDigits:d});
+      }
+
+      function onBlurFormat(e: Event){
+        const el = e.target;
+        if (!(el instanceof HTMLInputElement)) return;
+        el.value = formatARSFromStr(el.value);
+      }
+
+      function onInputClean(e: Event){
+        const el = e.target;
+        if (!(el instanceof HTMLInputElement)) return;
+        el.value = el.value.replace(/[^\d.,$-]/g,'');
+      }
+
+      document.querySelectorAll('.currency-ars').forEach((node: Element)=>{
+        const input = node instanceof HTMLInputElement ? node : null;
+        if (!input) return;
+        input.addEventListener('blur',  onBlurFormat);
+        input.addEventListener('input', onInputClean);
+      });
+    })();
+  </script>
+
+  {/* Formateo DNI/CUIT en vivo: 8 dígitos -> XX.XXX.XXX | 11 dígitos -> XX-XXXXXXXX-X */}
+  <script>
+    (function(){
+      function formatDniCuitLive(raw: string | number | null | undefined){
         const digits = String(raw||'').replace(/\D+/g, '');
         if (!digits) return '';
         // CUIT/CUIL (11)
@@ -574,7 +578,7 @@ const currentTecLabel: string = (() => {
 
       const input = document.getElementById('input-dni-cuit');
       if (input instanceof HTMLInputElement) {
-        input.addEventListener('input', (e) => {
+        input.addEventListener('input', (e: Event) => {
           const el = e.target;
           if (!(el instanceof HTMLInputElement)) return;
           const before = el.value;
@@ -585,7 +589,7 @@ const currentTecLabel: string = (() => {
             try { if (atEnd) el.setSelectionRange(after.length, after.length); } catch {}
           }
         });
-        input.addEventListener('blur', (e) => {
+        input.addEventListener('blur', (e: Event) => {
           const el = e.target;
           if (!(el instanceof HTMLInputElement)) return;
           el.value = formatDniCuitLive(el.value);
@@ -594,12 +598,10 @@ const currentTecLabel: string = (() => {
     })();
   </script>
 
-
-
-  <!-- Normalizador de “Tamaño de boquilla” a `X mm` (solo en editar) -->
+  {/* Normalizador de “Tamaño de boquilla” a `X mm` (solo en editar) */}
   <script>
     (function () {
-      function parseNozzle(raw) {
+      function parseNozzle(raw: string | number | null | undefined) {
         if (raw == null) return '';
         let s = String(raw).toLowerCase().trim();
         s = s.replace(',', '.');
@@ -614,7 +616,8 @@ const currentTecLabel: string = (() => {
         out = out.replace(/\.?0+$/, ''); // quita ceros/punto sobrantes
         return out;
       }
-      function normalizeToMm(raw) {
+
+      function normalizeToMm(raw: string | number | null | undefined) {
         const num = parseNozzle(raw);
         return num ? (num + ' mm') : '';
       }
@@ -628,7 +631,7 @@ const currentTecLabel: string = (() => {
       }
 
       // Limpiar caracteres raros mientras escribe
-      input.addEventListener('input', (e) => {
+      input.addEventListener('input', (e: Event) => {
         const el = e.target;
         if (!(el instanceof HTMLInputElement)) return;
         const before = el.value;
@@ -637,7 +640,7 @@ const currentTecLabel: string = (() => {
       });
 
       // Normaliza al salir del campo
-      input.addEventListener('blur', (e) => {
+      input.addEventListener('blur', (e: Event) => {
         const el = e.target;
         if (!(el instanceof HTMLInputElement)) return;
         el.value = normalizeToMm(el.value);

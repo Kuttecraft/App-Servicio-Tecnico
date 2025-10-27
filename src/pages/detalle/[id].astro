@@ -167,7 +167,7 @@ const quierePresupuesto =
       </div>
 
       <div class="card-body">
-        <!-- Imagen principal -->
+        {/* Imagen principal */}
         <div class="text-center mb-3">
           <img
             id="imagen-equipo"
@@ -178,7 +178,7 @@ const quierePresupuesto =
           />
         </div>
 
-        <!-- Miniaturas -->
+        {/* Miniaturas */}
         {imagenes.length > 0 && (
           <div class="thumbs mb-4" id="thumbs">
             {imagenes.map((src) => (
@@ -194,13 +194,13 @@ const quierePresupuesto =
           </div>
         )}
 
-        <!-- Encabezado: cliente y modelo -->
+        {/* Encabezado: cliente y modelo */}
         <div class="text-center mb-3">
           <h4 class="fw-bold text-dark mb-1">{equipo?.cliente?.cliente ?? '—'}</h4>
           <div class="text-muted small">{modeloMostrado}</div>
         </div>
 
-        <!-- ===== Sección Ticket ===== -->
+        {/* ===== Sección Ticket ===== */}
         <div class="section-title"><i class="bi bi-ticket-perforated"></i> Ticket</div>
         <div class="row row-cols-1 row-cols-md-2 g-3">
           <div class="col"><strong>N° Ticket:</strong> {equipo?.ticket ?? '—'}</div>
@@ -212,7 +212,7 @@ const quierePresupuesto =
 
         <div class="divider"></div>
 
-        <!-- ===== Sección Cliente ===== -->
+        {/* ===== Sección Cliente ===== */}
         <div class="section-title"><i class="bi bi-person-badge"></i> Cliente</div>
         <div class="row row-cols-1 row-cols-md-2 g-3">
           <div class="col"><strong>DNI/CUIT:</strong> {formatDniCuit(equipo?.cliente?.dni_cuit)}</div>
@@ -222,7 +222,7 @@ const quierePresupuesto =
 
         <div class="divider"></div>
 
-        <!-- ===== Sección Presupuesto ===== -->
+        {/* ===== Sección Presupuesto ===== */}
         <div class="section-title"><i class="bi bi-receipt"></i> Presupuesto</div>
         <div class="row row-cols-1 row-cols-md-2 g-3">
           <div class="col">
@@ -253,7 +253,7 @@ const quierePresupuesto =
 
         <div class="divider"></div>
 
-        <!-- ===== Sección Delivery ===== -->
+        {/* ===== Sección Delivery ===== */}
         <div class="section-title"><i class="bi bi-truck"></i> Delivery</div>
         <div class="row row-cols-1 row-cols-md-2 g-3">
           <div class="col">
@@ -266,7 +266,7 @@ const quierePresupuesto =
           {delivery?.informacion_adicional_delivery && <div class="col"><strong>Info adicional:</strong> {delivery.informacion_adicional_delivery}</div>}
         </div>
 
-        <!-- ===== Acciones ===== -->
+        {/* ===== Acciones ===== */}
         {(isAdmin || isTecnico) && (
           <>
             <div class="divider"></div>
@@ -315,26 +315,35 @@ const quierePresupuesto =
   {isAdmin && (
     <script>
       // Acción admin: eliminar ticket (confirm + POST a /api/eliminarTicket)
-      (window as any).eliminarTicket = async function(id) {
+      (window as any).eliminarTicket = async function(id: string) {
         if (!confirm("¿Estás seguro de que querés eliminar este ticket? Esta acción no se puede deshacer.")) return;
         const res = await fetch(`/api/eliminarTicket?id=${id}`, { method: 'POST' });
         const data = await res.json();
-        if (res.ok) { alert("Ticket eliminado correctamente."); window.location.href = '/dashboard'; }
-        else { alert("Error al eliminar: " + data.error); }
+        if (res.ok) {
+          alert("Ticket eliminado correctamente.");
+          window.location.href = '/dashboard';
+        } else {
+          alert("Error al eliminar: " + data.error);
+        }
       }
     </script>
   )}
 
-  <!-- Acción: marcar "Máquina Lista" -->
+  {/* Acción: marcar "Máquina Lista" */}
   <script>
-    (window as any).maquinaLista = async function(id) {
+    (window as any).maquinaLista = async function(id: string) {
       if (!confirm("¿Marcar este equipo como LISTA? Esto actualizará el estado y la fecha de listo.")) return;
 
       // Deshabilitamos todos los botones/links para evitar doble clic mientras se procesa
       const elements = document.querySelectorAll('button, a.btn');
-      elements.forEach((el) => {
-        if (el instanceof HTMLButtonElement) el.disabled = true;
-        else if (el instanceof HTMLAnchorElement) { el.classList.add('disabled'); el.setAttribute('aria-disabled', 'true'); el.style.pointerEvents = 'none'; }
+      elements.forEach((el: Element) => {
+        if (el instanceof HTMLButtonElement) {
+          el.disabled = true;
+        } else if (el instanceof HTMLAnchorElement) {
+          el.classList.add('disabled');
+          el.setAttribute('aria-disabled', 'true');
+          (el as HTMLAnchorElement).style.pointerEvents = 'none';
+        }
       });
 
       try {
@@ -348,38 +357,46 @@ const quierePresupuesto =
         alert("Error de red: " + (e && (e as any).message ? (e as any).message : String(e)));
       } finally {
         // Rehabilitamos la UI
-        elements.forEach((el) => {
-          if (el instanceof HTMLButtonElement) el.disabled = false;
-          else if (el instanceof HTMLAnchorElement) { el.classList.remove('disabled'); el.removeAttribute('aria-disabled'); el.style.pointerEvents = ''; }
+        elements.forEach((el: Element) => {
+          if (el instanceof HTMLButtonElement) {
+            el.disabled = false;
+          } else if (el instanceof HTMLAnchorElement) {
+            el.classList.remove('disabled');
+            el.removeAttribute('aria-disabled');
+            (el as HTMLAnchorElement).style.pointerEvents = '';
+          }
         });
       }
     }
   </script>
 
-  <!-- Miniaturas → imagen principal -->
+  {/* Miniaturas → imagen principal */}
   <script>
     const thumbs = document.querySelectorAll('#thumbs .thumb');
     const mainImg = document.getElementById('imagen-equipo');
+
     if (thumbs && mainImg) {
-      thumbs.forEach((t) => {
+      thumbs.forEach((t: Element) => {
         t.addEventListener('click', () => {
-          thumbs.forEach((x) => x.classList.remove('active'));
+          thumbs.forEach((x: Element) => x.classList.remove('active'));
           t.classList.add('active');
           const src = t.getAttribute('data-src') || t.getAttribute('src');
           if (src && mainImg instanceof HTMLImageElement) {
             mainImg.src = src + `?t=${Date.now()}`;
           }
         });
-        t.addEventListener('keydown', (ev) => {
+
+        t.addEventListener('keydown', (ev: Event) => {
           if (ev instanceof KeyboardEvent && (ev.key === 'Enter' || ev.key === ' ')) {
-            ev.preventDefault(); (t as HTMLElement).click();
+            ev.preventDefault();
+            (t as HTMLElement).click();
           }
         });
       });
     }
   </script>
 
-  <!-- Overlay de zoom para la imagen principal -->
+  {/* Overlay de zoom para la imagen principal */}
   <style>
     .zoom-overlay{ position:fixed; inset:0; display:none; z-index:2000; background:rgba(0,0,0,.9); align-items:center; justify-content:center; padding:24px; }
     .zoom-overlay.open{ display:flex; }
@@ -400,18 +417,66 @@ const quierePresupuesto =
     const overlayImg   = document.getElementById('zoomImg');
     const btnCloseZoom = document.getElementById('zoomClose');
 
-    if (mainImgZoom instanceof HTMLImageElement && overlayZoom instanceof HTMLElement && overlayImg instanceof HTMLImageElement && btnCloseZoom instanceof HTMLElement) {
+    if (
+      mainImgZoom instanceof HTMLImageElement &&
+      overlayZoom instanceof HTMLElement &&
+      overlayImg instanceof HTMLImageElement &&
+      btnCloseZoom instanceof HTMLElement
+    ) {
+      // Creamos referencias no nulas y bien tipadas para que TS se quede tranquilo:
+      const _overlayZoom: HTMLElement = overlayZoom;
+      const _overlayImg: HTMLImageElement = overlayImg;
+      const _mainImgZoom: HTMLImageElement = mainImgZoom;
+      const _btnCloseZoom: HTMLElement = btnCloseZoom;
+
       let escala = 1;
-      function aplicar(){ overlayImg.style.transform = `scale(${escala})`; overlayImg.style.cursor = escala > 1 ? 'zoom-out' : 'zoom-in'; }
-      mainImgZoom.addEventListener('click', () => { overlayImg.src = mainImgZoom.currentSrc || mainImgZoom.src; overlayZoom.classList.add('open'); document.body.style.overflow = 'hidden'; escala = 1; aplicar(); });
-      function cerrarOverlay(){ overlayZoom.classList.remove('open'); document.body.style.overflow = ''; escala = 1; aplicar(); }
-      btnCloseZoom.addEventListener('click', cerrarOverlay);
-      overlayZoom.addEventListener('click', (e) => { if (e.target === overlayZoom) cerrarOverlay(); });
-      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && overlayZoom.classList.contains('open')) cerrarOverlay(); });
-      function toggleZoom(){ escala = (escala === 1) ? 2 : 1; aplicar(); }
-      overlayImg.addEventListener('dblclick', (e) => { e.preventDefault(); toggleZoom(); });
+
+      function aplicar() {
+        _overlayImg.style.transform = `scale(${escala})`;
+        _overlayImg.style.cursor = escala > 1 ? 'zoom-out' : 'zoom-in';
+      }
+
+      _mainImgZoom.addEventListener('click', () => {
+        _overlayImg.src = _mainImgZoom.currentSrc || _mainImgZoom.src;
+        _overlayZoom.classList.add('open');
+        document.body.style.overflow = 'hidden';
+        escala = 1;
+        aplicar();
+      });
+
+      function cerrarOverlay() {
+        _overlayZoom.classList.remove('open');
+        document.body.style.overflow = '';
+        escala = 1;
+        aplicar();
+      }
+
+      _btnCloseZoom.addEventListener('click', cerrarOverlay);
+
+      _overlayZoom.addEventListener('click', (e: Event) => {
+        if (e.target === _overlayZoom) cerrarOverlay();
+      });
+
+      document.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && _overlayZoom.classList.contains('open')) cerrarOverlay();
+      });
+
+      function toggleZoom() {
+        escala = (escala === 1) ? 2 : 1;
+        aplicar();
+      }
+
+      _overlayImg.addEventListener('dblclick', (e: MouseEvent) => {
+        e.preventDefault();
+        toggleZoom();
+      });
+
       let lastTap = 0;
-      overlayImg.addEventListener('click', () => { const now = Date.now(); if (now - lastTap < 300) toggleZoom(); lastTap = now; });
+      _overlayImg.addEventListener('click', () => {
+        const now = Date.now();
+        if (now - lastTap < 300) toggleZoom();
+        lastTap = now;
+      });
     }
   </script>
 </BasePrivateLayout>
