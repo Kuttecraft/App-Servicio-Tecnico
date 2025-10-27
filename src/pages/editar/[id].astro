@@ -2,6 +2,21 @@
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import { supabase } from '../../lib/supabase' ;
 
+/** Lista de modelos de impresoras para el selector */
+const impresoras = [
+  "PK3 MK8",
+  "PK3++ MK8",
+  "PK3++ EXT MK8",
+  "PK3 BMG",
+  "PK3++ BMG",
+  "PK3++ EXT BMG",
+  "Artillery",
+  "Bambulab",
+  "Creality",
+  "Hellbot",
+  "OTRA__ESPECIFICAR"
+];
+
 /** Convierte varias variantes de fecha a "YYYY-MM-DD" (para inputs type="date"). */
 function toISODate(v?: string | null): string {
   if (!v) return '';
@@ -169,8 +184,8 @@ if (equipo && (!equipo.cliente || (
 }
 
 const estados = [
-  "Nuevo","Retirar","Presupuestar","Enviar presupuesto","P. Enviado",
-  "Reparación","Prueba","Lista","Entregada","Feedback Enviado","Archivada","No realizada"
+  "Nuevo","Presupuestar","Enviar presupuesto","P. Enviado",
+  "Reparación","Prueba","Lista", "Retirar", "Entregada","Feedback Enviado","Archivada","No realizada"
 ];
 
 // Fallbacks de imágenes
@@ -183,7 +198,7 @@ const valorCubreGarantia = (equipo?.presupuestos?.cubre_garantia === 'true') ? '
 const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
 const estadoActual = (equipo?.estado || '').trim();
 
-// Técnico actual -> label = parte antes de @
+// Técnico actual -> label = parte antes del @
 const currentTecId: number | null =
   equipo?.tecnico_id != null ? Number(equipo.tecnico_id) : null;
 
@@ -195,6 +210,13 @@ const currentTecLabel: string = (() => {
   const nombre = String(t.nombre || '').trim();
   return nombre || '';
 })();
+
+/** ================== LÓGICA PARA SELECT DE IMPRESORA ================== */
+const modeloActualRaw = (equipo?.impresoras?.modelo || '').toString().trim();
+const estaEnLista = impresoras.includes(modeloActualRaw);
+const isOtra = !estaEnLista && modeloActualRaw !== '';
+const valorOtra = isOtra ? modeloActualRaw : '';
+const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
 ---
 
 <BasePrivateLayout>
@@ -210,6 +232,7 @@ const currentTecLabel: string = (() => {
     .img-box { border-radius:15px; overflow:hidden; border:1px solid rgba(0,0,0,.1); box-shadow:0 2px 8px rgba(0,0,0,.06); }
     .img-box img { display:block; width:auto; height:auto; max-width:300px; max-height:300px; object-fit:contain; }
     .btn-col { display:flex; flex-direction:column; align-items:center; gap:.5rem; }
+    .hidden { display:none !important; }
   </style>
 
   <div class="container mt-4">
@@ -244,7 +267,7 @@ const currentTecLabel: string = (() => {
               </select>
             </div>
 
-            {/* Técnico dinámico: label = email antes del @ */}
+            {/* Técnico dinámico */}
             <div>
               <label class="form-label">Técnico</label>
               <select
@@ -278,7 +301,6 @@ const currentTecLabel: string = (() => {
           <div class="grid-2">
             <div>
               <label class="form-label">DNI/CUIT</label>
-              {/* Máximo recomendado: 14 (11 dígitos + guiones) */}
               <input
                 name="dniCuit"
                 id="input-dni-cuit"
@@ -307,9 +329,40 @@ const currentTecLabel: string = (() => {
           <div class="section-title"><i class="bi bi-printer"></i> Impresora</div>
           <div class="grid-2">
             <div>
-              <label class="form-label">Máquina</label>
-              <input name="maquina" type="text" class="form-control" value={equipo.impresoras?.modelo || ''} />
+              <label class="form-label">Modelo / Línea</label>
+              <select
+                name="maquinaSelect"
+                id="select-impresora-modelo"
+                class="form-select"
+                data-otra-value={valorOtra}
+              >
+                <option value="">— Seleccionar —</option>
+                {impresoras.map((opt) => (
+                  <option
+                    value={opt}
+                    selected={valorSelect === opt}
+                  >
+                    {opt === 'OTRA__ESPECIFICAR' ? 'Otra (especificar)' : opt}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            <div class="col-12">
+              <label class="form-label">Modelo específico</label>
+              <input
+                name="maquina"
+                id="input-modelo-otra"
+                type="text"
+                class={`form-control ${isOtra ? '' : 'hidden'}`}
+                value={isOtra ? valorOtra : (estaEnLista ? '' : modeloActualRaw)}
+                placeholder="Ej: Prusa MK4, Ender 3 tuneada..."
+              />
+              <small class="text-muted">
+                Si elegís "Otra", escribí aquí el modelo exacto.
+              </small>
+            </div>
+
             <div>
               <label class="form-label">N° de serie</label>
               <input name="numeroSerie" type="text" class="form-control" value={equipo.impresoras?.numero_de_serie || ''} />
@@ -413,10 +466,16 @@ const currentTecLabel: string = (() => {
           <div class="section-title center"><i class="bi bi-images"></i> Imágenes</div>
 
           <div class="mb-4">
-            <h6 class="mb-2 text-center">Imagen principal (Cuando llego la impresora)</h6>
+            <h6 class="mb-2 text-center">Imagen principal (Cuando llegó la impresora)</h6>
             <div class="img-row">
               <div class="img-box">
-                <img id="img-actual-o-preview" src={urlMain} alt="Imagen actual" onerror="this.onerror=null;this.src='/logo.webp';" loading="lazy" />
+                <img
+                  id="img-actual-o-preview"
+                  src={urlMain}
+                  alt="Imagen principal (Cuando llegó la impresora)"
+                  onerror="this.onerror=null;this.src='/logo.webp';"
+                  loading="lazy"
+                />
               </div>
               <div class="btn-col">
                 <label class="btn btn-primary fw-semibold">
@@ -430,18 +489,24 @@ const currentTecLabel: string = (() => {
           </div>
 
           <div class="mb-4">
-            <h6 class="mb-2 text-center">Imagen reparacion (en proceso)</h6>
+            <h6 class="mb-2 text-center">Imagen reparación (en proceso)</h6>
             <div class="img-row">
               <div class="img-box">
-                <img id="img-ticket-preview" src={urlTicket} alt="Imagen reparacion (en proceso) " onerror="this.onerror=null;this.src='/logo.webp';" loading="lazy" />
+                <img
+                  id="img-ticket-preview"
+                  src={urlTicket}
+                  alt="Imagen reparación (en proceso)"
+                  onerror="this.onerror=null;this.src='/logo.webp';"
+                  loading="lazy"
+                />
               </div>
               <div class="btn-col">
                 <label class="btn btn-primary fw-semibold">
-                  <i class="bi bi-upload me-2"></i> Cambiar imagen ticket
+                  <i class="bi bi-upload me-2"></i> Cambiar imagen reparación
                   <input type="file" name="imagenTicketArchivo" accept="image/*" id="input-imagen-ticket" style="display:none;" />
                 </label>
                 <input type="hidden" name="borrarImagenTicket" id="input-borrar-imagen-ticket" value="false" />
-                <button type="button" class="btn btn-danger px-4" id="btn-eliminar-imagen-ticket">Eliminar imagen ticket</button>
+                <button type="button" class="btn btn-danger px-4" id="btn-eliminar-imagen-ticket">Eliminar imagen reparación</button>
               </div>
             </div>
           </div>
@@ -450,15 +515,21 @@ const currentTecLabel: string = (() => {
             <h6 class="mb-2 text-center">Imagen final (ya lista para entregar)</h6>
             <div class="img-row">
               <div class="img-box">
-                <img id="img-extra-preview" src={urlExtra} alt="Imagen final (ya lista para entregar) " onerror="this.onerror=null;this.src='/logo.webp';" loading="lazy" />
+                <img
+                  id="img-extra-preview"
+                  src={urlExtra}
+                  alt="Imagen final (ya lista para entregar)"
+                  onerror="this.onerror=null;this.src='/logo.webp';"
+                  loading="lazy"
+                />
               </div>
               <div class="btn-col">
                 <label class="btn btn-primary fw-semibold">
-                  <i class="bi bi-upload me-2"></i> Cambiar imagen extra
+                  <i class="bi bi-upload me-2"></i> Cambiar imagen final
                   <input type="file" name="imagenExtraArchivo" accept="image/*" id="input-imagen-extra" style="display:none;" />
                 </label>
                 <input type="hidden" name="borrarImagenExtra" id="input-borrar-imagen-extra" value="false" />
-                <button type="button" class="btn btn-danger px-4" id="btn-eliminar-imagen-extra">Eliminar imagen extra</button>
+                <button type="button" class="btn btn-danger px-4" id="btn-eliminar-imagen-extra">Eliminar imagen final</button>
               </div>
             </div>
           </div>
@@ -512,6 +583,41 @@ const currentTecLabel: string = (() => {
     })();
   </script>
 
+  {/* Lógica de mostrar/ocultar el campo "Modelo específico" según el select */}
+  <script>
+    (function(){
+      const selModeloEl = document.getElementById('select-impresora-modelo');
+      const inputOtraEl = document.getElementById('input-modelo-otra');
+
+      if (
+        selModeloEl instanceof HTMLSelectElement &&
+        inputOtraEl instanceof HTMLInputElement
+      ) {
+        const _selModelo = selModeloEl as HTMLSelectElement;
+        const _inputOtra = inputOtraEl as HTMLInputElement;
+
+        function syncOtraVisibility(): void {
+          const v = _selModelo.value;
+
+          if (v === 'OTRA__ESPECIFICAR') {
+            _inputOtra.classList.remove('hidden');
+
+            if (!_inputOtra.value.trim()) {
+              const preset = _selModelo.getAttribute('data-otra-value') || '';
+              if (preset) _inputOtra.value = preset;
+            }
+          } else {
+            _inputOtra.classList.add('hidden');
+            _inputOtra.value = v || '';
+          }
+        }
+
+        syncOtraVisibility();
+        _selModelo.addEventListener('change', syncOtraVisibility);
+      }
+    })();
+  </script>
+
   {/* Formateo ARS al escribir */}
   <script>
     (function(){
@@ -558,21 +664,18 @@ const currentTecLabel: string = (() => {
     })();
   </script>
 
-  {/* Formateo DNI/CUIT en vivo: 8 dígitos -> XX.XXX.XXX | 11 dígitos -> XX-XXXXXXXX-X */}
+  {/* Formateo DNI/CUIT en vivo */}
   <script>
     (function(){
       function formatDniCuitLive(raw: string | number | null | undefined){
         const digits = String(raw||'').replace(/\D+/g, '');
         if (!digits) return '';
-        // CUIT/CUIL (11)
         if (digits.length === 11) {
           return digits.slice(0,2)+'-'+digits.slice(2,10)+'-'+digits.slice(10);
         }
-        // DNI (7 u 8) -> miles con puntos
         if (digits.length === 7 || digits.length === 8) {
           return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
         }
-        // Otros -> permitir puntos/guiones ya escritos y limpiar lo demás
         return String(raw||'').replace(/[^\d\.\-]/g,'');
       }
 
@@ -598,7 +701,7 @@ const currentTecLabel: string = (() => {
     })();
   </script>
 
-  {/* Normalizador de “Tamaño de boquilla” a `X mm` (solo en editar) */}
+  {/* Normalizador de “Tamaño de boquilla” a `X mm` */}
   <script>
     (function () {
       function parseNozzle(raw: string | number | null | undefined) {
@@ -608,12 +711,12 @@ const currentTecLabel: string = (() => {
         const m = s.match(/(\d+\.?\d*|\.\d+)/);
         if (!m) return '';
         let num = m[0];
-        if (num.startsWith('.')) num = '0' + num;   // .4 -> 0.4
-        if (num.endsWith('.'))  num = num.slice(0,-1); // 1. -> 1
+        if (num.startsWith('.')) num = '0' + num;
+        if (num.endsWith('.'))  num = num.slice(0,-1);
         const n = Number(num);
         if (!isFinite(n)) return '';
         let out = n.toFixed(2);
-        out = out.replace(/\.?0+$/, ''); // quita ceros/punto sobrantes
+        out = out.replace(/\.?0+$/, '');
         return out;
       }
 
@@ -625,12 +728,10 @@ const currentTecLabel: string = (() => {
       const input = document.querySelector('input[name="boquilla"]');
       if (!(input instanceof HTMLInputElement)) return;
 
-      // Normaliza al cargar si ya hay valor
       if (input.value && input.value.trim()) {
         input.value = normalizeToMm(input.value);
       }
 
-      // Limpiar caracteres raros mientras escribe
       input.addEventListener('input', (e: Event) => {
         const el = e.target;
         if (!(el instanceof HTMLInputElement)) return;
@@ -639,7 +740,6 @@ const currentTecLabel: string = (() => {
         if (before !== cleaned) el.value = cleaned;
       });
 
-      // Normaliza al salir del campo
       input.addEventListener('blur', (e: Event) => {
         const el = e.target;
         if (!(el instanceof HTMLInputElement)) return;
