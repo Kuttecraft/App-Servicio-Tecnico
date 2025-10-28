@@ -2,18 +2,6 @@
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import { supabase } from '../../lib/supabase';
 
-// ========================= CONFIG ESTADOS QUE DISPARAN MAIL =========================
-// Estos estados deben disparar correo automático al cliente
-const ESTADOS_CON_MAIL = [
-  "P. Enviado",
-  "Reparación",
-  "Prueba",
-  "Lista",
-  "Retirar",
-  "Entregada",
-  "Feedback Enviado",
-];
-
 // ========================= IMPRESORAS =========================
 /** Lista de modelos de impresoras para el selector */
 const impresoras = [
@@ -63,16 +51,10 @@ function toMDY(v?: string | null): string {
   if (!v) return '';
   const s = String(v).trim();
   if (!s || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') return '';
-
-  // YYYY-MM-DD
-  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  let m = s.match(/^(\d{4})-((\d{2}))-(\d{2})/);
   if (m) return `${Number(m[2])}/${Number(m[3])}/${Number(m[1])}`;
-
-  // YYYY/MM/DD
   m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
   if (m) return `${Number(m[2])}/${Number(m[3])}/${Number(m[1])}`;
-
-  // M/D/YYYY o D/M/YYYY
   m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
   if (m) {
     const a = Number(m[1]); const b = Number(m[2]); const y = Number(m[3]);
@@ -82,7 +64,6 @@ function toMDY(v?: string | null): string {
     else { mm = a; dd = b; }
     return `${mm}/${dd}/${y}`;
   }
-
   const d = new Date(s);
   if (!isNaN(d.getTime())) return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
   return '';
@@ -114,10 +95,10 @@ function parseToNumberLike(s?: string | null): string {
   if (hasDot && !hasCom) {
     const parts = t.split('.');
     const looksLikeThousands = parts.length > 1 && parts.slice(1).every(p => p.length === 3);
-    return looksLikeThousands ? parts.join('') : t; // miles o decimal real
+    return looksLikeThousands ? parts.join('') : t;
   }
 
-  return t; // solo dígitos
+  return t;
 }
 
 function formatARS(v?: string | number | null): string {
@@ -142,12 +123,12 @@ function prettifyDniCuit(s?: string | null): string {
     return `${digits.slice(0,2)}-${digits.slice(2,10)}-${digits.slice(10)}`;
   }
 
-  // DNI: 7 u 8 dígitos → agrupado con puntos (X.XXX.XXX | XX.XXX.XXX)
+  // DNI: 7 u 8 dígitos → agrupado con puntos
   if (digits.length === 7 || digits.length === 8) {
     return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   }
 
-  // Otros largos → dejar solo dígitos, mostrando miles con puntos como fallback
+  // Otros largos
   return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
@@ -186,7 +167,7 @@ let equipo: any = row ? {
   ...row,
   cliente: clienteJoin ?? null,
   tecnicos: Array.isArray(row?.tecnicos) ? row.tecnicos[0] : row?.tecnicos,
-  impresoras: Array.isArray(row?.impresoras) ? row.impresoras[0] : row?.impresoras,
+  impresoras: Array.isArray(row?.impresoras) ? row?.impresoras[0] : row?.impresoras,
   delivery: Array.isArray(row?.delivery) ? row.delivery[0] : row?.delivery,
   presupuestos: Array.isArray(row?.presupuestos)
     ? (row.presupuestos.sort((a:any,b:any)=>Number(a.id)-Number(b.id))[row.presupuestos.length-1] ?? null)
@@ -243,15 +224,7 @@ const isOtra = !estaEnLista && modeloActualRaw !== '';
 const valorOtra = isOtra ? modeloActualRaw : '';
 const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
 
-// Datos para email defaults
-const ticketNumberSafe = equipo?.ticket ?? '';
-const clienteMailSafe  = equipo?.cliente?.correo_electronico ?? '';
-const clienteNombreSafe = ''; // si tenés nombre cliente guardado, lo podés poner acá
-const modeloSafe       = modeloActualRaw || equipo?.impresoras?.maquina || '';
-const estadoSafe       = estadoActual || '';
-const fechaListoSafe   = toISODate(equipo?.fecha_de_reparacion) || '';
 ---
-
 <BasePrivateLayout>
   <style>
     .section-card { border: 1px solid rgba(0,0,0,.08); border-radius: 12px; padding: 1rem; background: #fff; }
@@ -266,69 +239,6 @@ const fechaListoSafe   = toISODate(equipo?.fecha_de_reparacion) || '';
     .img-box img { display:block; width:auto; height:auto; max-width:300px; max-height:300px; object-fit:contain; }
     .btn-col { display:flex; flex-direction:column; align-items:center; gap:.5rem; }
     .hidden { display:none !important; }
-
-    /* modal email */
-    .modal-email-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.6);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 2000;
-      padding: 1rem;
-    }
-    .modal-email-backdrop.open { display:flex; }
-    .modal-email-card {
-      background:#fff;
-      max-width:500px;
-      width:100%;
-      border-radius:12px;
-      box-shadow:0 20px 50px rgba(0,0,0,.4);
-      padding:1rem 1rem 0.75rem;
-      display:flex;
-      flex-direction:column;
-      gap:.75rem;
-      position:relative;
-    }
-    .modal-email-header {
-      display:flex;
-      justify-content:space-between;
-      align-items:flex-start;
-      gap:.5rem;
-    }
-    .modal-email-header h5 {
-      margin:0;
-      font-size:1rem;
-      font-weight:600;
-      color:#0d6efd;
-      display:flex;
-      align-items:center;
-      gap:.5rem;
-    }
-    .modal-email-close {
-      background:transparent;
-      border:0;
-      font-size:1.25rem;
-      line-height:1;
-      cursor:pointer;
-    }
-    .modal-email-body label {
-      font-size:.8rem;
-      font-weight:500;
-      color:#444;
-      margin-bottom:.25rem;
-    }
-    .modal-email-body input,
-    .modal-email-body textarea {
-      width:100%;
-    }
-    .modal-email-footer {
-      display:flex;
-      justify-content:flex-end;
-      gap:.5rem;
-      flex-wrap:wrap;
-    }
   </style>
 
   <div class="container mt-4">
@@ -342,27 +252,9 @@ const fechaListoSafe   = toISODate(equipo?.fecha_de_reparacion) || '';
         class="d-flex flex-column gap-3"
         id="form-editar-equipo"
         style="max-width: 980px; margin: 0 auto;"
-        data-ticket-number={ticketNumberSafe}
-        data-cliente-email={clienteMailSafe}
-        data-cliente-nombre={clienteNombreSafe}
-        data-modelo={modeloSafe}
-        data-fecha-listo={fechaListoSafe}
       >
         <input type="hidden" name="ticketId" value={String(equipo.id)} />
         <input type="hidden" name="id"        value={String(equipo.id)} />
-
-        {/*
-          ===== Hidden inputs para email automático =====
-          El JS va a rellenar estos antes de enviar el form
-        */}
-        <input type="hidden" name="email_to"          id="email_to"          value={clienteMailSafe} />
-        <input type="hidden" name="email_subject"     id="email_subject"     value="" />
-        <input type="hidden" name="email_body"        id="email_body"        value="" />
-        <input type="hidden" name="email_send_flag"   id="email_send_flag"   value="false" />
-
-        {/* ===== Hidden extras de timestamps (el backend ya los mira) ===== */}
-        <input type="hidden" name="timestampListo"        value="" />
-        <input type="hidden" name="timestampPresupuesto"  value="" />
 
         {/* 1) DATOS DEL TICKET */}
         <div class="section-card">
@@ -373,17 +265,7 @@ const fechaListoSafe   = toISODate(equipo?.fecha_de_reparacion) || '';
               <input type="number" class="form-control" value={equipo.ticket} disabled />
             </div>
             <div>
-              <label class="form-label d-flex justify-content-between align-items-center">
-                <span>Estado</span>
-                {/* botón "Ver / editar mail" se muestra sólo si estado ∈ ESTADOS_CON_MAIL */}
-                <button
-                  type="button"
-                  id="btn-open-mail"
-                  class={`btn btn-sm btn-outline-primary ${ESTADOS_CON_MAIL.includes(estadoActual) ? '' : 'hidden'}`}
-                >
-                  <i class="bi bi-envelope-open me-1"></i> Ver / editar mail
-                </button>
-              </label>
+              <label class="form-label">Estado</label>
               <select name="estado" class="form-select" required id="select-estado">
                 {estados.map((op) => (
                   <option value={op} selected={estadoActual.toLowerCase() === op.toLowerCase()}>{op}</option>
@@ -660,7 +542,6 @@ const fechaListoSafe   = toISODate(equipo?.fecha_de_reparacion) || '';
         </div>
 
         <div class="actions">
-          {/* guardamos normalmente */}
           <button type="submit" class="btn btn-success px-4" id="btn-guardar-ticket">
             <i class="bi bi-check2-square me-1"></i> Guardar cambios
           </button>
@@ -671,42 +552,10 @@ const fechaListoSafe   = toISODate(equipo?.fecha_de_reparacion) || '';
     )}
   </div>
 
-  {/* MODAL EMAIL */}
-  <div class="modal-email-backdrop" id="modalEmail" role="dialog" aria-modal="true" aria-labelledby="modalEmailTitle">
-    <div class="modal-email-card">
-      <div class="modal-email-header">
-        <h5 id="modalEmailTitle"><i class="bi bi-envelope-paper"></i> Mail al cliente</h5>
-        <button type="button" class="modal-email-close" id="modalEmailClose" aria-label="Cerrar">✕</button>
-      </div>
-
-      <div class="modal-email-body">
-        <div>
-          <label for="modalEmailTo">Para</label>
-          <input id="modalEmailTo" class="form-control" type="email" />
-        </div>
-        <div>
-          <label for="modalEmailSubject">Asunto</label>
-          <input id="modalEmailSubject" class="form-control" type="text" />
-        </div>
-        <div>
-          <label for="modalEmailBody">Mensaje</label>
-          <textarea id="modalEmailBody" class="form-control" rows="6"></textarea>
-        </div>
-      </div>
-
-      <div class="modal-email-footer">
-        <button type="button" class="btn btn-outline-secondary" id="modalEmailCancel">Cancelar</button>
-        <button type="button" class="btn btn-primary" id="modalEmailApply">
-          <i class="bi bi-check2"></i> Usar este mail
-        </button>
-      </div>
-    </div>
-  </div>
-
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
   <script src="/scripts/form-mas-imagenes.js?v=1" defer></script>
 
-  {/* Cargar técnicos dinámicamente desde /api/listarTecnicos (evita duplicados) */}
+  {/* Cargar técnicos dinámicamente desde /api/listarTecnicos */}
   <script type="module">
     // @ts-nocheck
     (async function(){
@@ -725,10 +574,10 @@ const fechaListoSafe   = toISODate(equipo?.fecha_de_reparacion) || '';
 
         (data.items || []).forEach((it) => {
           const idNum = Number(it.id);
-          if (ya.has(idNum)) return; // ya existe (semilla o previo)
+          if (ya.has(idNum)) return;
           const opt = document.createElement('option');
           opt.value = String(it.id);
-          opt.textContent = it.label; // local-part del email
+          opt.textContent = it.label;
           if (current && idNum === current) opt.selected = true;
           sel.appendChild(opt);
         });
@@ -901,267 +750,6 @@ const fechaListoSafe   = toISODate(equipo?.fecha_de_reparacion) || '';
         if (!(el instanceof HTMLInputElement)) return;
         el.value = normalizeToMm(el.value);
       });
-    })();
-  </script>
-
-  {/* ================== LÓGICA MAIL AUTO ================== */}
-  <script type="module">
-    // @ts-nocheck
-    (function(){
-      // Estados que deben mostrar botón y mandar mail
-      const ESTADOS_CON_MAIL_LOCAL = [
-        "P. Enviado",
-        "Reparación",
-        "Prueba",
-        "Lista",
-        "Retirar",
-        "Entregada",
-        "Feedback Enviado",
-      ];
-
-      // refs DOM
-      const form            = document.getElementById('form-editar-equipo');
-      const selectEstado    = document.getElementById('select-estado');
-      const btnOpenMail     = document.getElementById('btn-open-mail');
-      const modalBackdrop   = document.getElementById('modalEmail');
-      const modalClose      = document.getElementById('modalEmailClose');
-      const modalCancel     = document.getElementById('modalEmailCancel');
-      const modalApply      = document.getElementById('modalEmailApply');
-
-      const inputToHidden      = document.getElementById('email_to');
-      const inputSubjectHidden = document.getElementById('email_subject');
-      const inputBodyHidden    = document.getElementById('email_body');
-      const inputSendFlag      = document.getElementById('email_send_flag');
-
-      const modalTo      = document.getElementById('modalEmailTo');
-      const modalSubject = document.getElementById('modalEmailSubject');
-      const modalBody    = document.getElementById('modalEmailBody');
-
-      // data base que viene desde data-* del form
-      let ticketNumber   = '';
-      let clienteEmail   = '';
-      let clienteNombre  = '';
-      let modelo         = '';
-      let fechaListo     = '';
-
-      if (form instanceof HTMLElement) {
-        ticketNumber  = form.dataset.ticketNumber   || '';
-        clienteEmail  = form.dataset.clienteEmail   || '';
-        clienteNombre = form.dataset.clienteNombre  || '';
-        modelo        = form.dataset.modelo         || '';
-        fechaListo    = form.dataset.fechaListo     || '';
-      }
-
-      // plantillas por estado
-      function buildEmailForEstado(estado){
-        switch (estado) {
-          case 'P. Enviado':
-            return {
-              subject: `Presupuesto disponible - Ticket #${ticketNumber}`,
-              body:
-`Hola ${clienteNombre || ''},
-
-Ya tenemos el presupuesto de tu equipo (${modelo}).
-Podés revisarlo y respondernos si querés avanzar con la reparación.
-
-Ticket: ${ticketNumber}
-
-Gracias!`
-            };
-          case 'Reparación':
-            return {
-              subject: `Estamos reparando tu equipo - Ticket #${ticketNumber}`,
-              body:
-`Te avisamos que tu impresora (${modelo}) está en proceso de reparación.
-
-Ticket: ${ticketNumber}
-
-Apenas tengamos novedades te escribimos nuevamente.`
-            };
-          case 'Prueba':
-            return {
-              subject: `Estamos probando tu equipo - Ticket #${ticketNumber}`,
-              body:
-`Buenas! Tu equipo (${modelo}) ya está reparado y lo estamos probando para asegurarnos que funcione correctamente.
-
-Ticket: ${ticketNumber}
-
-Te avisamos apenas esté listo.`
-            };
-          case 'Lista':
-            return {
-              subject: `Tu equipo está listo para retirar - Ticket #${ticketNumber}`,
-              body:
-`Tu impresora (${modelo}) ya está lista.
-
-Podés coordinar la entrega / retiro.
-Ticket: ${ticketNumber}
-Fecha listo: ${fechaListo || '-'}
-
-Gracias por confiar en nosotros!`
-            };
-          case 'Retirar':
-            return {
-              subject: `Recordatorio de retiro - Ticket #${ticketNumber}`,
-              body:
-`Te recordamos que tu equipo (${modelo}) ya está listo para retirar.
-
-Ticket: ${ticketNumber}
-
-Por favor contactate con nosotros para coordinar la entrega.`
-            };
-          case 'Entregada':
-            return {
-              subject: `Confirmación de entrega - Ticket #${ticketNumber}`,
-              body:
-`Confirmamos que te entregamos la impresora (${modelo}).
-
-Ticket: ${ticketNumber}
-
-Gracias por elegirnos!`
-            };
-          case 'Feedback Enviado':
-            return {
-              subject: `¿Nos das tu feedback? - Ticket #${ticketNumber}`,
-              body:
-`Hola! Ya finalizamos el trabajo sobre tu equipo (${modelo}).
-
-Nos ayuda muchísimo tu opinión 🙌
-¿Podrías contarnos cómo fue la experiencia?
-
-¡Mil gracias!`
-            };
-          default:
-            return {
-              subject: `Estado de tu equipo - Ticket #${ticketNumber}`,
-              body:
-`Hola! Te escribimos por el ticket #${ticketNumber} (${modelo}).
-
-Estado actual: ${estado}.`
-            };
-        }
-      }
-
-      // mostrar/ocultar botón "Ver / editar mail" según estado
-      function refreshMailButton() {
-        if (!(selectEstado instanceof HTMLSelectElement) || !(btnOpenMail instanceof HTMLButtonElement)) return;
-        const est = selectEstado.value;
-        if (ESTADOS_CON_MAIL_LOCAL.includes(est)) {
-          btnOpenMail.classList.remove('hidden');
-        } else {
-          btnOpenMail.classList.add('hidden');
-        }
-      }
-
-      // abrir modal y precargar campos
-      function openModal() {
-        if (!(selectEstado instanceof HTMLSelectElement)) return;
-        const est = selectEstado.value;
-        const tpl = buildEmailForEstado(est);
-
-        if (modalTo instanceof HTMLInputElement)      modalTo.value = clienteEmail || '';
-        if (modalSubject instanceof HTMLInputElement) modalSubject.value = tpl.subject || '';
-        if (modalBody instanceof HTMLTextAreaElement) modalBody.value = tpl.body || '';
-
-        if (modalBackdrop instanceof HTMLElement) {
-          modalBackdrop.classList.add('open');
-          document.body.style.overflow = 'hidden';
-        }
-      }
-
-      function closeModal() {
-        if (modalBackdrop instanceof HTMLElement) {
-          modalBackdrop.classList.remove('open');
-          document.body.style.overflow = '';
-        }
-      }
-
-      // cuando el usuario acepta el mail → copiamos al hidden y marcamos flag
-      function applyMail() {
-        if (
-          !(inputToHidden instanceof HTMLInputElement) ||
-          !(inputSubjectHidden instanceof HTMLInputElement) ||
-          !(inputBodyHidden instanceof HTMLInputElement) ||
-          !(inputSendFlag instanceof HTMLInputElement)
-        ) {
-          closeModal();
-          return;
-        }
-        if (modalTo instanceof HTMLInputElement)        inputToHidden.value      = modalTo.value.trim();
-        if (modalSubject instanceof HTMLInputElement)   inputSubjectHidden.value = modalSubject.value.trim();
-        if (modalBody instanceof HTMLTextAreaElement)   inputBodyHidden.value    = modalBody.value.trim();
-
-        // si el estado actual está en la lista, mandamos flag true; si no, false
-        if (selectEstado instanceof HTMLSelectElement) {
-          const est = selectEstado.value;
-          inputSendFlag.value = ESTADOS_CON_MAIL_LOCAL.includes(est) ? 'true' : 'false';
-        } else {
-          inputSendFlag.value = 'false';
-        }
-
-        closeModal();
-      }
-
-      // seguridad extra: antes de enviar el form, si el estado requiere mail
-      // y todavía no tocamos el modal, igual generamos algo y marcamos flag
-      function beforeSubmitFallback() {
-        if (!(selectEstado instanceof HTMLSelectElement)) return;
-        if (
-          !(inputToHidden instanceof HTMLInputElement) ||
-          !(inputSubjectHidden instanceof HTMLInputElement) ||
-          !(inputBodyHidden instanceof HTMLInputElement) ||
-          !(inputSendFlag instanceof HTMLInputElement)
-        ) return;
-
-        const est = selectEstado.value;
-        if (!ESTADOS_CON_MAIL_LOCAL.includes(est)) {
-          // estado NO manda mail
-          inputSendFlag.value = 'false';
-          return;
-        }
-
-        // si ya hay contenido en los hidden, asumimos que ya se editó
-        if (inputSubjectHidden.value && inputBodyHidden.value) {
-          inputSendFlag.value = 'true';
-          return;
-        }
-
-        // generar por defecto
-        const tpl = buildEmailForEstado(est);
-        inputToHidden.value      = inputToHidden.value || (clienteEmail || '');
-        inputSubjectHidden.value = inputSubjectHidden.value || tpl.subject || '';
-        inputBodyHidden.value    = inputBodyHidden.value || tpl.body || '';
-        inputSendFlag.value      = 'true';
-      }
-
-      // listeners
-      if (selectEstado instanceof HTMLSelectElement) {
-        selectEstado.addEventListener('change', refreshMailButton);
-      }
-      if (btnOpenMail instanceof HTMLButtonElement) {
-        btnOpenMail.addEventListener('click', openModal);
-      }
-      if (modalClose instanceof HTMLButtonElement) {
-        modalClose.addEventListener('click', closeModal);
-      }
-      if (modalCancel instanceof HTMLButtonElement) {
-        modalCancel.addEventListener('click', closeModal);
-      }
-      if (modalApply instanceof HTMLButtonElement) {
-        modalApply.addEventListener('click', applyMail);
-      }
-
-      // antes de submit forzado
-      const btnGuardar = document.getElementById('btn-guardar-ticket');
-      const formEl = form instanceof HTMLFormElement ? form : null;
-      if (formEl && btnGuardar instanceof HTMLButtonElement) {
-        formEl.addEventListener('submit', () => {
-          beforeSubmitFallback();
-        });
-      }
-
-      // inicio
-      refreshMailButton();
     })();
   </script>
 </BasePrivateLayout>
