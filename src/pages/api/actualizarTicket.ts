@@ -2,6 +2,7 @@
 import type { APIRoute } from 'astro';
 import { supabase } from '../../lib/supabase';
 import { resolverAutor, nombreAutor } from '../../lib/resolverAutor';
+import { sendEmail } from '../../lib/sendEmail';
 
 /**
  * Normaliza fechas a formato 'YYYY-MM-DD' a partir de varios posibles formatos de entrada:
@@ -150,6 +151,7 @@ function normalizarDniCuit(input?: string | null): string | null {
 
 /** Helper para responder JSON de error con status configurable. */
 function jsonError(message: string, status = 500) {
+  console.error('[actualizarTicket] jsonError', status, message);
   return new Response(JSON.stringify({ error: message }), {
     status,
     headers: { 'Content-Type': 'application/json' },
@@ -192,10 +194,13 @@ const imgShow = (v: any) => (v ? 'Cargada' : '—');
  * - Maneja creación/actualización de delivery y presupuesto.
  * - Sube/borra imágenes en Supabase Storage.
  * - Escribe un comentario con los cambios realizados.
+ * - Registra el email a cliente (si corresponde) y ahora LO ENVÍA.
  * - Redirige a /detalle/:id si todo OK.
  */
 export const POST: APIRoute = async ({ request, params, locals }) => {
   try {
+    console.log('========== [/api/actualizarTicket] ==========');
+
     // Perfil/rol desde locals (puede venir de middleware de autenticación)
     const perfil = (locals as any)?.perfil as { rol?: string; admin?: boolean } | undefined;
     const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
@@ -242,15 +247,28 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     const fields: Record<string, string> = {};
     formData.forEach((val, key) => { if (typeof val === 'string') fields[key] = val.trim(); });
 
+    // Campos especiales de email automático
+    const email_to        = (formData.get('email_to') as string | null) ?? '';
+    const email_subject   = (formData.get('email_subject') as string | null) ?? '';
+    const email_body      = (formData.get('email_body') as string | null) ?? '';
+    const email_send_flag = (formData.get('email_send_flag') as string | null) ?? 'false';
+
+    console.log('[EMAIL] Recibido desde form:', {
+      email_to,
+      email_subject,
+      email_body_preview: email_body.slice(0, 80),
+      email_send_flag,
+    });
+
     // ---------- Leer fila actual del ticket (datos base para comparar) ----------
     const { data: tRow, error: tErr } = await supabase
       .from('tickets_mian')
-      .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion, estado, maquina_reparada, tecnico_id, notas_del_tecnico, notas_del_cliente, imagen, imagen_ticket, imagen_extra') // 🆕 sumo campos de imagen
+      .select('cliente_id, impresora_id, marca_temporal, fecha_de_reparacion, estado, maquina_reparada, tecnico_id, notas_del_tecnico, notas_del_cliente, imagen, imagen_ticket, imagen_extra')
       .eq('id', idNum)
       .single();
     if (tErr || !tRow) return jsonError(`No se pudo obtener el ticket (id=${String(id)})`, 500);
 
-    // 🆕 Estados previos de imágenes (para armar el diff)
+    // Estados previos de imágenes (para armar el diff)
     const prevImgMain   = tRow.imagen ?? null;
     const prevImgTicket = tRow.imagen_ticket ?? null;
     const prevImgExtra  = tRow.imagen_extra ?? null;
@@ -307,6 +325,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     };
 
     // ========== Ticket principal ==========
+
     // Normalizaciones de fechas específicas del formulario
     const fechaFormularioMDY = toMDYFromAny(fields.fechaFormulario); // guardamos en marca_temporal → M/D/YYYY
     const fechaListoNorm     = normDate(fields.timestampListo);      // guardamos en fecha_de_reparacion → YYYY-MM-DD
@@ -345,12 +364,12 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
       // Determinar nuevo técnico desde el form (string → number | null)
       let newTecId: number | null = null;
-      const raw = fields.tecnico_id;
-      if (raw === '') {
+      const rawTec = fields.tecnico_id;
+      if (rawTec === '') {
         datosTicketsMian.tecnico_id = null;        // “— Sin asignar —”
         newTecId = null;
       } else {
-        const tid = Number(raw);
+        const tid = Number(rawTec);
         if (Number.isFinite(tid) && tid > 0) {
           datosTicketsMian.tecnico_id = tid;
           newTecId = tid;
@@ -379,7 +398,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
             .in('id', ids);
 
           const byId = new Map<number, any>();
-          (tecs ?? []).forEach(t => byId.set(Number(t.id), t));
+          (tecs ?? []).forEach((t: any) => byId.set(Number(t.id), t));
 
           // Preferimos local-part del email; si no, nombre y apellido; si no, #id
           const labelFrom = (t: any): string => {
@@ -664,7 +683,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     if (imagenExtraArchivo && imagenExtraArchivo.size > 0) await subirImagen(imagenExtraArchivo, nombreArchivoExtra, 'imagen_extra');
     else if (mustDelete(borrarImagenExtra))                 await borrarImagenCampo(nombreArchivoExtra, 'imagen_extra');
 
-    // 🆕 Registrar diffs de imágenes (después de aplicar uploads/borrados)
+    // Registrar diffs de imágenes (después de aplicar uploads/borrados)
     const afterImgMain   = (datosTicketsMian as any).imagen        ?? prevImgMain;
     const afterImgTicket = (datosTicketsMian as any).imagen_ticket ?? prevImgTicket;
     const afterImgExtra  = (datosTicketsMian as any).imagen_extra  ?? prevImgExtra;
@@ -680,7 +699,8 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     }
 
     // ====== Comentario automático con el diff (si hubo cambios) ======
-    if (cambios.length > 0) {
+    // y comentar envío de mail si corresponde
+    {
       // Determinar autor (usuario actual) para el comentario
       const autor = await resolverAutor(locals);
       if (!autor || autor.activo === false) {
@@ -695,22 +715,91 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
         ? userEmail.split('@')[0]
         : nombreAutor(autor);
 
-      const encabezado = `${localPart} cambió los siguientes datos:`;
-      const cuerpo = cambios.join('\n'); // una línea por cambio, con viñeta y <strong>
-      const mensaje = `${encabezado}\n${cuerpo}`.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      // comentario de cambios (diff)
+      if (cambios.length > 0) {
+        const encabezado = `${localPart} cambió los siguientes datos:`;
+        const cuerpo = cambios.join('\n'); // una línea por cambio, con viñeta y <strong>
+        const mensaje = `${encabezado}\n${cuerpo}`.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-      // Insertar comentario de cambios
-      const { error: cErr } = await supabase
-        .from('ticket_comentarios')
-        .insert({ ticket_id: idNum, autor_id: autor.id, mensaje });
+        const { error: cErr } = await supabase
+          .from('ticket_comentarios')
+          .insert({ ticket_id: idNum, autor_id: autor.id, mensaje });
 
-      if (cErr) return jsonError('No se pudo crear el comentario de cambios: ' + cErr.message, 500);
+        if (cErr) return jsonError('No se pudo crear el comentario de cambios: ' + cErr.message, 500);
+      }
+
+      // 📧 NUEVO: envío real del email si hay flag y datos
+      let emailComentarioMensaje = '';
+
+      if (
+        email_send_flag === 'true' &&
+        email_to &&
+        email_subject &&
+        email_body
+      ) {
+        console.log('[EMAIL] shouldSend? true');
+        console.log('[EMAIL] Intentando enviar...', {
+          to: email_to,
+          subject: email_subject,
+          bodyPreview: email_body.slice(0, 120),
+        });
+
+        try {
+          await sendEmail({
+            to: email_to,
+            subject: email_subject,
+            text: email_body,
+            fromName: 'Servicio Técnico',
+          });
+
+          console.log('[EMAIL] Envío OK');
+
+          emailComentarioMensaje = [
+            `✉️ EMAIL AUTOMÁTICO AL CLIENTE`,
+            `Estado: ENVIADO ✅`,
+            `Para: ${email_to}`,
+            `Asunto: ${email_subject}`,
+            ``,
+            email_body
+          ].join('\n');
+        } catch (err: any) {
+          console.error('[EMAIL] Error al enviar:', err?.message || err);
+
+          emailComentarioMensaje = [
+            `✉️ EMAIL AUTOMÁTICO AL CLIENTE`,
+            `Estado: ERROR ❌`,
+            `Para: ${email_to}`,
+            `Asunto: ${email_subject}`,
+            `Error: ${err?.message || String(err)}`,
+            ``,
+            email_body
+          ].join('\n');
+        }
+      } else {
+        console.log('[EMAIL] shouldSend?', email_send_flag, '(salteado)');
+      }
+
+      // Guardar comentario del email (si corresponde)
+      if (emailComentarioMensaje) {
+        const { error: cErr2 } = await supabase
+          .from('ticket_comentarios')
+          .insert({
+            ticket_id: idNum,
+            autor_id: autor.id,
+            mensaje: emailComentarioMensaje,
+          });
+
+        if (cErr2) return jsonError('No se pudo registrar el comentario del email automático: ' + cErr2.message, 500);
+      }
     }
+
+    console.log('========== [/api/actualizarTicket] OK, redirect ==========');
 
     // Redirección al detalle si todo salió bien
     return new Response(null, { status: 303, headers: { Location: `/detalle/${idNum}` } });
   } catch (err: any) {
     // Fallback de error inesperado
+    console.error('[/api/actualizarTicket] CATCH', err);
     return jsonError('Error inesperado: ' + (err?.message || String(err)), 500);
   }
 };
