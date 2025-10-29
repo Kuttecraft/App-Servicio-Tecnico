@@ -13,7 +13,7 @@
     "@clerk/clerk-sdk-node": "^5.1.6",
     "@clerk/themes": "^2.2.48",
     "@supabase/ssr": "^0.6.1",
-    "@supabase/supabase-js": "^2.55.0",
+    "@supabase/supabase-js": "^2.77.0",
     "astro": "^5.8.0",
     "bootstrap": "^5.3.6",
     "bootstrap-icons": "^1.13.1",
