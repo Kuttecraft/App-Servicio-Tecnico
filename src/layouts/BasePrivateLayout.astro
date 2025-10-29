@@ -7,11 +7,45 @@ import { SignedIn, SignedOut } from '@clerk/astro/components';
 import Sidebar from '../components/Sidebar.astro';
 import Topbar from '../components/Topbar.astro';
 
-// Perfil del usuario actual (primero intenta en props, si no en locals)
-const perfil = Astro.props?.perfil ?? Astro.locals?.perfil ?? null;
+/**
+ * Este layout:
+ * - Muestra Sidebar + Topbar + contenido si el usuario está autenticado (SignedIn)
+ * - Muestra una pantalla de "Acceso restringido" si NO está autenticado (SignedOut)
+ *
+ * Props esperadas:
+ *   perfil?: PerfilDeUsuario | null
+ *     → info de permisos/rol que se pasa a <Sidebar />
+ *
+ *   showFilters?: boolean
+ *     → si true, Topbar muestra el formulario de filtros (search/dashboard)
+ *     → si false, Topbar sólo muestra el botón de usuario
+ *
+ * También intentamos tomar `perfil` desde Astro.locals.perfil por compatibilidad
+ * con middleware que haya seteado el perfil del usuario en el request.
+ */
 
-// Controla si se muestran los filtros en el Topbar (por defecto false)
-const showFilters = Astro.props?.showFilters ?? false;
+// Definimos un tipo suave para perfil para que TS no marque "any".
+// No lo hacemos súper estricto porque puede variar según backend.
+type PerfilDeUsuario = {
+  rol?: string;
+  admin?: boolean | string | 0 | 1;
+  tickets?: boolean | string | 0 | 1;
+  usuarios?: boolean | string | 0 | 1;
+  estadisticas?: boolean | string | 0 | 1;
+  [key: string]: unknown; // fallback por si en el futuro agregás más props
+};
+
+// Extraemos perfil: primero props, si no locals, si no null.
+// Tipado explícito para que VSCode/TS no marque implicit any.
+const perfil: PerfilDeUsuario | null =
+  ((Astro.props as { perfil?: PerfilDeUsuario | null })?.perfil) ??
+  ((Astro.locals as any)?.perfil as PerfilDeUsuario | null) ??
+  null;
+
+// showFilters controla si <Topbar> dibuja el formulario de filtros de dashboard.
+// Lo tipamos como boolean para que TS no infiera any desde props.
+const showFilters: boolean =
+  (Astro.props as { showFilters?: boolean })?.showFilters ?? false;
 ---
 
 <SignedIn>
