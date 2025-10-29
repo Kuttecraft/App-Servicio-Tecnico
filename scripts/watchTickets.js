@@ -51,7 +51,7 @@ async function sendTicketEmail({ email, nombre, ticketNumber }) {
 
     <p>Tu ticket <strong>#${ticketNumber}</strong> fue creado correctamente.</p>
 
-    <p>Podés seguir el estado de tu reparación haciendo clic aquí:</p>
+    <p>Podés seguir el estado de tu reparación haciendo clic en el siguiente enlace:</p>
     <p><a href="${FOLLOW_LINK}" target="_blank">${FOLLOW_LINK}</a></p>
 
     <p>En la página de seguimiento ingresá:</p>
