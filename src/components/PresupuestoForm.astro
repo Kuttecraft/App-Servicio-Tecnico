@@ -1,111 +1,278 @@
 ---
 const { equipo } = Astro.props as { equipo: any };
-const isVerificar = Boolean(equipo?.id);
 
+/*
+  Este componente renderiza el formulario de presupuesto / entrega,
+  similar al deliveryForm, pero podés adaptarlo a otro flujo (por ej. cotización previa).
+
+  Recibe `equipo` con:
+    - ticketId
+    - cotizar_delivery
+    - medio_de_entrega
+    - direccion
+    - localidad
+    - fecha_de_entrega (YYYY-MM-DD)
+    - forma_de_pago
+    - informacion_adicional_delivery
+    - pagado ('true' | 'false' | '' | null)
+
+  Usa Bootstrap para layout y clases .currency-ars para formatear dinero en cliente.
+*/
+
+// Utilidad: convierte "YYYY-MM-DD" a "DD/MM/YYYY" para mostrar en input readonly
+function ddmmyyyy(ymd: string) {
+  if (!ymd) return '';
+  const y = ymd.slice(0, 4), m = ymd.slice(5, 7), d = ymd.slice(8, 10);
+  return (y && m && d) ? `${d}/${m}/${y}` : '';
+}
+
+// Fecha actual en Y-M-D
+const hoyYMD = new Date().toISOString().slice(0, 10);
+
+// Fecha a mostrar (fallback hoy)
+const fechaMostrar = ddmmyyyy((equipo?.fecha_de_entrega as string) || hoyYMD);
+
+// Formato ARS defensivo (acepta string o number, devuelve "$ 1.500")
 function formatARS(v?: string | number | null): string {
   if (v == null || v === '') return '';
-  const digits = String(v).replace(/[^\d]/g, '');
-  const n = Number(digits);
+  const n = Number(String(v).replace(/[^\d,-]/g, '').replace(',', '.'));
   if (!isFinite(n)) return String(v);
   return new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency: 'ARS',
     minimumFractionDigits: 0,
-    maximumFractionDigits: 0
+    maximumFractionDigits: 2
   }).format(n);
 }
+
+// ------ Preparar "Medio de entrega" (select + input "Otro") ------
+// Si el valor actual no está entre las opciones fijas, activamos "Otro" y mostramos input libre
+const medioActual = (equipo?.medio_de_entrega ?? '').trim();
+const opciones = ['Delivery', 'Taller'];
+const esOtro = !!(medioActual && !opciones.includes(medioActual));
+const seleccionado = esOtro ? 'Otro' : (medioActual || '');
+const valorOtro = esOtro ? medioActual : '';
 ---
 
-<form id="presupuesto-form" method="POST" action={`/api/actualizarPresupuesto?id=${equipo.ticketId}`} class="card shadow-sm">
-  <div class="card-body">
-    <div class="row g-3">
-      <div class="col-md-6">
-        <label class="form-label">Monto</label>
-        <input
-          type="text"
-          class="form-control currency-ars"
-          name="monto"
-          value={formatARS(equipo?.monto ?? '')}
-          placeholder="$20.000"
-        />
-      </div>
+<form
+  method="POST"
+  action={`/api/actualizarDelivery?id=${equipo.ticketId}`}
+  class="row g-3"
+>
+  <div class="col-md-6">
+    <label class="form-label">Costo delivery</label>
+    <input
+      type="text"
+      class="form-control currency-ars"
+      name="cotizar_delivery"
+      value={formatARS(equipo?.cotizar_delivery ?? '')}
+      placeholder="$500"
+    />
+  </div>
 
-      <div class="col-md-6">
-        <label class="form-label">Link presupuesto</label>
-        <input
-          type="url"
-          class="form-control"
-          name="link_presupuesto"
-          value={equipo?.link_presupuesto ?? ''}
-          autocomplete="off"
-        />
-      </div>
+  <div class="col-md-6">
+    <label class="form-label">Medio de entrega</label>
+    <select
+      name="medio_de_entrega_select"
+      id="medioSelect"
+      class="form-select"
+    >
+      <option value="" selected={!seleccionado}>Seleccionar</option>
+      <option value="Delivery" selected={seleccionado === 'Delivery'}>
+        Delivery
+      </option>
+      <option value="Taller" selected={seleccionado === 'Taller'}>
+        Taller
+      </option>
+      <option value="Otro" selected={seleccionado === 'Otro'}>
+        Otro
+      </option>
+    </select>
 
-      <div class="col-md-6">
-        <label class="form-label">¿Garantía activa?</label>
-        <select name="garantia_activa" class="form-select">
-          <option value="">Seleccionar</option>
-          <option value="Sí" selected={equipo?.garantia_activa === 'Sí'}>Sí</option>
-          <option value="No" selected={equipo?.garantia_activa === 'No'}>No</option>
-        </select>
+    <div
+      id="medioOtroWrapper"
+      class={esOtro ? 'mt-2' : 'mt-2 d-none'}
+    >
+      <label class="form-label">Especificar otro medio</label>
+      <input
+        type="text"
+        class="form-control"
+        name="medio_de_entrega_otro"
+        id="medioOtro"
+        value={valorOtro}
+        placeholder="Moto, correo, mensajería, etc."
+      />
+      <div class="form-text">
+        Si elegís “Otro”, se guardará este valor.
       </div>
-
-      <div class="col-md-6">
-        <label class="form-label">¿Quiere saber presupuesto?</label>
-        <select name="solicitar_presupuesto" class="form-select">
-          <option value="" selected={!(equipo?.solicitar_presupuesto === 'Si' || equipo?.solicitar_presupuesto === 'No')}>Sin seleccionar</option>
-          <option value="Si" selected={equipo?.solicitar_presupuesto === 'Si'}>Sí</option>
-          <option value="No" selected={equipo?.solicitar_presupuesto === 'No'}>No</option>
-        </select>
-      </div>
-
-      <div class="col-12">
-        <label class="form-label">Notas (administración)</label>
-        <textarea name="notas_administracion" class="form-control" rows="3">{equipo?.notas_administracion ?? ''}</textarea>
-      </div>
-
-      {isVerificar && (
-        <div class="col-12 mt-2">
-          <h5 class="mb-2"><i class="bi bi-check2-circle me-2"></i> Aprobación del presupuesto</h5>
-          <select name="presupuesto_aprobado" class="form-select">
-            <option value="Si" selected={equipo?.presupuesto_aprobado === 'Si'}>Si</option>
-            <option value="No" selected={equipo?.presupuesto_aprobado === 'No'}>No</option>
-          </select>
-        </div>
-      )}
     </div>
+  </div>
 
-    <div class="mt-4 text-end">
-      <button type="submit" class="btn btn-primary">
-        <i class="bi bi-save me-1"></i> Guardar cambios
-      </button>
-    </div>
+  <div class="col-md-6">
+    <label class="form-label">Dirección</label>
+    <input
+      type="text"
+      class="form-control"
+      name="direccion"
+      value={equipo?.direccion ?? ''}
+      placeholder="Calle, número, piso/depto"
+    />
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label">Localidad</label>
+    <input
+      type="text"
+      class="form-control"
+      name="localidad"
+      value={equipo?.localidad ?? ''}
+      placeholder="Ciudad / localidad"
+    />
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label">Fecha de entrega</label>
+    <input
+      type="text"
+      class="form-control"
+      value={fechaMostrar}
+      readonly
+    />
+    <div class="form-text">Se completa automáticamente al guardar.</div>
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label">Forma de pago</label>
+    <input
+      type="text"
+      class="form-control"
+      name="forma_de_pago"
+      value={equipo?.forma_de_pago ?? ''}
+      placeholder="Transferencia, efectivo..."
+    />
+  </div>
+
+  <div class="col-12">
+    <label class="form-label">Información adicional</label>
+    <textarea
+      class="form-control"
+      name="informacion_adicional_delivery"
+      rows="3"
+      placeholder="Notas, referencias, aclaraciones..."
+    >{equipo?.informacion_adicional_delivery ?? ''}</textarea>
+  </div>
+
+  <div class="col-12">
+    <label class="form-label">¿Pagado?</label>
+    <select name="pagado" class="form-select">
+      <option value="" selected={!equipo?.pagado}>Seleccionar</option>
+      <option value="true"  selected={equipo?.pagado === 'true'}>Sí</option>
+      <option value="false" selected={equipo?.pagado === 'false'}>No</option>
+    </select>
+  </div>
+
+  <div class="col-12 d-flex justify-content-end">
+    <button type="submit" class="btn btn-success">
+      <i class="bi bi-save me-1"></i> Guardar delivery
+    </button>
   </div>
 </form>
 
 <script>
 (function(){
-  function digitsToInt(s){
+  // === Formateo de moneda ARS en vivo ===
+  //
+  // Objetivo:
+  // - Mientras el usuario escribe en inputs .currency-ars, restringimos caracteres válidos.
+  // - Al salir del campo (blur), lo convertimos a formato de moneda ARS ($ 1.500).
+  //
+  // Para que TypeScript no grite con TS7006 ("parámetro X implicit any"),
+  // tipamos los parámetros usando comentarios JSDoc `@type`.
+  // Esto no cambia comportamiento en runtime.
+
+  /**
+   * Convierte un string "sucio" (puede tener $ y puntos) a número JS.
+   * @param {string | undefined} s
+   * @returns {number}
+   */
+  function parseNumberTyped(s){
     if(!s) return 0;
-    const d = s.replace(/[^\d]/g,'');
-    return Number(d)||0;
+    // Dejamos sólo dígitos, coma y guion. Después pasamos coma a punto como decimal.
+    s = s.replace(/[^\d,-]/g,'').replace(',', '.');
+    return Number(s) || 0;
   }
-  function formatARS(n){
+
+  /**
+   * Formatea un número como ARS usando Intl.NumberFormat('es-AR').
+   * @param {number} n
+   * @returns {string}
+   */
+  function formatARSTyped(n){
     return new Intl.NumberFormat('es-AR',{
-      style:'currency',currency:'ARS',
-      minimumFractionDigits:0, maximumFractionDigits:0
+      style:'currency',
+      currency:'ARS',
+      minimumFractionDigits:0,
+      maximumFractionDigits:2
     }).format(n);
   }
-  function onBlur(e){
-    const n = digitsToInt(e.target.value);
-    e.target.value = n ? formatARS(n) : '';
+
+  /**
+   * Handler blur: al salir del input, lo dejamos prolijo tipo "$ 1.500".
+   * @param {Event} e
+   */
+  function onBlurTyped(e){
+    const target = e.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const n = parseNumberTyped(target.value);
+    target.value = n ? formatARSTyped(n) : '';
   }
-  function onInput(e){
-    e.target.value = e.target.value.replace(/[^\d]/g,'');
+
+  /**
+   * Handler input: mientras escribe, filtramos caracteres no numéricos / separadores válidos.
+   * @param {Event} e
+   */
+  function onInputTyped(e){
+    const target = e.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    target.value = target.value.replace(/[^\d,.-]/g,'');
   }
-  document.querySelectorAll('.currency-ars').forEach(el=>{
-    el.addEventListener('blur', onBlur);
-    el.addEventListener('input', onInput);
+
+  // Atachamos ambos handlers a todos los inputs de clase .currency-ars
+  document.querySelectorAll('.currency-ars').forEach((el)=>{
+    if (el instanceof HTMLInputElement) {
+      el.addEventListener('blur', onBlurTyped);
+      el.addEventListener('input', onInputTyped);
+    }
   });
+
+  // === Toggle del campo "Otro" para Medio de entrega ===
+  //
+  // Lógica:
+  // - Si el usuario elige "Otro", mostramos el wrapper con el input libre y le damos foco.
+  // - Si elige otra opción, lo ocultamos y limpiamos el valor libre para no mandarlo al backend.
+
+  const sel  = document.getElementById('medioSelect');
+  const wrap = document.getElementById('medioOtroWrapper');
+  const otro = document.getElementById('medioOtro');
+
+  function toggleOtro(){
+    if(!(sel instanceof HTMLSelectElement) || !(wrap instanceof HTMLElement)) return;
+    if(sel.value === 'Otro'){
+      wrap.classList.remove('d-none');
+      if(otro instanceof HTMLInputElement){
+        // pequeño timeout para asegurar foco después del repaint
+        setTimeout(()=>otro.focus(), 0);
+      }
+    }else{
+      wrap.classList.add('d-none');
+      if(otro instanceof HTMLInputElement){
+        otro.value = '';
+      }
+    }
+  }
+
+  if (sel) {
+    sel.addEventListener('change', toggleOtro);
+  }
 })();
 </script>

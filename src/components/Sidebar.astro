@@ -1,127 +1,241 @@
 ---
+/**
+ * sidebar.astro
+ *
+ * Barra lateral (desktop fija / mobile offcanvas) que muestra navegación
+ * según permisos del usuario.
+ *
+ * FUENTE DE PERMISOS:
+ * - props.perfil si se pasa explícito al componente
+ * - si no, intenta usar Astro.locals.perfil (inyectado por tu middleware)
+ *
+ * ROLES:
+ * - admin
+ * - tecnico
+ *
+ * FLAGS BINARIAS:
+ * - tickets
+ * - usuarios
+ * - estadisticas
+ * etc.
+ *
+ * NOTA SOBRE SEGURIDAD
+ * --------------------
+ * El sidebar es sólo visual. El backend/servidor igual debería validar permisos
+ * para las páginas protegidas. Pero esto oculta secciones que no aplican
+ * según el rol para mejorar UX.
+ */
+
 type Binario = boolean | string | 0 | 1;
+
 type Perfil = {
-  rol?: string;                      // 'admin' | 'tecnico'
-  admin?: Binario;                   // redundante, por si viene
+  rol?: string;          // "admin" | "tecnico" | etc.
+  admin?: Binario;       // redundante, por compatibilidad
   tickets?: Binario;
   usuarios?: Binario;
   estadisticas?: Binario;
 };
 
+// Props del componente:
+// - mobile?: si true, renderiza versión offcanvas (mobile).
+// - perfil?: datos de permisos. Si no viene, intentamos desde Astro.locals.
 const props = Astro.props as { mobile?: boolean; perfil?: Perfil };
-const mobile = props?.mobile ?? false;
 
-// 🔐 Tomamos perfil de props o, si no lo pasan, desde locals (lo que setea tu middleware)
-// Esto evita que quede todo visible cuando no te pasan nada por props.
+// Por defecto mobile = false si no viene.
+const mobile: boolean = props?.mobile ?? false;
+
+// Tomamos perfil de props primero. Si no está, intentamos de locals.
+// Si tampoco está, usamos {} para no explotar.
 const perfil: Perfil =
   (props?.perfil as Perfil) ??
   (((Astro.locals as any)?.perfil as Perfil) ?? {});
 
-// Helpers
+// Helper: interpreta valores "binarios flexibles" (true / 1 / "1" / "true") como boolean real.
 const asBool = (v: Binario | undefined): boolean =>
   v === true || v === 1 || v === '1' || v === 'true';
 
-const isAdmin   = (perfil?.rol === 'admin') || asBool(perfil?.admin);
-const isTecnico = (perfil?.rol === 'tecnico');
+// Rol semántico:
+const isAdmin: boolean   = (perfil?.rol === 'admin') || asBool(perfil?.admin);
+const isTecnico: boolean = (perfil?.rol === 'tecnico');
 
-// ⚖️ “Clamp” de permisos: las flags NUNCA elevan por encima del rol.
-// - Para admin: si hay flag la respeto, si no hay => true.
-// - Para técnico: siempre false (aunque venga 'true' desde la DB).
-const allowAdminOnly = (flag?: Binario) =>
+// ⚖️ Control de permisos admin-only
+//
+// allowAdminOnly(flag):
+// - Si sos admin:
+//    - si la flag viene definida, usamos su valor (asBool(flag))
+//    - si NO viene definida, asumimos true (por defecto admin puede).
+// - Si NO sos admin: siempre false (aunque alguien haya seteado la flag a "true").
+//
+// Esto evita que un técnico herede permisos que no corresponden
+// sólo porque en la DB figura algo raro.
+const allowAdminOnly = (flag?: Binario): boolean =>
   isAdmin ? (flag === undefined ? true : asBool(flag)) : false;
 
-// Visibilidad final
-const veTickets        = perfil.tickets      !== undefined ? asBool(perfil.tickets)      : true; // todos ven tickets
-const veMisEstadisticas= true;  // todos ven su panel de métricas
+// VISIBILIDAD FINAL DE LAS SECCIONES DEL SIDEBAR
+// ----------------------------------------------
 
-// admin-only
-const veUsuarios       = allowAdminOnly(perfil.usuarios);
-const veEstadisticas   = allowAdminOnly(perfil.estadisticas);
-const veRepuestos      = allowAdminOnly(undefined); // sin flag: admin siempre, técnico nunca
+// Tickets: todos pueden ver, salvo que explícitamente se les pise con perfil.tickets.
+// Si no hay perfil.tickets definido, default = true.
+const veTickets: boolean =
+  perfil.tickets !== undefined ? asBool(perfil.tickets) : true;
 
-// UI helpers
-const currentPath = Astro.url.pathname;
-const isActive = (href: string) => (currentPath === href ? 'active' : '');
+// "Mis estadísticas": lo ve todo el mundo (admin o técnico).
+const veMisEstadisticas: boolean = true;
+
+// Secciones solo admin:
+const veUsuarios: boolean     = allowAdminOnly(perfil.usuarios);
+const veEstadisticas: boolean = allowAdminOnly(perfil.estadisticas);
+
+// Repuestos: admin siempre lo ve. Técnicos nunca.
+// Acá pasamos `undefined` a allowAdminOnly()
+// → para admin devuelve true por default
+// → para técnico devuelve false
+const veRepuestos: boolean    = allowAdminOnly(undefined);
+
+// Helper de UI para resaltar la opción activa comparando con la ruta actual.
+const currentPath: string = Astro.url.pathname;
+const isActive = (href: string): string => (currentPath === href ? 'active' : '');
 ---
 
 {!mobile ? (
-  <aside class="d-none d-md-flex flex-column bg-dark text-white p-3"
-    style="position: fixed; top: 0; left: 0; height: 100vh; width: 240px; z-index: 1030;">
+  /* ===========================
+     SIDEBAR DESKTOP (FIJO)
+     ===========================
+     - d-none d-md-flex → oculto en mobile, visible en md+
+     - position: fixed; ocupa el lateral izquierdo completo
+  */
+  <aside
+    class="d-none d-md-flex flex-column bg-dark text-white p-3"
+    style="position: fixed; top: 0; left: 0; height: 100vh; width: 240px; z-index: 1030;"
+  >
     <h4 class="text-center mb-4">Servicio Técnico</h4>
 
     <nav class="nav nav-pills flex-column gap-2">
-      <a class={`nav-link text-white d-flex align-items-center gap-2 ${isActive('/dashboard')}`} href="/dashboard">
+      <a
+        class={`nav-link text-white d-flex align-items-center gap-2 ${isActive('/dashboard')}`}
+        href="/dashboard"
+      >
         <i class="bi bi-house"></i> Inicio
       </a>
 
       {veTickets && (
-        <a class={`nav-link text-white d-flex align-items-center gap-2 ${isActive('/addTicket')}`} href="/addTicket">
+        <a
+          class={`nav-link text-white d-flex align-items-center gap-2 ${isActive('/addTicket')}`}
+          href="/addTicket"
+        >
           <i class="bi bi-ticket-detailed"></i> Tickets
         </a>
       )}
 
       {veUsuarios && (
-        <a class={`nav-link text-white d-flex align-items-center gap-2 ${isActive('/usuarios')}`} href="/usuarios">
+        <a
+          class={`nav-link text-white d-flex align-items-center gap-2 ${isActive('/usuarios')}`}
+          href="/usuarios"
+        >
           <i class="bi bi-people"></i> Usuarios
         </a>
       )}
 
       {veEstadisticas && (
-        <a class={`nav-link text-white d-flex align-items-center gap-2 ${isActive('/estadisticas')}`} href="/estadisticas">
+        <a
+          class={`nav-link text-white d-flex align-items-center gap-2 ${isActive('/estadisticas')}`}
+          href="/estadisticas"
+        >
           <i class="bi bi-bar-chart-line"></i> Estadísticas
         </a>
       )}
 
       {veRepuestos && (
-        <a class={`nav-link text-white d-flex align-items-center gap-2 ${isActive('/repuesto')}`} href="/repuesto">
+        <a
+          class={`nav-link text-white d-flex align-items-center gap-2 ${isActive('/repuesto')}`}
+          href="/repuesto"
+        >
           <i class="bi bi-box-seam"></i> Repuestos
         </a>
       )}
 
       {veMisEstadisticas && (
-        <a class={`nav-link text-white d-flex align-items-center gap-2 ${isActive('/estadisticas-tecnico')}`} href="/estadisticas-tecnico">
+        <a
+          class={`nav-link text-white d-flex align-items-center gap-2 ${isActive('/estadisticas-tecnico')}`}
+          href="/estadisticas-tecnico"
+        >
           <i class="bi bi-person-lines-fill"></i> Mis estadísticas
         </a>
       )}
     </nav>
   </aside>
 ) : (
-  <div class="offcanvas offcanvas-start bg-dark text-white" tabindex="-1" id="mobileSidebar" aria-labelledby="mobileSidebarLabel">
+  /* ===========================
+     SIDEBAR MOBILE (OFFCANVAS)
+     ===========================
+     - Usa el componente Offcanvas de Bootstrap.
+     - Se abre con data-bs-toggle="offcanvas" desde algún botón hamburguesa en el layout.
+  */
+  <div
+    class="offcanvas offcanvas-start bg-dark text-white"
+    tabindex="-1"
+    id="mobileSidebar"
+    aria-labelledby="mobileSidebarLabel"
+  >
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="mobileSidebarLabel">Menú</h5>
-      <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+      <button
+        type="button"
+        class="btn-close btn-close-white"
+        data-bs-dismiss="offcanvas"
+        aria-label="Cerrar"
+      ></button>
     </div>
+
     <div class="offcanvas-body d-flex flex-column">
-      <a class={`nav-link text-white mb-2 d-flex align-items-center gap-2 ${isActive('/dashboard')}`} href="/dashboard">
+      <a
+        class={`nav-link text-white mb-2 d-flex align-items-center gap-2 ${isActive('/dashboard')}`}
+        href="/dashboard"
+      >
         <i class="bi bi-house"></i> Inicio
       </a>
 
       {veTickets && (
-        <a class={`nav-link text-white mb-2 d-flex align-items-center gap-2 ${isActive('/addTicket')}`} href="/addTicket">
+        <a
+          class={`nav-link text-white mb-2 d-flex align-items-center gap-2 ${isActive('/addTicket')}`}
+          href="/addTicket"
+        >
           <i class="bi bi-ticket-detailed"></i> Tickets
         </a>
       )}
 
       {veUsuarios && (
-        <a class={`nav-link text-white mb-2 d-flex align-items-center gap-2 ${isActive('/usuarios')}`} href="/usuarios">
+        <a
+          class={`nav-link text-white mb-2 d-flex align-items-center gap-2 ${isActive('/usuarios')}`}
+          href="/usuarios"
+        >
           <i class="bi bi-people"></i> Usuarios
         </a>
       )}
 
       {veEstadisticas && (
-        <a class={`nav-link text-white mb-2 d-flex align-items-center gap-2 ${isActive('/estadisticas')}`} href="/estadisticas">
+        <a
+          class={`nav-link text-white mb-2 d-flex align-items-center gap-2 ${isActive('/estadisticas')}`}
+          href="/estadisticas"
+        >
           <i class="bi bi-bar-chart-line"></i> Estadísticas
         </a>
       )}
 
       {veRepuestos && (
-        <a class={`nav-link text-white mb-2 d-flex align-items-center gap-2 ${isActive('/repuesto')}`} href="/repuesto">
+        <a
+          class={`nav-link text-white mb-2 d-flex align-items-center gap-2 ${isActive('/repuesto')}`}
+          href="/repuesto"
+        >
           <i class="bi bi-box-seam"></i> Repuestos
         </a>
       )}
 
       {veMisEstadisticas && (
-        <a class={`nav-link text-white mb-2 d-flex align-items-center gap-2 ${isActive('/estadisticas-tecnico')}`} href="/estadisticas-tecnico">
+        <a
+          class={`nav-link text-white mb-2 d-flex align-items-center gap-2 ${isActive('/estadisticas-tecnico')}`}
+          href="/estadisticas-tecnico"
+        >
           <i class="bi bi-person-lines-fill"></i> Mis estadísticas
         </a>
       )}

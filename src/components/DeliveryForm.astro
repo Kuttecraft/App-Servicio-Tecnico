@@ -1,18 +1,81 @@
 ---
 const { equipo } = Astro.props as { equipo: any };
+/*
+  Este componente renderiza el formulario de "delivery" / datos de entrega
+  asociado a un ticket/equipo en reparación.
 
-// Utilidad: convierte "YYYY-MM-DD" a "DD/MM/YYYY" para mostrar en input readonly
+  COSAS QUE HACE:
+  - Muestra y permite editar: costo delivery, medio de entrega, dirección, localidad,
+    forma de pago, notas adicionales, estado "pagado".
+  - Muestra la fecha de entrega en modo readonly (no editable por el usuario).
+  - Soporta una opción "Otro" en "Medio de entrega": si el valor actual
+    no es uno de los predefinidos ("Delivery", "Taller"), se selecciona "Otro"
+    y se muestra un input adicional para especificar.
+  - Formatea el campo "Costo delivery" como moneda ARS en vivo desde JS.
+
+  EXPECTATIVAS:
+  - Recibe `equipo` como prop con campos:
+      equipo.ticketId
+      equipo.cotizar_delivery
+      equipo.medio_de_entrega
+      equipo.direccion
+      equipo.localidad
+      equipo.fecha_de_entrega        (YYYY-MM-DD o null)
+      equipo.forma_de_pago
+      equipo.informacion_adicional_delivery
+      equipo.pagado                  ('true' | 'false' | '' | null)
+  - Usa Bootstrap (clases .row, .col-md-6, .form-control, .form-select, etc.)
+  - Usa íconos Bootstrap Icons (bi bi-save).
+
+  NOTA BACKEND:
+  - El <form> hace POST a /api/actualizarDelivery?id={equipo.ticketId}.
+    Ese endpoint va a decidir cómo persistir estos datos, incluyendo:
+      - calcular o setear la fecha_de_entrega "real"
+      - procesar costo delivery como número
+      - si pagado es "true" / "false" / vacío
+*/
+
+//
+// Utilidad: ddmmyyyy(ymd)
+// Convierte una fecha string en formato "YYYY-MM-DD" a "DD/MM/YYYY"
+// para mostrarla amigablemente en el input readonly.
+//
+// Ej:
+//   '2025-10-29' -> '29/10/2025'
+// Si no viene fecha, devuelve ''.
+//
 function ddmmyyyy(ymd: string) {
   if (!ymd) return '';
   const y = ymd.slice(0, 4), m = ymd.slice(5, 7), d = ymd.slice(8, 10);
   return (y && m && d) ? `${d}/${m}/${y}` : '';
 }
-const hoyYMD = new Date().toISOString().slice(0, 10);          // fecha actual en Y-M-D
-const fechaMostrar = ddmmyyyy((equipo?.fecha_de_entrega as string) || hoyYMD); // fallback: hoy
 
-// Formato ARS defensivo (acepta string o number)
+// hoyYMD:
+// Tomamos la fecha actual en formato "YYYY-MM-DD".
+// new Date().toISOString() → "2025-10-29T13:45:00.000Z"
+// slice(0,10) → "2025-10-29"
+const hoyYMD = new Date().toISOString().slice(0, 10);
+
+// fechaMostrar:
+// - Si equipo.fecha_de_entrega existe (ej: '2025-10-31'), mostramos esa.
+// - Si no, mostramos la fecha actual como fallback.
+// - Siempre formateada en DD/MM/YYYY.
+// Esta fecha es sólo visual (readonly), el backend es el que maneja el valor real.
+const fechaMostrar = ddmmyyyy((equipo?.fecha_de_entrega as string) || hoyYMD);
+
+// formatARS:
+// Formateo defensivo de valores numéricos/plata en pesos argentinos.
+// Acepta string o number; limpia caracteres raros; intenta parsear;
+// devuelve algo tipo "$ 5.000" (según locale 'es-AR').
+//
+// Importantísimo para evitar que en el input aparezcan números crudos
+// con separador decimal distinto, etc.
+//
 function formatARS(v?: string | number | null): string {
   if (v == null || v === '') return '';
+  // Limpieza básica:
+  // - quitamos cualquier cosa que no sea dígito, coma o guion.
+  // - reemplazamos coma por punto antes de Number(), para soportar "1,5".
   const n = Number(String(v).replace(/[^\d,-]/g, '').replace(',', '.'));
   if (!isFinite(n)) return String(v);
   return new Intl.NumberFormat('es-AR', {
@@ -24,7 +87,20 @@ function formatARS(v?: string | number | null): string {
 }
 
 // ------ Preparar "Medio de entrega" (select + input "Otro") ------
-// Si el valor actual no está entre las opciones, se selecciona "Otro" y se muestra el input
+//
+// Lógica:
+//  - Tenemos un select con opciones fijas: "Delivery", "Taller", y "Otro".
+//  - Si el valor actual de equipo.medio_de_entrega NO coincide con ninguna opción fija,
+//    entonces asumimos que es un valor personalizado => seleccionamos "Otro"
+//    y mostramos un input adicional para editar ese texto.
+//
+// Variables que salen de acá:
+//   medioActual  → valor actual crudo (string de la DB).
+//   opciones     → las opciones "normales" que esperamos.
+//   esOtro       → boolean: true si el valor actual no está entre las opciones fijas.
+//   seleccionado → qué opción del <select> debe venir marcada como selected.
+//   valorOtro    → si esOtro = true, el texto que cargamos en el input visible "Otro".
+//
 const medioActual = (equipo?.medio_de_entrega ?? '').trim();
 const opciones = ['Delivery', 'Taller'];
 const esOtro = !!(medioActual && !opciones.includes(medioActual));
@@ -32,8 +108,25 @@ const seleccionado = esOtro ? 'Otro' : (medioActual || '');
 const valorOtro = esOtro ? medioActual : '';
 ---
 
-<!-- Formulario de Delivery: postea a /api/actualizarDelivery con el id del ticket -->
-<form method="POST" action={`/api/actualizarDelivery?id=${equipo.ticketId}`} class="row g-3">
+<!--
+  Formulario de Delivery
+  ----------------------
+  method="POST"
+  action= /api/actualizarDelivery?id={equipo.ticketId}
+
+  El endpoint /api/actualizarDelivery:
+  - debería leer todos los name="" de los inputs de abajo.
+  - debería interpretar "medio_de_entrega_select" junto con "medio_de_entrega_otro":
+      * si select !== "Otro", usar el valor del select;
+      * si select === "Otro", usar el campo libre.
+  - debería guardar también cotizar_delivery, direccion, localidad, etc.
+-->
+<form
+  method="POST"
+  action={`/api/actualizarDelivery?id=${equipo.ticketId}`}
+  class="row g-3"
+>
+  <!-- COSTO DELIVERY -->
   <div class="col-md-6">
     <label class="form-label">Costo delivery</label>
     <input
@@ -43,20 +136,41 @@ const valorOtro = esOtro ? medioActual : '';
       value={formatARS(equipo?.cotizar_delivery ?? '')}
       placeholder="$500"
     />
+    <!--
+      Notas:
+      - class="currency-ars" → el script inline de abajo da formato ARS dinámico.
+      - value inicial viene formateado ya en ARS desde formatARS().
+      - En el backend probablemente vas a tener que "desformatear" para guardarlo limpio.
+    -->
   </div>
 
+  <!-- MEDIO DE ENTREGA (Delivery / Taller / Otro) -->
   <div class="col-md-6">
     <label class="form-label">Medio de entrega</label>
-    <!-- Select con opciones fijas + "Otro" -->
-    <select name="medio_de_entrega_select" id="medioSelect" class="form-select">
+
+    <!-- Select con opciones fijas + la opción "Otro" -->
+    <select
+      name="medio_de_entrega_select"
+      id="medioSelect"
+      class="form-select"
+    >
       <option value="" selected={!seleccionado}>Seleccionar</option>
-      <option value="Delivery" selected={seleccionado === 'Delivery'}>Delivery</option>
-      <option value="Taller" selected={seleccionado === 'Taller'}>Taller</option>
-      <option value="Otro" selected={seleccionado === 'Otro'}>Otro</option>
+      <option value="Delivery" selected={seleccionado === 'Delivery'}>
+        Delivery
+      </option>
+      <option value="Taller" selected={seleccionado === 'Taller'}>
+        Taller
+      </option>
+      <option value="Otro" selected={seleccionado === 'Otro'}>
+        Otro
+      </option>
     </select>
 
-    <!-- Campo visible solo si eligen "Otro" -->
-    <div id="medioOtroWrapper" class={esOtro ? 'mt-2' : 'mt-2 d-none'}>
+    <!-- Campo libre que sólo se muestra si eligieron "Otro" -->
+    <div
+      id="medioOtroWrapper"
+      class={esOtro ? 'mt-2' : 'mt-2 d-none'}
+    >
       <label class="form-label">Especificar otro medio</label>
       <input
         type="text"
@@ -66,10 +180,18 @@ const valorOtro = esOtro ? medioActual : '';
         value={valorOtro}
         placeholder="Moto, correo, mensajería, etc."
       />
-      <div class="form-text">Si elegís “Otro”, se guardará este valor.</div>
+      <div class="form-text">
+        Si elegís “Otro”, se guardará este valor.
+      </div>
     </div>
+    <!--
+      Notas:
+      - esOtro controla si arrancamos con el wrapper visible o con d-none.
+      - El script inline al final también actualiza esta visibilidad onChange.
+    -->
   </div>
 
+  <!-- DIRECCIÓN -->
   <div class="col-md-6">
     <label class="form-label">Dirección</label>
     <input
@@ -81,6 +203,7 @@ const valorOtro = esOtro ? medioActual : '';
     />
   </div>
 
+  <!-- LOCALIDAD -->
   <div class="col-md-6">
     <label class="form-label">Localidad</label>
     <input
@@ -92,13 +215,25 @@ const valorOtro = esOtro ? medioActual : '';
     />
   </div>
 
+  <!-- FECHA DE ENTREGA (solo lectura) -->
   <div class="col-md-6">
     <label class="form-label">Fecha de entrega</label>
-    <!-- Solo lectura: se completa automáticamente al guardar en backend -->
-    <input type="text" class="form-control" value={fechaMostrar} readonly />
+    <!--
+      Este campo es readonly, o sea:
+      - El usuario la ve, pero no la edita.
+      - La fuente real de la fecha se determina del lado del backend (ej: cuando el equipo fue entregado).
+      - `fechaMostrar` ya viene en formato DD/MM/YYYY.
+    -->
+    <input
+      type="text"
+      class="form-control"
+      value={fechaMostrar}
+      readonly
+    />
     <div class="form-text">Se completa automáticamente al guardar.</div>
   </div>
 
+  <!-- FORMA DE PAGO -->
   <div class="col-md-6">
     <label class="form-label">Forma de pago</label>
     <input
@@ -108,8 +243,14 @@ const valorOtro = esOtro ? medioActual : '';
       value={equipo?.forma_de_pago ?? ''}
       placeholder="Transferencia, efectivo..."
     />
+    <!--
+      libre: el admin puede anotar "Efectivo",
+      "Transferencia a alias tal",
+      "MercadoPago", etc.
+    -->
   </div>
 
+  <!-- INFORMACIÓN ADICIONAL -->
   <div class="col-12">
     <label class="form-label">Información adicional</label>
     <textarea
@@ -118,18 +259,35 @@ const valorOtro = esOtro ? medioActual : '';
       rows="3"
       placeholder="Notas, referencias, aclaraciones..."
     >{equipo?.informacion_adicional_delivery ?? ''}</textarea>
+    <!--
+      Campo libre multi-línea.
+      Puede ser:
+      - "Llamar antes de ir"
+      - "Timbre roto"
+      - "Cliente paga al retirar"
+      etc.
+    -->
   </div>
 
+  <!-- PAGADO (tri-estado) -->
   <div class="col-12">
     <label class="form-label">¿Pagado?</label>
-    <!-- Tri-estado: vacío / true / false -->
+    <!--
+      Tri-estado:
+        ""      → no especificado / pendiente
+        "true"  → Sí
+        "false" → No
+      Esto permite que el backend diferencie entre "no sé todavía"
+      y "sé que NO pagó" o "sé que SÍ pagó".
+    -->
     <select name="pagado" class="form-select">
       <option value="" selected={!equipo?.pagado}>Seleccionar</option>
-      <option value="true" selected={equipo?.pagado === 'true'}>Sí</option>
+      <option value="true"  selected={equipo?.pagado === 'true'}>Sí</option>
       <option value="false" selected={equipo?.pagado === 'false'}>No</option>
     </select>
   </div>
 
+  <!-- BOTÓN SUBMIT -->
   <div class="col-12 d-flex justify-content-end">
     <button type="submit" class="btn btn-success">
       <i class="bi bi-save me-1"></i> Guardar delivery
@@ -137,33 +295,66 @@ const valorOtro = esOtro ? medioActual : '';
   </div>
 </form>
 
-<!-- JS: formatea ARS en vivo y muestra/oculta campo "Otro" según selección -->
+<!--
+  SCRIPT INLINE
+  -------------
+  Hace dos cosas principales en el cliente:
+
+  1. Formateo dinámico de moneda ARS en los inputs con class .currency-ars
+     - Mientras escribís, restringe caracteres.
+     - Al salir del input (blur), lo convierte en formato "$ 1.500".
+     - Esto mantiene la UI prolija y consistente.
+
+  2. Toggle dinámico del campo "Otro" en "Medio de entrega"
+     - Si en el <select> eligen "Otro", se muestra el input libre.
+     - Si eligen cualquier otra opción, se oculta y borra su contenido.
+-->
 <script>
 (function(){
   // --- Helpers de moneda ARS (input limpio y formato al blur) ---
+
+  // parseNumber(s):
+  // Toma el string que está en el input (que puede tener símbolos),
+  // deja sólo dígitos y separador decimal, y devuelve un Number.
   function parseNumber(s){
     if(!s) return 0;
-    s = s.replace(/[^\d,-]/g,'').replace(',', '.');     // deja dígitos y decimal como punto
+    s = s.replace(/[^\d,-]/g,'').replace(',', '.'); // Ej: "$1.500,50" -> "1500.50"
     return Number(s) || 0;
   }
+
+  // formatARS(n):
+  // Devuelve el número n formateado como moneda argentina (ARS),
+  // con Intl.NumberFormat('es-AR').
   function formatARS(n){
     return new Intl.NumberFormat('es-AR',{
-      style:'currency',currency:'ARS',
-      minimumFractionDigits:0, maximumFractionDigits:2
+      style:'currency',
+      currency:'ARS',
+      minimumFractionDigits:0,
+      maximumFractionDigits:2
     }).format(n);
   }
+
+  // onBlur:
+  // Cuando el usuario sale del input, limpiamos y formateamos bien el valor.
   function onBlur(e){
     const target = e.target;
     if (!(target instanceof HTMLInputElement)) return;
     const n = parseNumber(target.value);
     target.value = n ? formatARS(n) : '';
   }
+
+  // onInput:
+  // Mientras el usuario está escribiendo, limitamos los caracteres permitidos
+  // a dígitos, coma, punto y guion.
+  // Esto evita meter letras o símbolos raros.
   function onInput(e){
     const target = e.target;
     if (!(target instanceof HTMLInputElement)) return;
-    target.value = target.value.replace(/[^\d,.-]/g,''); // deja solo números y separadores
+    target.value = target.value.replace(/[^\d,.-]/g,'');
   }
-  // Aplica a todos los inputs con clase .currency-ars
+
+  // Buscamos todos los inputs que tengan class="currency-ars"
+  // y les enchufamos el formateo interactivo.
   document.querySelectorAll('.currency-ars').forEach((el)=>{
     if (el instanceof HTMLInputElement) {
       el.addEventListener('blur', onBlur);
@@ -172,23 +363,37 @@ const valorOtro = esOtro ? medioActual : '';
   });
 
   // --- Toggle del input "Otro" para el medio de entrega ---
-  const sel  = document.getElementById('medioSelect');       // <select>
-  const wrap = document.getElementById('medioOtroWrapper');  // wrapper del input "Otro"
-  const otro = document.getElementById('medioOtro');         // <input> "Otro"
 
+  const sel  = document.getElementById('medioSelect');       // <select> Medio de entrega
+  const wrap = document.getElementById('medioOtroWrapper');  // div que envuelve el input "Otro"
+  const otro = document.getElementById('medioOtro');         // <input> libre "Otro"
+
+  // toggleOtro():
+  // - Si el usuario elige "Otro" en el select,
+  //   mostramos el wrapper y hacemos focus en el input libre.
+  // - Si elige cualquier otra opción,
+  //   ocultamos el wrapper y limpiamos el valor del input libre
+  //   para que no se mande accidentalmente.
   function toggleOtro(){
     if(!(sel instanceof HTMLSelectElement) || !(wrap instanceof HTMLElement)) return;
     if(sel.value === 'Otro'){
       wrap.classList.remove('d-none');
-      if(otro instanceof HTMLInputElement){ setTimeout(()=>otro.focus(), 0); } // foco al input
+      if(otro instanceof HTMLInputElement){
+        // Pequeño timeout 0ms para que el navegador termine el repaint del DOM
+        // y luego ponga el focus en el campo "Otro". UX más fluida.
+        setTimeout(()=>otro.focus(), 0);
+      }
     }else{
       wrap.classList.add('d-none');
-      if(otro instanceof HTMLInputElement){ otro.value = ''; }                // limpia si no es "Otro"
+      if(otro instanceof HTMLInputElement){
+        otro.value = ''; // limpiamos el contenido si se deja de usar "Otro"
+      }
     }
   }
 
+  // Escuchamos cambio en el select para mostrar/ocultar el campo "Otro".
   if (sel) {
-    sel.addEventListener('change', toggleOtro); // reacciona a cambios en el select
+    sel.addEventListener('change', toggleOtro);
   }
 })();
 </script>

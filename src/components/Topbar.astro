@@ -1,10 +1,21 @@
 ---
 import { UserButton } from '@clerk/astro/components';
 
-const { showFilters = false } = Astro.props; // muestra/oculta el formulario de filtros en el topbar
+/**
+ * Topbar fijo con:
+ * - Botón hamburguesa (abre sidebar mobile/offcanvas).
+ * - Formulario de filtros (opcional).
+ * - Botón de usuario (Clerk).
+ *
+ * Props:
+ *   showFilters?: boolean
+ *     - true  => renderiza el formulario de búsqueda/filtrado en el topbar
+ *     - false => sólo muestra el UserButton alineado a la derecha
+ */
+const { showFilters = false } = Astro.props as { showFilters?: boolean };
 
-// Lista de estados disponibles para filtrar
-const ESTADOS = [
+// Lista de estados disponibles para filtrar. Tipada explícitamente para TS.
+const ESTADOS: string[] = [
   "Nuevo",
   "Retirar",
   "Presupuestar",
@@ -35,9 +46,10 @@ const COLOR_POR_ESTADO: Record<string, string> = {
 };
 
 // Parámetros actuales del querystring (para SSR del filtro)
-const by = Astro.url.searchParams.get('by') || 'id';
-const rawQ = Astro.url.searchParams.get('q') || '';
-const q = rawQ.trim();
+// Tipamos explícitamente como string para que TS no acuse any.
+const by: string = Astro.url.searchParams.get('by') || 'id';
+const rawQ: string = Astro.url.searchParams.get('q') || '';
+const q: string = rawQ.trim();
 ---
 
 <!-- Navbar fija superior -->
@@ -69,8 +81,8 @@ const q = rawQ.trim();
         <div
           id="q-container"
           class="col-12 col-md-6"
-          data-estados={encodeURIComponent(JSON.stringify(ESTADOS))}          
-          data-colores={encodeURIComponent(JSON.stringify(COLOR_POR_ESTADO))} 
+          data-estados={encodeURIComponent(JSON.stringify(ESTADOS))}
+          data-colores={encodeURIComponent(JSON.stringify(COLOR_POR_ESTADO))}
         >
           {by === 'estado' ? (
             <!-- Dropdown SSR con puntitos de color -->
@@ -104,7 +116,7 @@ const q = rawQ.trim();
                     <span class="estado-dot" style="--dot-color:#ccc;"></span>
                   </button>
                 </li>
-                {ESTADOS.map((e) => (
+                {ESTADOS.map((e: string) => (
                   <li>
                     <button
                       type="button"
@@ -125,7 +137,7 @@ const q = rawQ.trim();
               <noscript>
                 <select name="q" class="form-select w-100 mt-2">
                   <option value="">Seleccioná estado…</option>
-                  {ESTADOS.map((e) => (
+                  {ESTADOS.map((e: string) => (
                     <option value={e} selected={q === e}>{e}</option>
                   ))}
                 </select>
@@ -185,6 +197,7 @@ const q = rawQ.trim();
       <!-- Datos embebidos para posibles lecturas desde JS -->
       <script type="application/json" id="estados-data">{JSON.stringify(ESTADOS)}</script>
       <script type="application/json" id="colores-data">{JSON.stringify(COLOR_POR_ESTADO)}</script>
+
       <!-- Script que transforma el campo según “by” y pinta los puntitos -->
       <script defer src="/scripts/form-actualizar-filtro.js"></script>
     </>
@@ -192,7 +205,7 @@ const q = rawQ.trim();
 </nav>
 
 <style>
-  /* Puntito de color reutilizable */
+  /* Puntito de color reutilizable (estado actual / color pastel) */
   .estado-dot {
     width: 12px;
     height: 12px;
@@ -202,7 +215,8 @@ const q = rawQ.trim();
     display: inline-block;
     flex: 0 0 auto;
   }
-  /* Activo en dropdown (Bootstrap override leve) */
+
+  /* Dropdown active override para que no pinte azul bootstrap fuerte */
   .dropdown-menu .dropdown-item.active,
   .dropdown-menu .dropdown-item:active {
     background-color: rgba(0,0,0,.05);
