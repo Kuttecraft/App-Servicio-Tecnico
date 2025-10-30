@@ -2,11 +2,15 @@
   "name": "super-sphere",
   "type": "module",
   "version": "0.0.1",
+  "main": "index.js",
+  "description": "Este proyecto tiene como objetivo migrar flujos actuales que usan Google Sheets, Google Forms, AppScript y AppSheet a una aplicación web moderna, capaz de correr de forma local en servidores propios.",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "watch": "node ./scripts/watchTickets.js",
+    "watch:pm2": "pm2 start ./scripts/watchTickets.js --name watch-tickets"
   },
   "dependencies": {
     "@astrojs/node": "^9.2.2",
@@ -21,7 +25,8 @@
     "dotenv": "^17.2.3",
     "nodemailer": "^7.0.10",
     "pdfmake": "^0.2.20",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "pm2": "^6.0.13"
   },
   "devDependencies": {
     "@clerk/astro": "^2.9.0",
@@ -29,5 +34,16 @@
     "@types/pdfmake": "^0.2.12",
     "@types/pg": "^8.15.5",
     "typescript": "^5.8.3"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kuttecraft/App-Servicio-Tecnico.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Kuttecraft/App-Servicio-Tecnico/issues"
+  },
+  "homepage": "https://github.com/Kuttecraft/App-Servicio-Tecnico#readme"
 }

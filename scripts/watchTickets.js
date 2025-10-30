@@ -1,4 +1,5 @@
 // watchTickets.js
+// EJECUTAR EN LA TERMINAL EL SIGUIENTE COMANDO: npm run watch
 //
 // PROPÓSITO
 // ---------
