@@ -4,27 +4,79 @@ import { supabase } from '../../lib/supabase';
 import { resolverAutor, nombreAutor } from '../../lib/resolverAutor';
 
 /**
- * Endpoint POST para agregar un comentario manual a un ticket.
+ * jsonError()
+ * --------------------------------------------------
+ * Helper reutilizable para devolver errores en formato JSON
+ * con un status HTTP específico. Esto mantiene consistencia
+ * en todas las respuestas de error del endpoint.
+ */
+function jsonError(message: string, status = 500) {
+  return new Response(
+    JSON.stringify({ error: message }),
+    {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    }
+  );
+}
+
+/**
+ * POST /api/agregarComentario
+ * --------------------------------------------------
+ * Este endpoint agrega un comentario manual (libre) a un ticket.
+ *
  * Flujo:
- * 1) Parsear body JSON y validar parámetros (ticketId, mensaje).
- * 2) Resolver autor actual (técnico) desde `locals` y validar que esté activo.
- * 3) Verificar existencia del ticket.
- * 4) Insertar comentario (append-only) en `ticket_comentarios`.
- * 5) Responder con metadatos del comentario creado.
+ *   1. Lee el body JSON que envía el front { ticketId, mensaje }.
+ *   2. Valida que:
+ *      - haya ticketId numérico válido (>0),
+ *      - el mensaje no esté vacío y no supere el máximo.
+ *   3. Resuelve el autor actual con `resolverAutor(locals)`:
+ *      - si no hay autor, devolvemos 401 (no autorizado/técnico no resuelto)
+ *      - si el autor está inactivo, devolvemos 403
+ *   4. Verifica que el ticket exista en `tickets_mian`.
+ *   5. Inserta una fila en `ticket_comentarios` con:
+ *        - ticket_id
+ *        - autor_id
+ *        - mensaje
+ *   6. Devuelve JSON con info útil para el frontend:
+ *        - id del comentario creado
+ *        - marca de tiempo
+ *        - nombre del autor en formato legible
+ *
+ * Seguridad / Auditoría:
+ * - Cada comentario queda trazado con `autor_id`, que viene del técnico
+ *   autenticado/resuelto vía `locals`.
+ * - No permite comentar si el técnico está marcado como inactivo.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   try {
-    // Intentamos leer el body como JSON, y si falla devolvemos null para validar luego.
-    const body = await request.json().catch(() => null) as { ticketId?: number|string; mensaje?: string };
+    /**
+     * 1) Parseo del body
+     * ----------------------------------------------------------------------------
+     * El frontend debería mandar:
+     *    { "ticketId": 123, "mensaje": "Texto del comentario..." }
+     *
+     * Hacemos request.json(), pero como podría fallar si no viene JSON válido,
+     * usamos .catch(() => null) para evitar que reviente el try/catch externo.
+     *
+     * Tipamos el body como un objeto con `ticketId?` y `mensaje?`
+     * para que TypeScript sepa qué esperamos.
+     */
+    const body = (await request.json().catch(() => null)) as {
+      ticketId?: number | string;
+      mensaje?: string;
+    } | null;
 
-    // Normalizamos y validamos entrada.
-    const ticketIdNum = Number(body?.ticketId);           // Forzamos a number para la consulta
-    const mensaje = (body?.mensaje || '').trim();         // Quitamos espacios al mensaje
+    // 2) Normalizamos y validamos los parámetros de entrada
+    const ticketIdNum = Number(body?.ticketId); // lo forzamos a number para usarlo en queries
+    const mensaje = (body?.mensaje || '').trim(); // quitamos espacios alrededor
 
-    // Validaciones básicas del input
+    // Validación del ticketId
     if (!Number.isFinite(ticketIdNum) || ticketIdNum <= 0) {
       return jsonError('ticketId inválido', 400);
     }
+
+    // Validación del mensaje
     if (!mensaje) {
       return jsonError('El mensaje no puede estar vacío', 400);
     }
@@ -32,66 +84,119 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return jsonError('Mensaje demasiado largo (máx 2000)', 400);
     }
 
-    // 1) Resolver autor (usuario/técnico actual) desde `locals`.
+    /**
+     * 3) Resolver autor
+     * ----------------------------------------------------------------------------
+     * `resolverAutor(locals)` busca el técnico actual usando varias heurísticas:
+     *   - locals.tecnico_id
+     *   - email en locals.user / locals.perfil / locals.usuario
+     *   - si no existe el técnico, incluso lo crea
+     *
+     * De ese autor usamos:
+     *   - autor.id       → lo guardamos como autor_id en la tabla
+     *   - autor.activo   → para bloquear técnicos inactivos
+     *   - nombreAutor()  → para mostrar un label legible en respuesta
+     */
     const autor = await resolverAutor(locals);
     if (!autor) {
-      // Sin autor no podemos auditar quién escribió el comentario
+      // No pudimos determinar quién sos → no registramos el comentario
       return jsonError('No se pudo determinar el técnico actual', 401);
     }
     if (autor.activo === false) {
-      // Bloqueamos a técnicos inactivos
+      // El técnico existe pero está marcado como inactivo → bloqueado
       return jsonError('El técnico no está activo', 403);
     }
 
-    // 2) Validar existencia del ticket destino
+    /**
+     * 4) Confirmar que el ticket existe
+     * ----------------------------------------------------------------------------
+     * Si alguien intenta comentar un ticket inexistente o borrado,
+     * respondemos 404 y no creamos ruido en la DB.
+     */
     const { data: tk } = await supabase
       .from('tickets_mian')
       .select('id')
       .eq('id', ticketIdNum)
       .maybeSingle();
-    if (!tk?.id) return jsonError('Ticket inexistente', 404);
 
-    // 3) Insertar comentario (append-only) en la tabla de comentarios del ticket
+    if (!tk?.id) {
+      return jsonError('Ticket inexistente', 404);
+    }
+
+    /**
+     * 5) Insertar el comentario en ticket_comentarios
+     * ----------------------------------------------------------------------------
+     * Guardamos:
+     *   - ticket_id   → relación con el ticket
+     *   - autor_id    → FK al técnico que hizo el comentario
+     *   - mensaje     → el texto que escribió
+     *
+     * .select('id, creado_en').single() nos devuelve la fila recién creada
+     * con su `id` y el timestamp `creado_en` para mostrar al frontend.
+     */
     const { data: inserted, error: insErr } = await supabase
       .from('ticket_comentarios')
       .insert({
         ticket_id: ticketIdNum,
-        autor_id: autor.id, // referenciamos al autor resuelto
-        mensaje
+        autor_id: autor.id,
+        mensaje,
       })
-      .select('id, creado_en') // devolvemos campos útiles para el front
+      .select('id, creado_en')
       .single();
 
     if (insErr || !inserted) {
-      return jsonError('No se pudo agregar el comentario: ' + (insErr?.message || ''), 500);
+      return jsonError(
+        'No se pudo agregar el comentario: ' +
+          (insErr?.message || ''),
+        500
+      );
     }
 
-    // 4) Armamos respuesta amigable: nombre del autor y fecha legible
+    /**
+     * 6) Preparar respuesta amigable para el frontend
+     * ----------------------------------------------------------------------------
+     * - autorNombre: mostramos "Nombre Apellido" o "Técnico" o derivado del email,
+     *   usando nombreAutor(autor).
+     * - creadoHumano: lo pasamos por toLocaleString('es-AR') para que el front
+     *   ya pueda pintar algo listo (ej: "29/10/2025 14:30:12").
+     */
     const autorNombre = nombreAutor(autor);
-    const creadoHumano = new Date(inserted.creado_en).toLocaleString('es-AR', { hour12: false });
 
-    // 5) Responder JSON con OK + metadatos del comentario creado
-    return new Response(JSON.stringify({
-      ok: true,
-      id: inserted.id,
-      creado_en: inserted.creado_en,
-      creado_en_humano: creadoHumano,
-      autor: autorNombre,
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    // inserted.creado_en es un timestamp ISO (Supabase).
+    // Lo convertimos a algo legible en Argentina (es-AR, 24h).
+    const creadoHumano = new Date(inserted.creado_en).toLocaleString(
+      'es-AR',
+      { hour12: false }
+    );
 
+    /**
+     * 7) Responder con éxito
+     * ----------------------------------------------------------------------------
+     * Devolvemos:
+     *   ok: true
+     *   id: id interno del comentario creado
+     *   creado_en: timestamp ISO crudo
+     *   creado_en_humano: string ya formateada para UI rápida
+     *   autor: nombre legible del técnico que comentó
+     */
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        id: inserted.id,
+        creado_en: inserted.creado_en,
+        creado_en_humano: creadoHumano,
+        autor: autorNombre,
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
   } catch (err: any) {
-    // Fallback de error no controlado
-    return jsonError('Error inesperado: ' + (err?.message || String(err)), 500);
+    // Cualquier excepción no controlada cae acá
+    return jsonError(
+      'Error inesperado: ' + (err?.message || String(err)),
+      500
+    );
   }
 };
-
-/**
- * Helper para responder errores en JSON con status configurable.
- * Estandariza content-type y payload { error: message }.
- */
-function jsonError(message: string, status = 500) {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}

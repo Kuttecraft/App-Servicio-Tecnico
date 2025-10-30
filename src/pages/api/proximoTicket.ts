@@ -1,16 +1,43 @@
 // src/pages/api/proximoTicket.ts
 import { supabase } from '../../lib/supabase';
 
+/**
+ * Endpoint GET /api/proximoTicket
+ *
+ * 🎫 Objetivo:
+ *   Sugerir el próximo número de ticket a asignar.
+ *
+ * 🧠 Lógica:
+ *   1. Busca en la tabla `tickets_mian` el valor más alto que exista en la columna `ticket`.
+ *      - Ignora `ticket = null`.
+ *   2. Convierte ese ticket máximo a número.
+ *   3. Devuelve ese número + 1.
+ *
+ *   Si la tabla está vacía, o no hay datos válidos, o hay error → devuelve 1.
+ *
+ * 📤 Respuesta:
+ * {
+ *   "sugerido": 1234
+ * }
+ *
+ * 🔎 Notas:
+ * - `ticket` en la base puede estar guardado como texto o número, por eso se hace `Number(...)`.
+ * - No escribe nada en la DB, solo calcula y responde.
+ * - No valida permisos acá, eso debería pasar antes (middleware / ruta protegida si aplica).
+ */
 export async function GET() {
   // ────────────────────────────────────────────────
-  // Este endpoint sugiere el próximo número de ticket.
-  // La lógica es: buscar el ticket más grande ya usado
-  // y devolver ese valor + 1.
+  // 1️⃣ Buscar el ticket más grande actualmente usado
   // ────────────────────────────────────────────────
-
-  // 1) Buscar en la tabla `tickets_mian` el valor máximo de `ticket`
-  //    - ignoramos los tickets nulos
-  //    - ordenamos descendente y tomamos solo 1 fila
+  //
+  //   SELECT ticket
+  //   FROM tickets_mian
+  //   WHERE ticket IS NOT NULL
+  //   ORDER BY ticket DESC
+  //   LIMIT 1;
+  //
+  // Usamos maybeSingle() porque esperamos 0 o 1 fila.
+  //
   const { data, error } = await supabase
     .from('tickets_mian')
     .select('ticket')
@@ -19,20 +46,36 @@ export async function GET() {
     .limit(1)
     .maybeSingle();
 
-  // Valor sugerido por defecto
+  // ────────────────────────────────────────────────
+  // 2️⃣ Calcular sugerencia
+  // ────────────────────────────────────────────────
+  //
+  // Valor por defecto si no hay registros válidos o hay error.
+  //
   let sugerido = 1;
 
-  // 2) Si no hubo error y tenemos un ticket válido,
-  //    lo convertimos a número y sumamos +1
+  // Si no hubo error y obtuvimos un `ticket` con valor numérico,
+  // usamos ese valor+1 como sugerido.
   if (!error && data) {
     const ticketNum = Number(data.ticket);
+
+    // Aceptamos solo números válidos y positivos
     if (!isNaN(ticketNum) && ticketNum > 0) {
       sugerido = ticketNum + 1;
     }
   }
 
-  // 3) Devolver la sugerencia como JSON
-  return new Response(JSON.stringify({ sugerido }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+  // ────────────────────────────────────────────────
+  // 3️⃣ Responder JSON
+  // ────────────────────────────────────────────────
+  //
+  // Ejemplo:
+  //   { "sugerido": 1521 }
+  //
+  return new Response(
+    JSON.stringify({ sugerido }),
+    {
+      headers: { 'Content-Type': 'application/json' },
+    }
+  );
 }
