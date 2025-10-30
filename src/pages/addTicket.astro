@@ -1,18 +1,67 @@
 ---
 /**
  * Pantalla para crear un nuevo ticket.
- * - Lee query params para precargar campos (y los limpia si ok=1).
- * - Pide al backend el próximo número sugerido de ticket.
- * - Ofrece selector de impresora con opción "Otra (especificar)" sincronizada.
- * - Carga imágenes (principal, ticket, extra) con previews (lo maneja script externo).
+ *
+ * 🧩 ¿Qué resuelve esta vista?
+ * - Renderiza un formulario completo para dar de alta un ticket (cliente, equipo, estado, etc.)
+ * - Sube imágenes (principal / ticket / extra) con previews
+ * - Calcula automáticamente el próximo número de ticket disponible
+ * - Permite prefijar campos vía querystring (para crear desde un link pre-rellenado)
+ *
+ * 🟢 Flujo normal:
+ *   1. Entrás a /addTicket (posiblemente con query params como cliente=..., modelo=..., etc.)
+ *   2. Completás el form.
+ *   3. Al enviar, hace POST a /api/crearTicket (con multipart/form-data).
+ *   4. /api/crearTicket redirige de vuelta acá con ?ok=1 si salió bien.
+ *
+ * 🔄 ¿Qué hace ok=1?
+ *   - Si ok=1, significa "ticket creado con éxito".
+ *   - Mostramos una badge verde "Ticket creado ✅".
+ *   - Limpiamos los campos iniciales para que puedas cargar OTRO ticket
+ *     rápido sin tener que borrar a mano.
+ *
+ * ⏭ Número de ticket sugerido:
+ *   - Antes de renderizar la página en el server llamamos a /api/proximoTicket
+ *   - Ese endpoint consulta la DB, busca el ticket más alto y propone el siguiente.
+ *   - Usamos eso como valor por defecto del input "Ticket".
+ *
+ * 🖨 Selección de impresora:
+ *   - Hay un <select> con modelos predefinidos y una opción "OTRA__ESPECIFICAR".
+ *   - Si el usuario elige "OTRA__ESPECIFICAR" o escribe algo en el campo de texto,
+ *     se muestra un input libre (modeloOtro).
+ *   - Antes de enviar el formulario nos aseguramos de que si completó un modelo libre,
+ *     el <select> quede en "OTRA__ESPECIFICAR", para que el backend entienda bien.
+ *
+ * 🖼 Imágenes:
+ *   - Hay 3 slots posibles:
+ *        - Principal (obligatoria en la práctica visualmente)
+ *        - Ticket (foto en proceso / fallas)
+ *        - Extra (finish / máquina lista)
+ *   - Cada tile tiene preview con <img> + botón "Subir imagen".
+ *   - Los tiles "ticket" y "extra" aparecen recién cuando el usuario los habilita,
+ *     manejado después por /scripts/form-crear-ticket-multi.js.
+ *
+ * 🔐 Seguridad:
+ *   - Esta vista asume que ya estás dentro de layout privado (<BasePrivateLayout />)
+ *     y que el middleware ya validó sesión/rol antes de permitirte llegar acá.
  */
+
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 
-// URL actual para leer parámetros de precarga
+// -------------------------------------------------------------
+// 1) Leemos la URL actual para poder obtener query params
+//    y también saber si venimos de un alta exitosa (ok=1).
+// -------------------------------------------------------------
 const url = new URL(Astro.request.url);
-const ok = url.searchParams.get('ok') === '1'; // si venimos de crear OK → limpiar form
 
-// Precargas condicionadas por ok
+// Si ?ok=1 => se considera "alta exitosa"
+const ok = url.searchParams.get('ok') === '1';
+
+// -------------------------------------------------------------
+// 2) Precarga inicial de cada campo del formulario
+//    Regla: si ok=1 => limpiamos (string vacío) para empezar un nuevo alta en blanco.
+//          si ok!=1 => usamos lo que vino en querystring (si hay).
+// -------------------------------------------------------------
 const cliente     = ok ? '' : (url.searchParams.get('cliente')     || '');
 const dniCuit     = ok ? '' : (url.searchParams.get('dniCuit')     || '');
 const correo      = ok ? '' : (url.searchParams.get('correo')      || '');
@@ -24,19 +73,34 @@ const boquilla    = ok ? '' : (url.searchParams.get('boquilla')    || '');
 const tecnico     = ok ? '' : (url.searchParams.get('tecnico')     || '');
 const comentarios = ok ? '' : (url.searchParams.get('comentarios') || '');
 
-// Estados válidos del ticket
+// -------------------------------------------------------------
+// 3) Estados válidos del ticket
+//    - Se usa para el <select name="estado">
+//    - También usamos esto para la precarga de estado.
+// -------------------------------------------------------------
 const estados = [
   "Nuevo", "Retirar", "Presupuestar", "Enviar presupuesto", "P. Enviado",
   "Reparación", "Prueba", "Lista", "Entregada",
   "Feedback Enviado", "Archivada", "No realizada"
 ];
-// Si ok → default a "Nuevo", si no, leemos de querystring
+
+// Si ok=1, siempre arrancamos desde "Nuevo".
+// Si NO ok=1, dejamos que la URL fuerce el estado inicial (?estado=XXX) o usamos "Nuevo".
 const estado = ok ? estados[0] : (url.searchParams.get('estado') || estados[0]);
 
-// Opciones de boquilla predefinidas
+// -------------------------------------------------------------
+// 4) Opciones de boquilla
+//    - Lista típica de tamaños de nozzle frecuentes en impresoras 3D.
+//    - Se usa para <select name="boquilla">.
+// -------------------------------------------------------------
 const boquillas = ["0.2mm","0.3mm","0.4mm","0.5mm","0.6mm","0.8mm","1mm"];
 
-// Opciones de impresoras frecuentes + "Otra (especificar)"
+// -------------------------------------------------------------
+// 5) Lista de modelos de impresoras más comunes
+//    + marcador especial "OTRA__ESPECIFICAR"
+//    - Esta lista arma el <select id="select-impresora">.
+//    - Si el usuario elige "OTRA__ESPECIFICAR", mostramos el input libre "modeloOtro".
+// -------------------------------------------------------------
 const impresoras = [
   "PK3 MK8",
   "PK3++ MK8",
@@ -51,9 +115,15 @@ const impresoras = [
   "OTRA__ESPECIFICAR"
 ];
 
-// Consultamos al backend el próximo número sugerido de ticket
+// -------------------------------------------------------------
+// 6) Obtenemos el próximo número sugerido de ticket desde la API
+//    /api/proximoTicket:
+//    - Busca el ticket existente más alto y devuelve +1.
+//    - Si algo falla, fallback = 1.
+// -------------------------------------------------------------
 let ticketSugerido = 1;
 try {
+  // Astro.site es la base URL del sitio. Si no está configurado, usamos localhost.
   let base = Astro.site?.toString() || 'http://localhost:4321';
   const res = await fetch(`${base}/api/proximoTicket`);
   if (res.ok) {
@@ -61,42 +131,123 @@ try {
     ticketSugerido = data.sugerido;
   }
 } catch {
+  // Ante error de red / fetch interno, fallback hardcodeado.
   ticketSugerido = 1;
 }
-// Si ok → usamos el sugerido, sino respetamos querystring con fallback al sugerido
-const ticket = ok ? ticketSugerido : (url.searchParams.get('ticket') || ticketSugerido);
 
-// El backend hoy no usa este hidden, pero se envía por compatibilidad
+// -------------------------------------------------------------
+// 7) Valor inicial del campo "ticket" en el form
+//    Regla:
+//      - Si ok=1 => usamos directamente el sugerido (nuevo alta limpia)
+//      - Si NO ok=1 => si la URL trae ?ticket=..., usamos eso,
+//        sino usamos sugerido.
+// -------------------------------------------------------------
+const ticket = ok
+  ? ticketSugerido
+  : (url.searchParams.get('ticket') || ticketSugerido);
+
+// -------------------------------------------------------------
+// 8) Campo "cobrado"
+//    - Hoy el backend lo ignora, pero lo seguimos mandando
+//      por compatibilidad con lógica vieja.
+// -------------------------------------------------------------
 const cobrado = "No";
 ---
 
 <BasePrivateLayout>
   <style>
-    /* Grilla de tiles para imágenes */
-    .image-tiles { display: flex; gap: 1.25rem; justify-content: center; flex-wrap: wrap; }
+    /* ==========================
+       Estilos visuales específicos de esta vista
+       ========================== */
+
+    /* Wrapper flex para las tarjetas de imágenes */
+    .image-tiles {
+      display: flex;
+      gap: 1.25rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* Tarjeta contenedora de cada imagen (principal / ticket / extra) */
     .image-tile {
-      position: relative; width: 280px; height: 280px; border-radius: 16px;
-      overflow: hidden; background: #f1f3f5; border: 1px solid rgba(0,0,0,.075);
+      position: relative;
+      width: 280px;
+      height: 280px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #f1f3f5;
+      border: 1px solid rgba(0,0,0,.075);
       box-shadow: 0 2px 8px rgba(0,0,0,.06);
-      display: flex; align-items: center; justify-content: center;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
       transition: box-shadow .2s ease;
     }
-    .image-tile:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
-    .image-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-    .upload-btn { cursor: pointer; }
-    .add-tile { background: #e9ecef; color: #6c757d; cursor: pointer; display: none; }
-    .add-tile .plus { font-size: 64px; line-height: 1; user-select: none; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
-    .hidden-input { display: none; }
+    .image-tile:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,.08);
+    }
 
-    .image-tile.has-image .upload-btn { display: none; }
-    .image-tile.has-image { cursor: pointer; }
+    /* Imagen dentro de la tile (preview). object-fit:cover para que llene el recuadro */
+    .image-tile img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Botón "Subir imagen" flotante dentro de la tile */
+    .upload-btn {
+      cursor: pointer;
+    }
+
+    /* Tile de "agregar otra imagen": gris con un "+" gigante
+       que se habilita para abrir slots ticket/extra */
+    .add-tile {
+      background: #e9ecef;
+      color: #6c757d;
+      cursor: pointer;
+      display: none;
+    }
+
+    .add-tile .plus {
+      font-size: 64px;
+      line-height: 1;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Input file oculto, lo dispara el <label> estilo botón */
+    .hidden-input {
+      display: none;
+    }
+
+    /* Cuando ya hay imagen cargada en la tile:
+       - ocultamos el botón de upload (queda solo la preview)
+       - .has-image también permite CSS personalizado si querés
+    */
+    .image-tile.has-image .upload-btn {
+      display: none;
+    }
+    .image-tile.has-image {
+      cursor: pointer;
+    }
   </style>
 
   <div class="container mt-5">
     <div class="d-flex align-items-center justify-content-between">
-      <h2 class="mb-4"><i class="bi bi-ticket-perforated me-2"></i> Crear nuevo ticket</h2>
+      <h2 class="mb-4">
+        <i class="bi bi-ticket-perforated me-2"></i>
+        Crear nuevo ticket
+      </h2>
 
+      {/* Si venimos de una creación exitosa (?ok=1): badge verde a la derecha */}
       {ok && (
         <span class="badge bg-success-subtle text-success border border-success-subtle">
           Ticket creado ✅
@@ -104,45 +255,129 @@ const cobrado = "No";
       )}
     </div>
 
-    <!-- Form principal: envía al endpoint /api/crearTicket -->
-    <form method="post" action="/api/crearTicket" enctype="multipart/form-data" class="row g-3" id="form-crear-ticket">
-      <!-- Cliente y documento -->
+    {/*
+      ======================================================
+      FORMULARIO PRINCIPAL
+      - method="post" action="/api/crearTicket"
+      - enctype="multipart/form-data" para permitir subir imágenes
+      - Cada input tiene name=... que el backend /api/crearTicket espera.
+      - El form incluye todas las secciones:
+          * Datos del cliente
+          * Datos del equipo
+          * Estado inicial
+          * Comentarios
+          * Imágenes
+      ======================================================
+    */}
+    <form
+      method="post"
+      action="/api/crearTicket"
+      enctype="multipart/form-data"
+      class="row g-3"
+      id="form-crear-ticket"
+    >
+      {/* ===========================
+         BLOQUE: Cliente + Documento
+         =========================== */}
       <div class="col-md-6">
         <label class="form-label">Cliente</label>
-        <input type="text" class="form-control" name="cliente" value={cliente} required />
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">DNI/CUIT</label>
-        <input type="text" class="form-control" name="dniCuit" id="dniCuit" value={dniCuit} />
+        <input
+          type="text"
+          class="form-control"
+          name="cliente"
+          value={cliente}
+          required
+        />
       </div>
 
-      <!-- Contacto y ticket -->
+      <div class="col-md-6">
+        <label class="form-label">DNI/CUIT</label>
+        <input
+          type="text"
+          class="form-control"
+          name="dniCuit"
+          id="dniCuit"
+          value={dniCuit}
+        />
+      </div>
+
+      {/* ===========================
+         BLOQUE: Contacto + Ticket
+         =========================== */}
       <div class="col-md-6">
         <label class="form-label">Correo</label>
-        <input type="email" class="form-control" name="correo" value={correo} />
+        <input
+          type="email"
+          class="form-control"
+          name="correo"
+          value={correo}
+        />
       </div>
 
       <div class="col-md-6">
         <label class="form-label">Ticket</label>
-        <input type="number" class="form-control" name="ticket" value={ticket} min={1} required />
+        {/* Valor inicial = ticket calculado más arriba */}
+        <input
+          type="number"
+          class="form-control"
+          name="ticket"
+          value={ticket}
+          min={1}
+          required
+        />
       </div>
 
       <div class="col-md-6">
         <label class="form-label">WhatsApp</label>
-        <input type="text" class="form-control" name="whatsapp" value={whatsapp} />
+        <input
+          type="text"
+          class="form-control"
+          name="whatsapp"
+          value={whatsapp}
+        />
       </div>
 
-      <!-- Selector de impresora + “Otra (especificar)” con input extra sincronizado -->
+      {/* ======================================================
+         BLOQUE: Impresora
+         - <select> con modelos frecuentes.
+         - Si seleccionás "OTRA__ESPECIFICAR", aparece
+           un input de texto libre "modeloOtro".
+         - El script inline de más abajo se encarga de:
+           - mostrar/ocultar el campo extra
+           - sincronizar el select con lo que escribe el usuario
+             (si escribe algo en "modeloOtro", forzamos el select a OTRA__ESPECIFICAR).
+         ====================================================== */}
       <div class="col-md-6">
         <label class="form-label">Impresora / Máquina</label>
-        <select class="form-select" name="modelo" id="select-impresora">
-          <option value="" selected={!modelo}>Seleccionar…</option>
+
+        <select
+          class="form-select"
+          name="modelo"
+          id="select-impresora"
+        >
+          {/* Opción vacía "Seleccionar…" al inicio */}
+          <option
+            value=""
+            selected={!modelo}
+          >
+            Seleccionar…
+          </option>
+
           {impresoras.map((m) => (
-            <option value={m} selected={m === modelo}>
+            <option
+              value={m}
+              selected={m === modelo}
+            >
               {m === 'OTRA__ESPECIFICAR' ? 'Otra (especificar)' : m}
             </option>
           ))}
         </select>
+
+        {/* Campo libre que se muestra sólo si:
+            - Ya había modeloOtro (precarga), o
+            - El <select> está en OTRA__ESPECIFICAR.
+           El script inline se encarga de togglear la clase d-none y del required.
+        */}
         <input
           type="text"
           name="modeloOtro"
@@ -150,119 +385,270 @@ const cobrado = "No";
           value={modeloOtro}
           placeholder='Escribe el modelo (p. ej. "Ender 3 V3 KE")'
           autocomplete="off"
-          class:list={{ 'form-control': true, 'mt-2': true, 'd-none': modelo !== 'OTRA__ESPECIFICAR' && !modeloOtro }}
+          class:list={{
+            'form-control': true,
+            'mt-2': true,
+            'd-none': modelo !== 'OTRA__ESPECIFICAR' && !modeloOtro
+          }}
         />
       </div>
 
-      <!-- Serie y boquilla -->
+      {/* ===========================
+         BLOQUE: Serie y Boquilla
+         =========================== */}
       <div class="col-md-6">
         <label class="form-label">N° de Serie</label>
-        <input type="text" class="form-control" name="numeroSerie" value={numeroSerie} />
+        <input
+          type="text"
+          class="form-control"
+          name="numeroSerie"
+          value={numeroSerie}
+        />
       </div>
 
       <div class="col-md-6">
         <label class="form-label">Tamaño de boquilla</label>
-        <select class="form-select" name="boquilla">
-          <option value="" selected={!boquilla}>Seleccionar…</option>
+        <select
+          class="form-select"
+          name="boquilla"
+        >
+          <option
+            value=""
+            selected={!boquilla}
+          >
+            Seleccionar…
+          </option>
+
           {boquillas.map((b) => (
-            <option value={b} selected={b === boquilla}>{b}</option>
+            <option
+              value={b}
+              selected={b === boquilla}
+            >
+              {b}
+            </option>
           ))}
         </select>
       </div>
 
-      <!-- Técnico libre (el endpoint resolverá/creará técnico si no existe) -->
+      {/* ===========================
+         BLOQUE: Técnico asignado
+         - Campo libre de texto.
+         - /api/crearTicket luego intenta resolver/crear el técnico en DB.
+         =========================== */}
       <div class="col-md-6">
         <label class="form-label">Técnico</label>
-        <input type="text" class="form-control" name="tecnico" value={tecnico} />
+        <input
+          type="text"
+          class="form-control"
+          name="tecnico"
+          value={tecnico}
+        />
       </div>
 
-      <!-- Estado inicial del ticket -->
+      {/* ===========================
+         BLOQUE: Estado inicial
+         - Combo <select> con todos los estados de tickets.
+         =========================== */}
       <div class="col-md-6">
         <label class="form-label">Estado</label>
-        <select class="form-select" name="estado" required>
+        <select
+          class="form-select"
+          name="estado"
+          required
+        >
           {estados.map((op) => (
-            <option value={op} selected={op === estado}>{op}</option>
+            <option
+              value={op}
+              selected={op === estado}
+            >
+              {op}
+            </option>
           ))}
         </select>
       </div>
 
-      <!-- Se envía por compat (el backend puede ignorarlo) -->
-      <input type="hidden" name="cobrado" value={cobrado} />
+      {/* ===========================
+         Campo oculto "cobrado"
+         - Históricamente usado por backend. Lo seguimos mandando.
+         =========================== */}
+      <input
+        type="hidden"
+        name="cobrado"
+        value={cobrado}
+      />
 
-      <!-- Comentarios -->
+      {/* ===========================
+         BLOQUE: Comentarios
+         - Descripción del problema, notas iniciales, etc.
+         =========================== */}
       <div class="col-12">
         <label class="form-label">Comentarios</label>
-        <textarea class="form-control" name="comentarios">{comentarios}</textarea>
+        <textarea
+          class="form-control"
+          name="comentarios"
+        >{comentarios}</textarea>
       </div>
 
-      <!-- Imágenes: principal, ticket, extra (tiles con botón de upload y previews) -->
+      {/* ======================================================
+         BLOQUE: Imágenes
+         - 3 tiles máximas:
+             1) Principal (siempre visible)
+             2) Ticket (aparece cuando el user la "agrega")
+             3) Extra  (aparece en una segunda etapa)
+         - Cada tile contiene:
+             - <img> preview (arranca oculto con class d-none)
+             - label con botón "Subir imagen" que dispara <input type=file />
+         - Los tiles "add-tile" (+) se usan para ir habilitando las otras
+           imágenes opcionales. La lógica / preview real
+           la maneja /scripts/form-crear-ticket-multi.js (abajo).
+         ====================================================== */}
       <div class="col-12">
         <label class="form-label d-block text-center mb-2">Imágenes</label>
+
         <div class="image-tiles">
-          <!-- Principal -->
+          {/* --- Tile PRINCIPAL --- */}
           <div class="image-tile" id="tile-principal">
-            <img id="previewPrincipal" src="/logo.webp" alt="Vista previa principal" class="d-none" />
-            <label class="btn btn-outline-primary upload-btn position-absolute" style="bottom:12px; left:50%; transform:translateX(-50%);">
+            <img
+              id="previewPrincipal"
+              src="/logo.webp"
+              alt="Vista previa principal"
+              class="d-none"
+            />
+
+            <label
+              class="btn btn-outline-primary upload-btn position-absolute"
+              style="bottom:12px; left:50%; transform:translateX(-50%);"
+            >
               <i class="bi bi-upload me-2"></i> Subir imagen
-              <input type="file" class="hidden-input" name="imagenArchivo" id="imagenArchivo" accept="image/*" />
+              <input
+                type="file"
+                class="hidden-input"
+                name="imagenArchivo"
+                id="imagenArchivo"
+                accept="image/*"
+              />
             </label>
           </div>
 
-          <!-- Botón para sumar tile "ticket" -->
-          <div class="image-tile add-tile" id="tile-plus-ticket" title="Añadir imagen de ticket">
+          {/* --- Botón "+" para habilitar tile de imagen "ticket" --- */}
+          <div
+            class="image-tile add-tile"
+            id="tile-plus-ticket"
+            title="Añadir imagen de ticket"
+          >
             <div class="plus">+</div>
           </div>
 
-          <!-- Ticket -->
+          {/* --- Tile de IMAGEN TICKET (inicialmente oculto con d-none) --- */}
           <div class="image-tile d-none" id="tile-ticket">
-            <img id="previewTicket" src="/logo.webp" alt="Vista previa ticket" class="d-none" />
-            <label class="btn btn-outline-primary upload-btn position-absolute" style="bottom:12px; left:50%; transform:translateX(-50%);">
+            <img
+              id="previewTicket"
+              src="/logo.webp"
+              alt="Vista previa ticket"
+              class="d-none"
+            />
+
+            <label
+              class="btn btn-outline-primary upload-btn position-absolute"
+              style="bottom:12px; left:50%; transform:translateX(-50%);"
+            >
               <i class="bi bi-upload me-2"></i> Subir imagen ticket
-              <input type="file" class="hidden-input" name="imagenTicketArchivo" id="imagenTicketArchivo" accept="image/*" />
+              <input
+                type="file"
+                class="hidden-input"
+                name="imagenTicketArchivo"
+                id="imagenTicketArchivo"
+                accept="image/*"
+              />
             </label>
           </div>
 
-          <!-- Botón para sumar tile "extra" -->
-          <div class="image-tile add-tile d-none" id="tile-plus-extra" title="Añadir imagen extra">
+          {/* --- Botón "+" para habilitar tile de imagen "extra"
+                (arranca oculto hasta que se usa la "ticket") --- */}
+          <div
+            class="image-tile add-tile d-none"
+            id="tile-plus-extra"
+            title="Añadir imagen extra"
+          >
             <div class="plus">+</div>
           </div>
 
-          <!-- Extra -->
+          {/* --- Tile de IMAGEN EXTRA (inicialmente oculto con d-none) --- */}
           <div class="image-tile d-none" id="tile-extra">
-            <img id="previewExtra" src="/logo.webp" alt="Vista previa extra" class="d-none" />
-            <label class="btn btn-outline-primary upload-btn position-absolute" style="bottom:12px; left:50%; transform:translateX(-50%);">
+            <img
+              id="previewExtra"
+              src="/logo.webp"
+              alt="Vista previa extra"
+              class="d-none"
+            />
+
+            <label
+              class="btn btn-outline-primary upload-btn position-absolute"
+              style="bottom:12px; left:50%; transform:translateX(-50%);"
+            >
               <i class="bi bi-upload me-2"></i> Subir imagen extra
-              <input type="file" class="hidden-input" name="imagenExtraArchivo" id="imagenExtraArchivo" accept="image/*" />
+              <input
+                type="file"
+                class="hidden-input"
+                name="imagenExtraArchivo"
+                id="imagenExtraArchivo"
+                accept="image/*"
+              />
             </label>
           </div>
         </div>
       </div>
 
-      <!-- Submit -->
+      {/* ===========================
+         SUBMIT
+         =========================== */}
       <div class="col-12 text-center">
-        <button type="submit" class="btn btn-primary mt-3 px-5">Crear ticket</button>
+        <button
+          type="submit"
+          class="btn btn-primary mt-3 px-5"
+        >
+          Crear ticket
+        </button>
       </div>
     </form>
   </div>
 
-  <!-- Al volver con ok=1: limpia previews y pone foco en Cliente -->
+  {/* ======================================================
+     SCRIPT #1 (inline):
+     - Se ejecuta cuando la página carga.
+     - Si venimos con ok=1 (creación exitosa), entonces:
+       - Oculta las previews (para no mostrar imágenes viejas)
+       - Pone el foco en el campo "Cliente"
+     ====================================================== */}
   <script is:inline>
     (function() {
       const usp = new URLSearchParams(location.search);
       if (usp.get('ok') === '1') {
+        // Ocultamos las imágenes previas anteriores (si las hubiera)
         const p1 = document.getElementById('previewPrincipal');
         const p2 = document.getElementById('previewTicket');
         const p3 = document.getElementById('previewExtra');
         if (p1) p1.classList.add('d-none');
         if (p2) p2.classList.add('d-none');
         if (p3) p3.classList.add('d-none');
+
+        // Colocamos focus automático en el primer campo lógico del form
         const first = document.querySelector('input[name="cliente"]');
         if (first) first.focus();
       }
     })();
   </script>
 
-  <!-- Toggle y sincronización del campo "Otra (especificar)" -->
+  {/* ======================================================
+     SCRIPT #2 (inline):
+     - Maneja la lógica "OTRA__ESPECIFICAR"
+       entre el <select id="select-impresora"> y el input texto #input-modelo-otro
+     - Funcionalidades:
+       * Mostrar/ocultar el input adicional según la opción elegida.
+       * Si el usuario empieza a tipear en el campo libre,
+         forzamos el <select> a "OTRA__ESPECIFICAR".
+       * En submit, garantizamos coherencia entre ambos campos.
+     ====================================================== */}
   <script is:inline>
     (function(){
       var form = document.getElementById('form-crear-ticket');
@@ -270,6 +656,9 @@ const cobrado = "No";
       var otro = document.getElementById('input-modelo-otro');
       if (!form || !sel || !otro) return;
 
+      // sync():
+      // - Calcula si debe mostrarse el input "otro".
+      // - Hace required ese input sólo si se está usando.
       function sync(){
         var hasTyped = (otro.value || '').trim().length > 0;
         var isOtherOption = sel.value === 'OTRA__ESPECIFICAR';
@@ -278,7 +667,9 @@ const cobrado = "No";
         otro.required = show;
       }
 
-      // Si el usuario escribe algo en "otro", forzamos el select = OTRA__ESPECIFICAR
+      // Si el usuario escribe en "otro",
+      // pero el select NO está en OTRA__ESPECIFICAR,
+      // lo pasamos automáticamente a esa opción para que el backend lo entienda.
       otro.addEventListener('input', function(){
         var hasTyped = (otro.value || '').trim().length > 0;
         if (hasTyped && sel.value !== 'OTRA__ESPECIFICAR') {
@@ -287,42 +678,86 @@ const cobrado = "No";
         sync();
       });
 
-      // Cambios en el select muestran/ocultan el input adicional
+      // Cambiar la opción del select también puede ocultar/mostrar el input libre
       sel.addEventListener('change', sync);
 
-      // Antes de enviar, garantizamos coherencia de selección y campo otro
+      // Antes de enviar el form:
+      // - Si el usuario escribió un modelo libre, forzamos el select a OTRA__ESPECIFICAR.
+      // - Llamamos sync() por última vez.
       form.addEventListener('submit', function(){
         var hasTyped = (otro.value || '').trim().length > 0;
         if (hasTyped && sel.value !== 'OTRA__ESPECIFICAR') sel.value = 'OTRA__ESPECIFICAR';
         sync();
       });
 
-      // Estado inicial
+      // Estado inicial al cargar la página
       sync();
     })();
   </script>
 
-  <!-- Autoformato DNI/CUIT (blur: aplica máscara; input: sanea caracteres) -->
+  {/* ======================================================
+     SCRIPT #3 (inline):
+     - Formato en vivo del DNI/CUIT.
+     - blur → normaliza el string a un formato lindo:
+         * 7 dígitos  => X.XXX.XXX
+         * 8 dígitos  => XX.XXX.XXX
+         * 11 dígitos => XX-XXXXXXXX-X
+     - input → limpia caracteres raros mientras tipean.
+     ====================================================== */}
   <script is:inline>
     (function(){
       var el = document.getElementById('dniCuit');
       if (!el) return;
 
+      // formatDniCuit:
+      // Aplica formato "lindo" según largo del número detectado.
       function formatDniCuit(value){
         var digits = String(value||'').replace(/\D+/g,'');
-        if (digits.length === 7) return digits[0] + '.' + digits.slice(1,4) + '.' + digits.slice(4);
-        if (digits.length === 8) return digits.slice(0,2) + '.' + digits.slice(2,5) + '.' + digits.slice(5);
-        if (digits.length === 11) return digits.slice(0,2) + '-' + digits.slice(2,10) + '-' + digits.slice(10);
+        if (digits.length === 7)
+          return digits[0] + '.' + digits.slice(1,4) + '.' + digits.slice(4);
+        if (digits.length === 8)
+          return digits.slice(0,2) + '.' + digits.slice(2,5) + '.' + digits.slice(5);
+        if (digits.length === 11)
+          return digits.slice(0,2) + '-' + digits.slice(2,10) + '-' + digits.slice(10);
+        // Cualquier otro largo: lo dejamos como está
         return value;
       }
-      el.addEventListener('blur', function(){ el.value = formatDniCuit(el.value); });
+
+      // Al salir del campo, intentamos embellecerlo
+      el.addEventListener('blur', function(){
+        el.value = formatDniCuit(el.value);
+      });
+
+      // Mientras escribe:
+      // - Permitimos solo dígitos, puntos y guiones
+      // - Evitamos duplicar "."
+      // - Evitamos duplicar "-"
       el.addEventListener('input', function(){
-        el.value = el.value.replace(/[^\d.\-]/g,'').replace(/\.{2,}/g,'.').replace(/\-{2,}/g,'-');
+        el.value = el.value
+          .replace(/[^\d.\-]/g,'')
+          .replace(/\.{2,}/g,'.')
+          .replace(/\-{2,}/g,'-');
       });
     })();
   </script>
 
-  <!-- Dependencias de compresión/preview y lógica de tiles (externo) -->
-  <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
-  <script src="/scripts/form-crear-ticket-multi.js?v=2" defer></script>
+  {/* ======================================================
+     SCRIPTS EXTERNOS
+     - browser-image-compression:
+         💡 Lib para comprimir imágenes en el navegador antes de subirlas,
+            evita subir JPG/PNG gigantes sin necesidad.
+     - /scripts/form-crear-ticket-multi.js:
+         Lógica que:
+           * Maneja previews en cada tile.
+           * Muestra/oculta los tiles "ticket" y "extra" progresivamente.
+           * Se asegura que al seleccionar una imagen se actualice el preview.
+     ====================================================== */}
+  <script
+    src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js"
+    defer
+  ></script>
+  <script
+    src="/scripts/form-crear-ticket-multi.js?v=2"
+    defer
+  ></script>
 </BasePrivateLayout>

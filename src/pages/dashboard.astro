@@ -1,31 +1,93 @@
 ---
 /**
- * Dashboard listado de tickets con filtros (controlados desde el Topbar).
- * - Filtros por: id, ticket, estado, cliente, máquina (by + q).
- * - Paginación simple (server-side) con rango from/to.
- * - Joins “suaves” con cliente/impresoras y variantes con !inner según filtro.
- * - Renderiza tarjetas con <PrinterCard />.
+ * Dashboard (listado principal de tickets)
+ *
+ * 🎯 Objetivo:
+ * - Mostrar una cuadrícula de tickets (cada uno en una <PrinterCard /> compacta).
+ * - Permitir filtrar y paginar resultados.
+ * - Los filtros se controlan desde un Topbar con un form que arma la querystring (?by=...&q=...).
+ *
+ * Campos típicos mostrados en cada tarjeta:
+ * - N° ticket
+ * - Cliente
+ * - Modelo/máquina
+ * - Estado actual
+ * - WhatsApp del cliente (para contacto rápido)
+ * - Imagen miniatura de la impresora
+ *
+ * 🔎 Filtros soportados (`by` + `q`):
+ *   by = "id"       → busca por tickets_mian.id exacto
+ *   by = "ticket"   → busca por tickets_mian.ticket exacto
+ *   by = "estado"   → igualdad exacta con estado
+ *   by = "cliente"  → ilike sobre cliente.cliente (nombre del cliente)
+ *   by = "maquina"  → ilike sobre impresora.modelo
+ *
+ * Importante:
+ *   - Para filtros por cliente/maquina usamos `!inner` en el SELECT de Supabase
+ *     para forzar INNER JOIN y filtrar sólo los que realmente tienen esa relación
+ *     (sin traer filas huérfanas).
+ *
+ * 📄 Paginación:
+ *   - Paginación server-side usando .range(from, to)
+ *   - itemsPerPage = 500 para minimizar la paginación manual (pensado para catálogos medianos)
+ *   - currentPage viene de ?page=#
+ *
+ * 🔐 Layout:
+ *   - Usa <BasePrivateLayout showFilters={true} />
+ *   - Se asume que el middleware ya validó sesión y que el Topbar inyecta los controles de filtro.
  */
+
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 import PrinterCard from '../components/PrinterCard.astro';
 import { supabase } from '../lib/supabase';
 
-// =================== Filtros (provienen del Topbar via querystring) ===================
-const by = Astro.url.searchParams.get('by') || 'id';     // campo por el que se filtra
-const rawQ = Astro.url.searchParams.get('q') || '';      // valor crudo
-const q = rawQ.trim();                                    // valor saneado
+// =================== FILTROS (desde querystring) ===================
+//
+// `by` define qué columna/relación se filtra.
+// `q` es el valor buscado.
+// Ambos los provee el <Topbar /> (o quien sea que genere la barra de filtros).
+//
+// Ejemplos de URL:
+//   /dashboard?by=cliente&q=juan
+//   /dashboard?by=maquina&q=Ender
+//   /dashboard?by=estado&q=Lista
+//
+const by = Astro.url.searchParams.get('by') || 'id';
+const rawQ = Astro.url.searchParams.get('q') || '';
+const q = rawQ.trim(); // saneado básico
 
-// =================== Paginación ===================
-// Nota: itemsPerPage alto (500) para reducir cambios de página en catálogos medianos.
+// =================== PAGINACIÓN ===================
+//
+// currentPage: viene de ?page=, default 1
+// itemsPerPage: tamaño de página muy grande (500) para reducir el click "Siguiente"
+// from / to: índices que usaremos en .range(from, to) de Supabase.
+//
 const pageParam = Astro.url.searchParams.get('page') || '1';
 const currentPage = parseInt(pageParam);
 const itemsPerPage = 500;
+
 const from = (currentPage - 1) * itemsPerPage;
 const to = from + itemsPerPage - 1;
 
-// =================== SELECT base ===================
-// join “aliasado” para que el objeto sea { impresora: { modelo }, cliente: { cliente, whatsapp } }
-// Cuando el filtro exige presencia (by=cliente|maquina), se usa !inner en esa relación.
+// =================== SELECT BASE ===================
+//
+// Supabase permite aliasar las relaciones así:
+//
+//   impresora:impresoras (modelo)
+//   cliente:cliente (cliente, whatsapp)
+//
+// Eso construye en cada fila devuelta un objeto:
+//   { impresora: { modelo }, cliente: { cliente, whatsapp } }
+//
+// NOTA SOBRE !inner:
+//   - Si agregás !inner en una relación, Supabase hace INNER JOIN en esa relación.
+//   - Lo usamos cuando necesitamos filtrar por un campo de esa relación:
+//       * Filtrar por cliente -> necesitamos cliente sí o sí -> cliente!inner
+//       * Filtrar por maquina -> necesitamos impresoras sí o sí -> impresoras!inner
+//
+// Si no ponemos !inner, es básicamente LEFT JOIN: podemos tener filas sin cliente/impresora
+// sin que se "caigan" del resultado.
+//
 let selectStr = `
   id,
   ticket,
@@ -35,7 +97,10 @@ let selectStr = `
   cliente:cliente (cliente, whatsapp)
 `;
 
-// Si filtramos por cliente: forzamos inner join con cliente
+// Caso especial 1: filtro por cliente
+// Al filtrar por cliente, queremos asegurar que el join cliente exista
+// porque vamos a hacer ilike sobre cliente.cliente.
+// Por eso forzamos cliente!inner para convertirlo en INNER JOIN.
 if (by === 'cliente') {
   selectStr = `
     id,
@@ -47,7 +112,9 @@ if (by === 'cliente') {
   `;
 }
 
-// Si filtramos por máquina: forzamos inner join con impresoras
+// Caso especial 2: filtro por máquina
+// Idem cliente, pero con impresoras. Hacemos impresoras!inner para garantizar
+// que haya una impresora asociada y poder ilikear impresora.modelo.
 if (by === 'maquina') {
   selectStr = `
     id,
@@ -59,63 +126,117 @@ if (by === 'maquina') {
   `;
 }
 
-// Construcción de la query base
-let query = supabase.from('tickets_mian').select(selectStr);
+// =================== CONSTRUCCIÓN DE LA QUERY ===================
+//
+// Empezamos con .from('tickets_mian').select(selectStr).
+// Después aplicamos where/ilike según `by`.
+// Finalmente ordenamos y aplicamos .range() para la paginación.
+//
+let query = supabase
+  .from('tickets_mian')
+  .select(selectStr);
 
-// =================== Aplicación de filtros ===================
+// =================== APLICACIÓN DE FILTROS ===================
+//
+// REGLA GENERAL:
+// - Si q está vacío → no filtramos (salvo el caso 'estado' si quisieras default, pero acá no).
+// - Si q tiene contenido:
+//     by = id/ticket → forzamos igualdad exacta numérica.
+//     by = estado    → igualdad exacta string.
+//     by = cliente   → ilike en cliente.cliente (usa !inner).
+//     by = maquina   → ilike en impresora.modelo (usa !inner).
+//
+// ILUSTRACIÓN DE CASOS:
+//   by="id"     q="123"  → eq('id',123)
+//   by="ticket" q="456"  → eq('ticket',456)
+//   by="estado" q="Lista" → eq('estado','Lista')
+//   by="cliente" q="juan" → ilike('cliente.cliente','%juan%')
+//   by="maquina" q="Ender" → ilike('impresora.modelo','%Ender%')
+//
+// Nota sutil: para id/ticket asumimos búsqueda EXACTA por número.
+// Si el usuario escribe algo no-numérico, devolvemos un resultado imposible eq(-1)
+// para no tirar todo el dataset entero.
+//
 if (q) {
-  // Si q es numérico, lo usamos como número; sino null para “no coincide”
+  // Si q parsea a número, qNum es ese número;
+  // si no, qNum = null (para detectar casos inválidos en id/ticket).
   const qNum = Number.isFinite(Number(q)) ? Number(q) : null;
 
   switch (by) {
     case 'id':
-      // Búsqueda exacta por id (si no es numérico, forzamos un id imposible -1)
-      query = qNum !== null ? query.eq('id', qNum) : query.eq('id', -1);
+      // id es PK numérica del ticket
+      query = qNum !== null
+        ? query.eq('id', qNum)
+        : query.eq('id', -1); // fuerza "sin resultados"
       break;
 
     case 'ticket':
-      // Búsqueda exacta por número de ticket
-      query = qNum !== null ? query.eq('ticket', qNum) : query.eq('ticket', -1);
+      // ticket es el número de ticket "visible" para el cliente
+      query = qNum !== null
+        ? query.eq('ticket', qNum)
+        : query.eq('ticket', -1);
       break;
 
     case 'estado':
-      // Igualdad directa (se asume que la UI provee valores válidos)
+      // estado textual exacto
       query = query.eq('estado', q);
       break;
 
     case 'cliente':
-      // Búsqueda por “cliente.cliente” (nombre del cliente) con ilike
-      // Requiere el !inner en el select para que la relación exista
+      // cliente.cliente = nombre del cliente
+      // usamos ilike para búsqueda parcial
+      // requiere cliente!inner en selectStr
       query = query.ilike('cliente.cliente', `%${q}%`);
       break;
 
     case 'maquina':
-      // Búsqueda por “impresora.modelo”
-      // Requiere el !inner en el select para que la relación exista
+      // impresora.modelo = modelo de la impresora
+      // ilike parcial
+      // requiere impresoras!inner en selectStr
       query = query.ilike('impresora.modelo', `%${q}%`);
       break;
 
     default:
-      // Sin filtro adicional
+      // Si llega un 'by' desconocido, no aplicamos filtro extra.
       break;
   }
 }
 
-// =================== Orden + rango (paginación) ===================
-query = query.order('id', { ascending: false }).range(from, to);
+// =================== ORDEN + RANGO ===================
+//
+// Mostramos primero los tickets más recientes (id DESC).
+// Luego limitamos el resultado con .range(from, to) para la página actual.
+//
+query = query
+  .order('id', { ascending: false })
+  .range(from, to);
 
-// =================== Ejecución ===================
+// =================== EJECUCIÓN ===================
+//
+// Disparamos la query construida arriba.
+// `error` puede existir si Supabase falla.
+// `data` es la lista de tickets final para esta página.
+//
 const { data, error } = await query;
 
-// Blindaje: siempre devolver array para mapear en el template
+// Blindaje final: siempre queremos que `impresoras` sea un array iterable
+// para el mapeo en el template, aunque la query falle.
 const impresoras = Array.isArray(data) ? data : [];
-if (error) console.error('Error supabase:', error, { by, q });
+if (error) {
+  console.error('Error supabase:', error, { by, q });
+}
 ---
 
 <BasePrivateLayout showFilters={true}>
   <div class="container mt-4">
 
-    <!-- =================== Resultados =================== -->
+    {/* =================== LISTA DE RESULTADOS ===================
+        - Si hay resultados, renderizamos un grid Bootstrap.
+        - Cada ticket se pinta con <PrinterCard />, que recibe:
+            id, ticket, cliente, maquina, estado, whatsapp, imagen,
+            y URLs para navegar al detalle (/detalle/:id) y edición (/editar/:id).
+        - Si no hay resultados o hubo error, mostramos un mensaje.
+    */}
     {Array.isArray(impresoras) && impresoras.length > 0 ? (
       <div class="row g-4">
         {impresoras.map((item: any) => (
@@ -136,11 +257,20 @@ if (error) console.error('Error supabase:', error, { by, q });
       </div>
     ) : (
       <div class="text-center">
-        <p class="text-muted">{error ? 'Error al cargar resultados' : 'No hay resultados.'}</p>
+        <p class="text-muted">
+          {error ? 'Error al cargar resultados' : 'No hay resultados.'}
+        </p>
       </div>
     )}
 
-    <!-- =================== Navegación =================== -->
+    {/* =================== PAGINACIÓN ===================
+        - Botones "Anterior" y "Siguiente".
+        - Construimos el href preservando `by` y `q`
+          pero cambiando `page`.
+        - Mostramos "Página N".
+        - Botón "Siguiente" sólo si esta página está llena
+          (== itemsPerPage). Eso implica que probablemente haya más.
+    */}
     <div class="d-flex justify-content-center mt-4 gap-2">
       {currentPage > 1 && (
         <a
@@ -154,7 +284,11 @@ if (error) console.error('Error supabase:', error, { by, q });
           Anterior
         </a>
       )}
-      <span class="align-self-center">Página {currentPage}</span>
+
+      <span class="align-self-center">
+        Página {currentPage}
+      </span>
+
       {Array.isArray(impresoras) && impresoras.length === itemsPerPage && (
         <a
           href={`?${new URLSearchParams({

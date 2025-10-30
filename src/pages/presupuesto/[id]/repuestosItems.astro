@@ -1,22 +1,67 @@
 ---
 import BasePrivateLayout from '../../../layouts/BasePrivateLayout.astro';
 
-// 🔐 Detectar rol para mostrar/ocultar precios
+/**
+ * Página /presupuesto/:id/items  (o similar)
+ *
+ * 🧩 Objetivo:
+ * - Seleccionar qué repuestos van a formar parte del presupuesto de un ticket.
+ * - Ver stock, categoría, si está activo o no, y (si sos admin) precios.
+ * - Editar cantidades antes de guardar.
+ * - Guardar en BD vía /api/presupuestoItems (POST).
+ *
+ * 🔐 Permisos / precios:
+ * - Sólo admins ven/usan los precios y totales.
+ *   showPrices = isAdmin
+ * - Técnicos ven la misma UI pero sin números de ARS.
+ *
+ * 📦 Flujo de trabajo:
+ * 1. Cargamos selección previa guardada en la BD (GET /api/presupuestoItems?ticket_id=...).
+ *    Eso permite mostrar qué ya estaba asociado a este ticket.
+ * 2. Cargamos listado paginado/filtrable de repuestos desde /api/listarRepuestos
+ *    con búsqueda, categoría, estado activo/inactivo, sort y paginación.
+ * 3. El usuario tilda checkboxes para agregar/quitar repuestos a "seleccion".
+ * 4. Puede abrir el modal "Confirmar repuestos a agregar", ajustar cantidades,
+ *    ver advertencias (sin stock / inactivo), y luego guardar cambios POST.
+ *
+ * 💾 Persistencia:
+ * - Botón "Guardar" del modal hace un POST a /api/presupuestoItems con {ticket_id, items:[{repuesto_id,cantidad}]},
+ *   reemplazando TODO el conjunto actual en la tabla presupuesto_repuestos.
+ * - Si hay repuestos inactivos nuevos, el backend rechaza.
+ *
+ * 🧠 UX:
+ * - El resumen superior (card-resumen-sel) muestra lo que está seleccionado ahora,
+ *   con botones inline para editar cantidad (abre modal chico) o quitar.
+ * - El stock puede quedar negativo más adelante (al marcar Máquina Lista),
+ *   eso está permitido, pero avisamos en amarillo.
+ * - No dejamos guardar si hay repuestos inactivos.
+ */
+
+// Perfil del usuario, inyectado en Astro.locals (middleware auth)
 type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
 const perfil = (Astro.locals as any)?.perfil as Perfil | undefined;
+
+// Admin => puede ver precios y totales en la UI
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const showPrices = isAdmin;
 
+// ID del ticket actual (de la ruta dinámica /presupuesto/:id/items)
 const ticketId = Astro.params.id;
 ---
 
 <BasePrivateLayout>
+  {/* ============================================================
+     Contenedor raíz. Metadatos importantes via data-*:
+     - data-ticket-id        → ID numérico de ticket
+     - data-show-prices      → si mostramos precios o no
+     ============================================================ */}
   <div
     id="repuestos-root"
     class="container mt-5"
     data-ticket-id={ticketId}
     data-show-prices={String(showPrices)}
   >
+    {/* Encabezado + botón "volver" */}
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h2 class="mb-0">
         <i class="bi bi-box-seam me-2"></i> Repuestos necesarios
@@ -28,6 +73,13 @@ const ticketId = Astro.params.id;
       </div>
     </div>
 
+    {/* ============================================================
+       Filtros de búsqueda:
+       - q: texto libre en "Componentes presupuestados"
+       - categoría: dropdown dinámico (se carga desde /api/categoriasRepuestos)
+       - estado: activo / inactivo / todos
+       También hay un botón X para limpiar q.
+       ============================================================ */}
     <div class="card mb-3">
       <div class="card-body">
         <div class="row g-2">
@@ -56,7 +108,15 @@ const ticketId = Astro.params.id;
       </div>
     </div>
 
-    <!-- Resumen mejorado -->
+    {/* ============================================================
+       Resumen de selección actual:
+       - Se muestra sólo si hay al menos 1 repuesto elegido.
+       - Lista tipo "cards", cada una con:
+         • ID, nombre, badge de cantidad
+         • botón editar cantidad (abre modal chico)
+         • botón borrar
+       - A la derecha muestra count y total estimado (si showPrices)
+       ============================================================ */}
     <div class="card mb-3" id="card-resumen-sel" style="display:none;">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span class="fw-semibold"><i class="bi bi-check2-square me-2"></i> Seleccionados previamente</span>
@@ -71,57 +131,87 @@ const ticketId = Astro.params.id;
         </span>
       </div>
       <div class="card-body py-3">
+        {/* Render dinámico en JS: tarjetas/rows de selección actual */}
         <div id="resumenLista" class="sel-grid"></div>
       </div>
     </div>
 
+    {/* ============================================================
+       Tabla principal de repuestos disponibles:
+       - Scrollable con height fijo.
+       - Columnas ordenables (click en header): ID / Componente / Stock / ...
+       - Checkbox por fila para seleccionar.
+       - Badge "Guardado ×N" si el repuesto ya formaba parte del presupuesto.
+       ============================================================ */}
     <div class="card">
       <div class="card-header d-flex justify-content-between">
         <span>Seleccionar repuestos</span>
         <span class="text-muted small" id="resumen"></span>
       </div>
+
       <div class="table-responsive" style="max-height:520px; overflow:auto;">
         <table class="table table-sm table-striped mb-0">
           <thead class="table-light">
             <tr>
+              {/* chkAll marca/desmarca todos los repuestos activos visibles en la página */}
               <th style="width:44px;"><input type="checkbox" id="chkAll" /></th>
+
               <th class="th-sortable" data-field="id" style="white-space:nowrap; cursor:pointer;">
                 ID <span class="sort-icon text-muted">↕</span>
               </th>
+
               <th class="th-sortable" data-field="componente" style="cursor:pointer;">
                 Componente <span class="sort-icon text-muted">↕</span>
               </th>
+
               <th class="th-sortable" data-field="stock" style="cursor:pointer;">
                 Stock <span class="sort-icon text-muted">↕</span>
               </th>
+
               <th class="th-sortable" data-field="categoria" style="cursor:pointer;">
                 Categoría <span class="sort-icon text-muted">↕</span>
               </th>
+
+              {/* Columna Precio sólo si showPrices = true (admin) */}
               {showPrices && (
                 <th class="th-sortable" data-field="precio" style="cursor:pointer;">
                   Precio <span class="sort-icon text-muted">↕</span>
                 </th>
               )}
+
               <th class="th-sortable" data-field="activo" style="cursor:pointer;">
                 Activo <span class="sort-icon text-muted">↕</span>
               </th>
+
+              {/* Columna final: muestra badge "Guardado ×X" si ya estaba en presupuesto */}
               <th style="width:150px;" class="text-end">Selección</th>
             </tr>
           </thead>
           <tbody id="tbody-repuestos">
+            {/* Primera carga muestra "Cargando..." hasta que JS reemplace */}
             <tr>
               <td colspan={showPrices ? 8 : 7} class="text-center py-3">Cargando...</td>
             </tr>
           </tbody>
         </table>
       </div>
+
+      {/* Footer tabla: paginación + botón Agregar al presupuesto */}
       <div class="card-footer d-flex justify-content-between align-items-center">
         <div>
-          <button class="btn btn-outline-secondary btn-sm" id="prevPage"><i class="bi bi-chevron-left"></i> Anterior</button>
-          <button class="btn btn-outline-secondary btn-sm ms-2" id="nextPage">Siguiente <i class="bi bi-chevron-right"></i></button>
+          <button class="btn btn-outline-secondary btn-sm" id="prevPage">
+            <i class="bi bi-chevron-left"></i> Anterior
+          </button>
+          <button class="btn btn-outline-secondary btn-sm ms-2" id="nextPage">
+            Siguiente <i class="bi bi-chevron-right"></i>
+          </button>
         </div>
+
         <div class="d-flex align-items-center gap-2">
+          {/* Texto "Mostrando X-Y de Z" */}
           <div id="paginacionInfo" class="text-muted small me-2"></div>
+
+          {/* Abre el modal de confirmación con los repuestos seleccionados */}
           <button id="btnAgregar" class="btn btn-primary btn-sm">
             <i class="bi bi-plus-circle me-1"></i> Agregar al presupuesto
           </button>
@@ -130,7 +220,13 @@ const ticketId = Astro.params.id;
     </div>
   </div>
 
-  <!-- Modal confirmación -->
+  {/* ============================================================
+     Modal de confirmación final:
+     - Lista editable de la selección actual (cantidad, quitar ítem).
+     - Valida stock bajo/negativo (solo warning amarillo).
+     - Bloquea guardar si hay repuestos INACTIVOS.
+     - Muestra total estimado si showPrices.
+     ============================================================ */}
   <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content">
@@ -139,7 +235,10 @@ const ticketId = Astro.params.id;
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
         </div>
         <div class="modal-body">
-          <p class="text-muted mb-2">Revisá la lista. Podés cambiar cantidades o quitar ítems antes de guardar.</p>
+          <p class="text-muted mb-2">
+            Revisá la lista. Podés cambiar cantidades o quitar ítems antes de guardar.
+          </p>
+
           <div class="table-responsive">
             <table class="table table-sm align-middle">
               <thead>
@@ -157,15 +256,25 @@ const ticketId = Astro.params.id;
               <tbody id="tbody-confirm"></tbody>
             </table>
           </div>
+
+          {/* Alerta amarilla:
+             - Se muestra si alguna cantidad supera stock (pero eso NO bloquea)
+             - También explica que inactivos sí bloquean el guardado */}
           <div id="ruleAlert" class="alert alert-warning py-2 px-3" style="display:none;">
             Hay repuestos con <strong>cantidad superior al stock disponible</strong>. Podés guardar igual:
             el stock quedará negativo al marcar <em>Máquina Lista</em>.<br />
             <strong>Los repuestos inactivos sí impiden guardar.</strong>
           </div>
         </div>
+
         <div class="modal-footer d-flex justify-content-end gap-3">
-          {showPrices && <div class="fw-semibold me-auto">Total estimado: <span id="totalEstimado">$0</span></div>}
+          {showPrices && (
+            <div class="fw-semibold me-auto">
+              Total estimado: <span id="totalEstimado">$0</span>
+            </div>
+          )}
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          {/* Botón Guardar: hace POST a /api/presupuestoItems */}
           <button id="btnGuardar" type="button" class="btn btn-primary" disabled>
             <i class="bi bi-save me-1"></i> Guardar
           </button>
@@ -174,23 +283,40 @@ const ticketId = Astro.params.id;
     </div>
   </div>
 
-  <!-- Modal para editar cantidad -->
+  {/* ============================================================
+     Modal chico para editar cantidad de un ítem del resumen
+     (sin abrir el modal grande)
+     ============================================================ */}
   <div class="modal fade" id="editQtyModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i> Editar cantidad</h5>
+          <h5 class="modal-title">
+            <i class="bi bi-pencil-square me-2"></i> Editar cantidad
+          </h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
         </div>
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Cantidad</label>
-            <input id="editQtyInput" type="number" min="1" step="1" class="form-control" />
+            <input
+              id="editQtyInput"
+              type="number"
+              min="1"
+              step="1"
+              class="form-control"
+            />
             <div class="form-text">Ingresá un entero mayor o igual a 1.</div>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-bs-dismiss="modal"
+          >
+            Cancelar
+          </button>
           <button id="editQtySave" type="button" class="btn btn-primary">
             <i class="bi bi-check2 me-1"></i> Guardar cambios
           </button>
@@ -199,17 +325,32 @@ const ticketId = Astro.params.id;
     </div>
   </div>
 
+  {/* ===================================================================
+     SCRIPT PRINCIPAL DE LA PÁGINA
+     - Maneja:
+       • Estado de filtros, sort, paginación
+       • Selección persistente (Map seleccion)
+       • Render de resumen
+       • Apertura/modificación de modales
+       • POST final
+     =================================================================== */}
   <script type="module">
+    // ===================== Referencias DOM básicas =====================
     const root = document.getElementById('repuestos-root');
     const ticketId = Number(root?.dataset.ticketId || 0);
     const showPrices = (root?.dataset.showPrices || 'false') === 'true';
+
+    // colCount se usa para colspan dinámico cuando no hay filas
     const colCount = showPrices ? 8 : 7;
 
+    // Filtros y tabla
     const q = document.getElementById('q');
     const btnClearQ = document.getElementById('btnClearQ');
     const categoria = document.getElementById('categoria');
     const estado = document.getElementById('estado');
     const tbody = document.getElementById('tbody-repuestos');
+
+    // Resumen/paginación
     const resumen = document.getElementById('resumen');
     const paginacionInfo = document.getElementById('paginacionInfo');
     const prevPageBtn = document.getElementById('prevPage');
@@ -217,47 +358,86 @@ const ticketId = Astro.params.id;
     const chkAll = document.getElementById('chkAll');
     const btnAgregar = document.getElementById('btnAgregar');
 
+    // Headers sortables (para cambiar orden al click)
     const thSortables = Array.from(document.querySelectorAll('.th-sortable'));
 
+    // Modales (Bootstrap)
     const confirmModalEl = document.getElementById('confirmModal');
     const ruleAlert = document.getElementById('ruleAlert');
     const tbodyConfirm = document.getElementById('tbody-confirm');
     const btnGuardar = document.getElementById('btnGuardar');
     const totalEstimadoEl = document.getElementById('totalEstimado');
 
-    // ===== Modales perezosos =====
+    // Modal de cantidad rápida
     const editQtyModalEl = document.getElementById('editQtyModal');
     let bsEditModal = null;
     let editId = null;
+
+    // Helpers para instanciar modals sólo cuando haga falta
     function getEditModal() {
       if (bsEditModal) return bsEditModal;
       if (typeof window !== 'undefined' && window.bootstrap) {
-        // @ts-ignore
+        // @ts-ignore bootstrap global
         bsEditModal = new window.bootstrap.Modal(editQtyModalEl);
         return bsEditModal;
       }
       return null;
     }
+
     let bsModal = null;
     function getConfirmModal() {
       if (bsModal) return bsModal;
       if (typeof window !== 'undefined' && window.bootstrap) {
-        // @ts-ignore
+        // @ts-ignore bootstrap global
         bsModal = new window.bootstrap.Modal(confirmModalEl);
         return bsModal;
       }
       return null;
     }
 
-    // selección persistente
-    const seleccion = new Map(); // id -> { id, comp, stock, unitPrice, cantidad, activo }
+    // ===================== Estado de selección =====================
+    /**
+     * `seleccion` mantiene lo que el usuario tiene marcado actualmente
+     * (incluye lo que vino de la BD y lo que agregó manualmente).
+     *
+     * key: repuesto_id
+     * value: {
+     *   id: number
+     *   comp: string (nombre del repuesto)
+     *   stock: number (stock numérico o Infinity)
+     *   unitPrice: number (precio unitario "snapshot")
+     *   cantidad: number
+     *   activo: boolean (si el repuesto está activo)
+     * }
+     *
+     * Nota: `activo === false` bloquea el guardado posterior.
+     */
+    const seleccion = new Map();
 
-    // utilidades
+    // ===================== Helpers de formato =====================
+    // Formatea $ARS sin decimales forzados
     const fmtARS = (n) =>
-      new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',minimumFractionDigits:0,maximumFractionDigits:2}).format(Number(n)||0);
-    const fmtARS0 = (n) =>
-      new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',minimumFractionDigits:0,maximumFractionDigits:0}).format(Number(n)||0);
+      new Intl.NumberFormat('es-AR',{
+        style:'currency',
+        currency:'ARS',
+        minimumFractionDigits:0,
+        maximumFractionDigits:2
+      }).format(Number(n)||0);
 
+    // Formatea $ARS pero redondeado sin decimales
+    const fmtARS0 = (n) =>
+      new Intl.NumberFormat('es-AR',{
+        style:'currency',
+        currency:'ARS',
+        minimumFractionDigits:0,
+        maximumFractionDigits:0
+      }).format(Number(n)||0);
+
+    /**
+     * parsePrecioARS(v):
+     * - Convierte un string tipo "$12.345" en número entero aproximado.
+     * - Se usa como snapshot del precio unitario que vamos a guardar.
+     */
     function parsePrecioARS(v){
       if (v == null || v === '') return 0;
       if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
@@ -267,18 +447,27 @@ const ticketId = Astro.params.id;
       return Number.isFinite(n) ? n : 0;
     }
 
-    // === Precargar selección guardada (usa stock_num y activo del API) ===
+    // ===================== Carga inicial =====================
+    /**
+     * cargarSeleccionAnterior():
+     * - Hace GET a /api/presupuestoItems?ticket_id=...
+     * - Esto devuelve los repuestos YA guardados en la BD para ese ticket,
+     *   con cantidad, activo, etc.
+     * - Popular `seleccion` para que la UI arranque con esa info.
+     */
     async function cargarSeleccionAnterior() {
       if (!ticketId) return;
       const res = await fetch(`/api/presupuestoItems?ticket_id=${ticketId}`);
       const out = await res.json();
       const rows = Array.isArray(out?.rows) ? out.rows : [];
+
       rows.forEach(r => {
         const id = Number(r?.repuesto_id || 0);
         const cantidad = Math.max(1, Number(r?.cantidad || 1));
         const unitPrice = Number(r?.precio_unit_num || 0);
         const stock = Number(r?.stock_num || 0);
         const activo = !!r?.activo;
+
         if (Number.isFinite(id) && id > 0) {
           seleccion.set(id, {
             id,
@@ -292,16 +481,28 @@ const ticketId = Astro.params.id;
       });
     }
 
-    // ===== Resumen (cards) + acciones =====
+    // ===================== Resumen superior =====================
     const cardResumen = document.getElementById('card-resumen-sel');
     const resumenLista = document.getElementById('resumenLista');
     const resumenCount = document.getElementById('resumenCount');
     const resumenTotal = document.getElementById('resumenTotal');
 
+    /**
+     * renderSeleccionResumen():
+     * - Pinta las "tarjetitas" de selección actual arriba.
+     * - Cada item tiene botones:
+     *    • editar cantidad → abre modal chico (editQtyModal)
+     *    • borrar → quita del Map y destilda checkbox en la tabla
+     * - Calcula y muestra total estimado (si showPrices).
+     */
     function renderSeleccionResumen() {
       const items = Array.from(seleccion.values());
-      const total = items.reduce((acc, it) => acc + (Number(it.unitPrice||0)*Number(it.cantidad||1)), 0);
+      const total = items.reduce(
+        (acc, it) => acc + (Number(it.unitPrice||0)*Number(it.cantidad||1)),
+        0
+      );
 
+      // Nada seleccionado → ocultar card
       if (items.length === 0) {
         cardResumen.style.display = 'none';
         resumenLista.innerHTML = '';
@@ -310,54 +511,68 @@ const ticketId = Astro.params.id;
         return;
       }
 
+      // Hay selección → mostramos card
       cardResumen.style.display = 'block';
       resumenCount.textContent = `${items.length} ${items.length===1?'ítem':'ítems'}`;
       if (showPrices && resumenTotal) resumenTotal.textContent = fmtARS0(total);
 
-      // === Botones a la derecha con separación ===
+      // Render HTML de cada selección (badge Cantidad + botones editar/borrar)
       resumenLista.innerHTML = items.map(it => {
         return `
           <div class="sel-card d-flex align-items-center flex-nowrap" data-id="${it.id}" title="#${it.id} — ${it.comp}">
             <div class="sel-card__left d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
               <span class="sel-id">#${it.id}</span>
               <span class="sel-name text-truncate">${(it.comp||'').toString()}</span>
-              <span class="badge rounded-pill text-bg-primary sel-qty ms-2" title="Cantidad">Cantidad: ${it.cantidad}</span>
+              <span class="badge rounded-pill text-bg-primary sel-qty ms-2" title="Cantidad">
+                Cantidad: ${it.cantidad}
+              </span>
             </div>
             <div class="sel-card__right ms-auto d-flex align-items-center gap-2">
-              <button class="btn btn-outline-secondary btn-icon btn-edit" title="Editar"><i class="bi bi-pencil"></i></button>
-              <button class="btn btn-outline-danger btn-icon btn-del" title="Borrar"><i class="bi bi-trash"></i></button>
+              <button class="btn btn-outline-secondary btn-icon btn-edit" title="Editar">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn btn-outline-danger btn-icon btn-del" title="Borrar">
+                <i class="bi bi-trash"></i>
+              </button>
             </div>
           </div>
         `;
       }).join('');
 
-      // Wire acciones
+      // Wire botón EDITAR cantidad (abre modal chico)
       resumenLista.querySelectorAll('.btn-edit').forEach(btn=>{
         btn.addEventListener('click', (e)=>{
           const card = e.currentTarget.closest('.sel-card');
           const id = Number(card?.getAttribute('data-id')||'0');
           if (!id || !seleccion.has(id)) return;
+
           editId = id;
           const curr = seleccion.get(id)?.cantidad ?? 1;
           document.getElementById('editQtyInput').value = String(curr);
           getEditModal()?.show();
         });
       });
+
+      // Wire botón BORRAR de la selección
       resumenLista.querySelectorAll('.btn-del').forEach(btn=>{
         btn.addEventListener('click', (e)=>{
           const card = e.currentTarget.closest('.sel-card');
           const id = Number(card?.getAttribute('data-id')||'0');
           if (!id) return;
           if (!confirm('¿Quitar este repuesto de la selección?')) return;
+
           seleccion.delete(id);
+
+          // Tildado visual en la tabla también se actualiza
           const chk = document.querySelector(`.chkItem[data-id="${id}"]`);
           if (chk) chk.checked = false;
+
           renderSeleccionResumen();
         });
       });
     }
 
-    // Guardar cantidad desde el modal de edición
+    // Guardar cambios de cantidad desde el modal chico
     document.getElementById('editQtySave').addEventListener('click', ()=>{
       const n = Math.max(1, Number(document.getElementById('editQtyInput').value || 1));
       if (!Number.isFinite(n)) return;
@@ -369,44 +584,82 @@ const ticketId = Astro.params.id;
       getEditModal()?.hide();
     });
 
-    function toggleClearBtn(){ btnClearQ.style.display = (q.value ?? '').trim() ? 'block' : 'none'; }
+    // ===================== Búsqueda / filtros / sort =====================
+    /**
+     * Mostrar/ocultar botón "X" para limpiar campo q.
+     * También dispara refetch de resultados al tipear.
+     */
+    function toggleClearBtn(){
+      btnClearQ.style.display = (q.value ?? '').trim() ? 'block' : 'none';
+    }
     q.addEventListener('input', () => { toggleClearBtn(); refetch(); });
-    btnClearQ.addEventListener('click', () => { q.value=''; toggleClearBtn(); page=1; cargar(); });
+    btnClearQ.addEventListener('click', () => {
+      q.value='';
+      toggleClearBtn();
+      page=1;
+      cargar();
+    });
     toggleClearBtn();
 
+    /**
+     * cargarCategorias():
+     * - GET /api/categoriasRepuestos
+     * - Pobla el <select id="categoria"> con todas las categorías únicas.
+     */
     async function cargarCategorias() {
       const res = await fetch('/api/categoriasRepuestos');
       const out = await res.json();
       const cats = Array.isArray(out?.categorias) ? out.categorias : [];
-      categoria.innerHTML = '<option value="">Todas las categorías</option>' +
+
+      categoria.innerHTML =
+        '<option value="">Todas las categorías</option>' +
         cats.map(c => `<option value="${c.replaceAll('"','&quot;')}">${c}</option>`).join('');
     }
 
+    /**
+     * setLoading():
+     * - Muestra fila "Cargando..." con colspan dinámico.
+     * - Se usa antes de reemplazar <tbody> con resultados reales.
+     */
     function setLoading(){
       tbody.innerHTML = `<tr><td colspan="${colCount}" class="text-center py-3">Cargando...</td></tr>`;
     }
 
+    /**
+     * wireRowCheckboxes():
+     * - Conecta cada checkbox de fila con el Map `seleccion`.
+     * - Al marcar: agrega/actualiza el repuesto en `seleccion`.
+     * - Al desmarcar: lo quita.
+     * - Respeta si el repuesto está inactivo → el checkbox viene disabled.
+     */
     function wireRowCheckboxes(){
       document.querySelectorAll('.chkItem').forEach((el)=>{
         if (el.disabled) return;
+
         const id = Number(el.getAttribute('data-id'));
         const comp = String(el.getAttribute('data-comp') || '');
         const stock = Number(el.getAttribute('data-stock') || '0');
         const unitPrice = Number(el.getAttribute('data-precio') || '0');
         const activo = el.getAttribute('data-activo') === '1';
 
+        // Sync visual inicial basado en `seleccion`
         el.checked = seleccion.has(id);
+
         el.onchange = () => {
           if (el.checked) {
+            // Guardamos / actualizamos selección
             const prev = seleccion.get(id);
             const cantidad = prev?.cantidad ?? 1;
             seleccion.set(id, { id, comp, stock, unitPrice, cantidad, activo: true });
+
+            // merge defensivo si ya había info previa
             if (prev) {
               prev.stock = stock;
               if (Number.isFinite(unitPrice) && unitPrice>0) prev.unitPrice = unitPrice;
               prev.activo = activo;
             }
           } else {
+            // Quitamos de la selección
             seleccion.delete(id);
           }
           renderSeleccionResumen();
@@ -414,45 +667,79 @@ const ticketId = Astro.params.id;
       });
     }
 
+    /**
+     * updateSortUI():
+     * - Pone ↑ / ↓ en el header activo.
+     * - Deja ↕ en los demás.
+     */
     function updateSortUI() {
       thSortables.forEach(th => {
         const f = th.getAttribute('data-field');
         const icon = th.querySelector('.sort-icon');
         const active = f === sortBy;
+
         th.classList.toggle('fw-semibold', active);
+
         if (icon) icon.textContent = active ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
         if (icon) icon.classList.toggle('text-muted', !active);
       });
     }
 
+    // Estado de la tabla
     let page = 1;
     const pageSize = 30;
     let sortBy = 'id';
     let sortDir = 'asc';
 
+    /**
+     * cargar():
+     * - Llama /api/listarRepuestos con filtros, sort y paginación.
+     * - Renderiza el <tbody> con filas.
+     * - Marca checkboxes según `seleccion`.
+     * - Actualiza labels de paginación y totales.
+     */
     async function cargar() {
       setLoading();
+
       const params = new URLSearchParams({
-        page: String(page), pageSize: String(pageSize),
+        page: String(page),
+        pageSize: String(pageSize),
         q: (q.value ?? '').trim(),
         categoria: (categoria.value ?? '').trim(),
         estado: (estado.value ?? '').trim(),
-        sortBy, sortDir,
+        sortBy,
+        sortDir,
       });
+
       const res = await fetch('/api/listarRepuestos?' + params.toString());
       const out = await res.json();
+
       const data = out.rows || [];
       const total = out.total || 0;
       const maxPage = total ? Math.ceil(total / pageSize) : 1;
-      if (total > 0 && page > maxPage) { page = maxPage; return cargar(); }
 
+      // Si quedó una página "fuera de rango" por filtros nuevos, ajustamos y recargamos
+      if (total > 0 && page > maxPage) {
+        page = maxPage;
+        return cargar();
+      }
+
+      // Sin resultados
       if (data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${colCount}" class="text-center py-3 text-muted">Sin resultados.</td></tr>`;
+        tbody.innerHTML =
+          `<tr><td colspan="${colCount}" class="text-center py-3 text-muted">Sin resultados.</td></tr>`;
       } else {
+        // Mapear filas -> HTML
         tbody.innerHTML = data.map(r => {
-        const stockStr = String(r.stock ?? '').trim();
-        const isInf = stockStr === '∞' || /^inf/i.test(stockStr);
-        const stockNum = isInf ? Infinity : (Number(stockStr.replace(/[^0-9.-]/g, '')) || 0);
+          const stockStr = String(r.stock ?? '').trim();
+
+          // Stock infinito / servicio: ∞, "inf", etc.
+          const isInf = stockStr === '∞' || /^inf/i.test(stockStr);
+
+          // Stock numérico limpio
+          const stockNum = isInf
+            ? Infinity
+            : (Number(stockStr.replace(/[^0-9.-]/g, '')) || 0);
 
           const unitPrice = parsePrecioARS(r.precio ?? '');
           const isActive  = !!r.activo;
@@ -462,10 +749,12 @@ const ticketId = Astro.params.id;
           const wasSelected = !!ya;
           const cantSel = ya?.cantidad ?? 1;
 
+          // Badge para indicar si este ítem ya estaba guardado con X cantidad
           const savedBadge = wasSelected
             ? `<span class="badge text-bg-info" title="Ya está guardado en el presupuesto">Guardado ×${cantSel}</span>`
             : '';
 
+          // Checkbox de selección de este repuesto
           const chk = `
             <input type="checkbox" class="chkItem"
               data-id="${r.id}"
@@ -478,7 +767,12 @@ const ticketId = Astro.params.id;
             />
           `;
 
-          const rowClass = isActive ? (wasSelected ? 'table-info' : '') : 'table-secondary';
+          // Colorear fila:
+          //  - inactivo → gris
+          //  - seleccionado activo → azul clarito
+          const rowClass = isActive
+            ? (wasSelected ? 'table-info' : '')
+            : 'table-secondary';
 
           return `
             <tr class="${rowClass}">
@@ -495,11 +789,13 @@ const ticketId = Astro.params.id;
         }).join('');
       }
 
+      // Info "Mostrando X-Y de Z"
       const from = total ? (page-1)*pageSize + 1 : 0;
       const to   = total ? Math.min(page*pageSize, total) : 0;
       resumen.textContent = total ? `Total: ${total}` : '';
       paginacionInfo.textContent = total ? `Mostrando ${from}-${to} de ${total}` : '';
 
+      // Checkbox "seleccionar todos" de la página actual.
       chkAll.checked = false;
       chkAll.onchange = () => {
         document.querySelectorAll('.chkItem:not([disabled])').forEach((el)=>{
@@ -510,137 +806,295 @@ const ticketId = Astro.params.id;
 
           el.checked = chkAll.checked;
           if (chkAll.checked) {
+            // Añadir todos los visibles activos a la selección
             const prev = seleccion.get(id);
             const cantidad = prev?.cantidad ?? 1;
             seleccion.set(id, { id, comp, stock, unitPrice, cantidad, activo: true });
+
+            // Merge defensivo si ya existía
             if (prev) {
               prev.stock = stock;
               if (Number.isFinite(unitPrice) && unitPrice>0) prev.unitPrice = unitPrice;
               prev.activo = true;
             }
           } else {
+            // Quitar todos los visibles de la selección
             seleccion.delete(id);
           }
         });
         renderSeleccionResumen();
       };
 
+      // Conectar checkboxes individuales
       wireRowCheckboxes();
+
+      // Botones de paginación habilitados/inhabilitados según página
       prevPageBtn.disabled = page <= 1;
       nextPageBtn.disabled = (page*pageSize) >= total;
+
+      // Actualizar íconos ↑ / ↓ en headers
       updateSortUI();
     }
 
-    // Debounce
+    // Debounce tipiado en búsqueda:
+    // refetch() espera 250ms después de dejar de escribir.
     const refetch = (()=>{ let t; return ()=>{ clearTimeout(t); t=setTimeout(()=>{ page=1; cargar(); }, 250);} })();
-    q.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); }});
+
+    // Evitar submit accidental con Enter en el campo q
+    q.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter'){ e.preventDefault(); }
+    });
+
+    // Filtros y acciones de tabla
     categoria.addEventListener('change', ()=>{ page=1; cargar(); });
     estado.addEventListener('change', ()=>{ page=1; cargar(); });
     prevPageBtn.addEventListener('click', ()=>{ if(page>1){ page--; cargar(); }});
     nextPageBtn.addEventListener('click', ()=>{ page++; cargar(); });
 
-    // Sort
+    // Sorting al click en cada encabezado .th-sortable
     thSortables.forEach(th=>{
       th.addEventListener('click', ()=>{
         const f = th.getAttribute('data-field'); if (!f) return;
-        if (sortBy === f) sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
-        else { sortBy = f; sortDir = 'asc'; }
-        page = 1; cargar();
+        if (sortBy === f) {
+          sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
+        } else {
+          sortBy = f;
+          sortDir = 'asc';
+        }
+        page = 1;
+        cargar();
       });
     });
 
-    // ====== Modal confirmación ======
+    // ===================== Modal de confirmación =====================
+    /**
+     * renderConfirmTable(items):
+     * - Pinta la tabla del modal grande de confirmación.
+     * - Cada fila tiene:
+     *    • input cantidad editable
+     *    • stock
+     *    • estado (Activo / Inactivo)
+     *    • precio unitario y subtotal (si showPrices)
+     *    • botón Quitar
+     * - Después llama a actualizarSubtotalesYValidar() para:
+     *    • recalcular subtotales
+     *    • mostrar alertas
+     *    • habilitar/deshabilitar Guardar
+     */
     function renderConfirmTable(items){
       tbodyConfirm.innerHTML = items.map((it, idx) => {
         const estadoHtml = it.activo
           ? '<span class="badge text-bg-success">Activo</span>'
           : '<span class="badge text-bg-danger">Inactivo — no se puede usar</span>';
+
         return `
           <tr data-row="${idx}" data-activo="${it.activo ? '1' : '0'}">
             <td class="fw-semibold">${it.id}</td>
             <td>${it.comp || ''}</td>
-            <td><input type="number" class="form-control form-control-sm inpCant" value="${it.cantidad}" min="1" step="1" style="max-width:110px;" ${it.activo ? '' : 'disabled'} /></td>
-            <td><span class="badge text-bg-light badgeStock">${it.stock === Infinity ? '∞' : it.stock}</span></td>
-            ${showPrices ? `<td><span class="precioUnit" data-punit="${it.unitPrice}">${fmtARS(it.unitPrice)}</span></td>` : ''}
-            ${showPrices ? `<td><span class="subtotal">${fmtARS(it.unitPrice * it.cantidad)}</span></td>` : ''}
+
+            <td>
+              <input
+                type="number"
+                class="form-control form-control-sm inpCant"
+                value="${it.cantidad}"
+                min="1"
+                step="1"
+                style="max-width:110px;"
+                ${it.activo ? '' : 'disabled'}
+              />
+            </td>
+
+            <td>
+              <span class="badge text-bg-light badgeStock">
+                ${it.stock === Infinity ? '∞' : it.stock}
+              </span>
+            </td>
+
+            ${showPrices
+              ? `<td><span class="precioUnit" data-punit="${it.unitPrice}">${fmtARS(it.unitPrice)}</span></td>`
+              : ''}
+
+            ${showPrices
+              ? `<td><span class="subtotal">${fmtARS(it.unitPrice * it.cantidad)}</span></td>`
+              : ''}
+
             <td>${estadoHtml}</td>
-            <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm btnQuitar"><i class="bi bi-x-lg"></i></button></td>
+
+            <td class="text-end">
+              <button type="button" class="btn btn-outline-danger btn-sm btnQuitar">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </td>
           </tr>
         `;
       }).join('');
-      tbodyConfirm.querySelectorAll('.inpCant').forEach(inp => inp.addEventListener('input', actualizarSubtotalesYValidar));
+
+      // Wire cantidad editable dentro del modal
+      tbodyConfirm.querySelectorAll('.inpCant').forEach(inp =>
+        inp.addEventListener('input', actualizarSubtotalesYValidar)
+      );
+
+      // Wire botón "Quitar" dentro del modal (remueve fila sin cerrar modal)
       tbodyConfirm.querySelectorAll('.btnQuitar').forEach(btn => {
-        btn.addEventListener('click', (e)=>{ e.currentTarget.closest('tr')?.remove(); actualizarSubtotalesYValidar(); });
+        btn.addEventListener('click', (e)=>{
+          e.currentTarget.closest('tr')?.remove();
+          actualizarSubtotalesYValidar();
+        });
       });
+
       actualizarSubtotalesYValidar();
     }
 
-    // ✅ Ajustada: no bloquea por superar stock; sí bloquea por inactivo. Muestra alert si hay sobre-selección.
+    /**
+     * actualizarSubtotalesYValidar():
+     * - Recorre las filas actuales del modal de confirmación.
+     * - Recalcula subtotales (precio * cantidad).
+     * - Marca:
+     *    • table-warning si se excede stock → ⚠ solo advertencia.
+     *    • table-danger si está inactivo   → ❌ bloquea guardado.
+     * - Determina si btnGuardar se habilita.
+     * - Muestra/oculta ruleAlert.
+     *
+     * Regla final:
+     *  - SIN stock suficiente está permitido (stock podrá quedar negativo al "Máquina Lista").
+     *  - Ítem INACTIVO → bloquea guardar.
+     */
     function actualizarSubtotalesYValidar(){
-      let ok = true, total = 0, haySuperaStock = false;
+      let ok = true;
+      let total = 0;
+      let haySuperaStock = false;
+
       const rows = Array.from(tbodyConfirm.querySelectorAll('tr'));
       rows.forEach((tr)=>{
         const activo = tr.getAttribute('data-activo') === '1';
         const stock = Number(tr.querySelector('.badgeStock')?.textContent || '0');
         const cant  = Math.max(1, Number(tr.querySelector('.inpCant')?.value || '1'));
 
+        // Subtotal precio * cantidad (solo admin)
         if (showPrices) {
           const unit  = Number(tr.querySelector('.precioUnit')?.getAttribute('data-punit') || '0');
           const sub = unit * cant;
-          const subtotalEl = tr.querySelector('.subtotal'); if (subtotalEl) subtotalEl.textContent = fmtARS(sub);
+          const subtotalEl = tr.querySelector('.subtotal');
+          if (subtotalEl) subtotalEl.textContent = fmtARS(sub);
           total += sub;
         }
 
+        // ¿Supera stock? → warning visual amarillo
+        // Nota: stock === Infinity (servicio) nunca dispara warning.
         const superaStock = (stock === 0 && cant > 0) || (stock > 0 && cant > stock);
         haySuperaStock = haySuperaStock || superaStock;
 
-        tr.classList.toggle('table-warning', superaStock); // aviso visual
-        tr.classList.toggle('table-danger', !activo);      // bloqueante
+        tr.classList.toggle('table-warning', superaStock); // Amarillo si cant > stock
+        tr.classList.toggle('table-danger', !activo);      // Rojo si inactivo
 
-        if (!activo) ok = false; // sólo inactivo bloquea
+        // Repuesto inactivo => bloquea "Guardar"
+        if (!activo) ok = false;
       });
 
-      if (showPrices && totalEstimadoEl) totalEstimadoEl.textContent = fmtARS(total);
+      if (showPrices && totalEstimadoEl) {
+        totalEstimadoEl.textContent = fmtARS(total);
+      }
 
+      // Mostrar alerta si no hay stock suficiente o si hay inactivos
       ruleAlert.style.display = (haySuperaStock || !ok) ? 'block' : 'none';
-      btnGuardar.disabled = !ok || rows.length === 0; // permitir guardar aunque supere stock
+
+      // Botón Guardar habilitado sólo si:
+      //   - hay al menos 1 fila
+      //   - no hay inactivos
+      btnGuardar.disabled = !ok || rows.length === 0;
     }
 
-    // Abre el modal con TODO lo que está en 'seleccion'
+    // Botón "Agregar al presupuesto":
+    // - Abre el modal grande con TODA la selección actual (`seleccion`)
     btnAgregar.addEventListener('click', () => {
       const items = Array.from(seleccion.values());
-      if (!items.length) { alert('Seleccioná al menos un repuesto.'); return; }
+      if (!items.length) {
+        alert('Seleccioná al menos un repuesto.');
+        return;
+      }
       renderConfirmTable(items);
       getConfirmModal()?.show();
     });
 
+    /**
+     * Guardar (POST):
+     * - Toma las filas actuales del modal de confirmación.
+     * - Arma payload { ticket_id, items:[{repuesto_id,cantidad},...] }.
+     * - POST /api/presupuestoItems
+     *   • El backend reemplaza por completo la lista de repuestos del presupuesto.
+     *   • Valida que repuestos inactivos nuevos no entren.
+     * - Si OK, volvemos a la pantalla principal del presupuesto del ticket.
+     */
     btnGuardar.addEventListener('click', async ()=>{
-      if (!ticketId) { alert('ticket_id inválido'); return; }
+      if (!ticketId) {
+        alert('ticket_id inválido');
+        return;
+      }
+
       const rows = Array.from(tbodyConfirm.querySelectorAll('tr'));
+
+      // Armamos el body para el POST
       const payloadItems = rows.map(tr=>{
-        const activo = tr.getAttribute('data-activo') === '1'; if (!activo) return null;
+        const activo = tr.getAttribute('data-activo') === '1';
+        if (!activo) return null; // inactivo -> descartar
         const id = Number(tr.querySelector('td')?.textContent?.trim() || '0');
         const cantidad = Math.max(1, Number(tr.querySelector('.inpCant')?.value || '1'));
         return { repuesto_id: id, cantidad };
       }).filter(Boolean);
-      if (payloadItems.length === 0) { alert('No hay ítems válidos para guardar.'); return; }
+
+      if (payloadItems.length === 0) {
+        alert('No hay ítems válidos para guardar.');
+        return;
+      }
+
       try {
         const res = await fetch('/api/presupuestoItems', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ ticket_id: ticketId, items: payloadItems })
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            ticket_id: ticketId,
+            items: payloadItems
+          })
         });
+
         const out = await res.json();
-        if (res.ok && out.ok) { getConfirmModal()?.hide(); window.location.href = `/presupuesto/${ticketId}`; }
-        else { alert('Error al guardar: ' + (out.error || res.statusText)); }
-      } catch { alert('Error de red al guardar.'); }
+
+        if (res.ok && out.ok) {
+          // Al guardar con éxito volvemos al detalle del presupuesto
+          getConfirmModal()?.hide();
+          window.location.href = `/presupuesto/${ticketId}`;
+        } else {
+          alert('Error al guardar: ' + (out.error || res.statusText));
+        }
+      } catch {
+        alert('Error de red al guardar.');
+      }
     });
 
-    // ===== Arranque seguro =====
+    // ===================== Init de la página =====================
+    /**
+     * init():
+     * - 1) Trae selección previa desde el backend (para que el técnico no pierda lo que ya estaba).
+     * - 2) Carga categorías para el filtro.
+     * - 3) Carga la primera página de repuestos.
+     * - 4) Renderiza el resumen inicial.
+     */
     async function init() {
-      try { await cargarSeleccionAnterior(); renderSeleccionResumen(); } catch(e){}
-      try { await cargarCategorias(); } catch(e){}
-      try { await cargar(); } catch(e){}
+      try {
+        await cargarSeleccionAnterior(); // inicializa `seleccion` con lo que ya estaba guardado
+        renderSeleccionResumen();
+      } catch(e){}
+
+      try {
+        await cargarCategorias(); // llena <select id="categoria">
+      } catch(e){}
+
+      try {
+        await cargar(); // dibuja tabla por primera vez
+      } catch(e){}
     }
+
+    // Ejecutamos init() cuando el DOM esté listo
     if (document.readyState === 'loading') {
       window.addEventListener('DOMContentLoaded', init);
     } else {
@@ -648,31 +1102,43 @@ const ticketId = Astro.params.id;
     }
   </script>
 
-  <!-- Estilos del resumen (tarjetas + acciones) -->
+  {/* ============================================================
+     Estilos propios de la card de "seleccionados"
+     (resumen superior con chips/edit/delete)
+     ============================================================ */}
   <style>
     .sel-grid{
       display:flex;
       flex-direction: column;
       gap:.75rem;
     }
+
     .sel-card{
       width:100%;
       display:flex;
       align-items:center;
       gap:.75rem;
       padding:.65rem .8rem;
+
       border:1px solid var(--bs-border-color);
       border-radius:.75rem;
       background:linear-gradient(180deg, var(--bs-body-bg), rgba(0,0,0,.02));
+
       box-shadow: 0 1px 0 rgba(0,0,0,.04);
-      transition: transform .08s ease, box-shadow .08s ease, border-color .08s ease;
+      transition:
+        transform .08s ease,
+        box-shadow .08s ease,
+        border-color .08s ease;
+
       flex-wrap:nowrap;
     }
+
     .sel-card:hover{
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(0,0,0,.06);
       border-color: rgba(0,0,0,.15);
     }
+
     .sel-card__left{
       min-width:0;
       display:flex;
@@ -680,12 +1146,20 @@ const ticketId = Astro.params.id;
       gap:.5rem;
       flex:1 1 auto;
     }
-    .sel-id{ font-variant-numeric: tabular-nums; color: var(--bs-secondary-color); }
+
+    .sel-id{
+      font-variant-numeric: tabular-nums;
+      color: var(--bs-secondary-color);
+    }
+
     .sel-name{
       max-width: 40ch;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       font-weight: 500;
     }
+
     .sel-card__right{
       margin-left:auto;
       display:flex;
@@ -693,12 +1167,15 @@ const ticketId = Astro.params.id;
       gap:.6rem;
       flex:0 0 auto;
     }
+
     .btn-icon{
       --bs-btn-padding-y: .25rem;
       --bs-btn-padding-x: .45rem;
       --bs-btn-font-size: .85rem;
       line-height: 1;
-      display:inline-flex; align-items:center; justify-content:center;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
     }
   </style>
 </BasePrivateLayout>

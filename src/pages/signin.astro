@@ -1,4 +1,20 @@
 ---
+/**
+ * signin.astro  (⚠ tu archivo estaba como "singin.astro", acá lo dejo corregido a "signin.astro")
+ *
+ * Pantalla de inicio de sesión con Clerk.
+ *
+ * - Muestra el componente <SignIn /> de Clerk.
+ * - Redirige al dashboard después de loguear.
+ * - Linkea a /signup si el usuario no tiene cuenta.
+ * - Usa Bootstrap solo para estilizar el entorno general y los botones.
+ *
+ * Notas:
+ * - Necesitás tener Clerk configurado en tu proyecto Astro (middleware + provider)
+ *   para que <SignIn /> funcione.
+ * - forceRedirectUrl: a dónde va el usuario después de iniciar sesión.
+ * - appearance.elements: permite inyectar clases utilitarias (Bootstrap en este caso).
+ */
 import { SignIn } from '@clerk/astro/components';
 ---
 
@@ -6,26 +22,121 @@ import { SignIn } from '@clerk/astro/components';
   <head>
     <meta charset="UTF-8" />
     <title>Iniciar sesión</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Bootstrap -->
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+
+    <!-- Bootstrap (solo estilos visuales básicos para centrar y tipografía) -->
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
       rel="stylesheet"
     />
+
+    <style>
+      /* Fondo oscuro con texto claro */
+      body {
+        background-color: #0f172a; /* azul/gris oscuro elegante */
+        color: #fff;
+        min-height: 100vh;
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", Roboto, "Helvetica Neue", sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Tarjeta central */
+      .auth-card {
+        background: rgba(15, 23, 42, 0.6); /* fondo translúcido */
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+        border-radius: 1rem;
+        width: 100%;
+        max-width: 360px;
+        padding: 2rem 1.5rem;
+        text-align: center;
+      }
+
+      .auth-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #fff;
+        margin-bottom: 1rem;
+      }
+
+      .auth-sub {
+        font-size: .9rem;
+        color: #cbd5e1;
+        margin-bottom: 1.5rem;
+      }
+
+      /* Forzamos botón principal del widget Clerk a parecerse a Bootstrap .btn-primary */
+      .btn-primary-clerk {
+        background-color: #0d6efd !important;
+        border: 1px solid #0d6efd !important;
+        color: #fff !important;
+        border-radius: .5rem !important;
+        font-weight: 600 !important;
+        font-size: .9rem !important;
+        line-height: 1.25rem !important;
+        padding: .6rem .75rem !important;
+        width: 100% !important;
+      }
+
+      /* Campos de formulario dentro del widget */
+      .clerk-input {
+        border-radius: .5rem !important;
+        border: 1px solid rgba(255,255,255,.15) !important;
+        background: rgba(15,23,42,.4) !important;
+        color: #fff !important;
+      }
+      .clerk-input:focus {
+        border-color: #0d6efd !important;
+        outline: 0 !important;
+        box-shadow: 0 0 0 .25rem rgba(13,110,253,.25) !important;
+      }
+
+      /* Textos secundarios/links del widget */
+      .clerk-link {
+        color: #0d6efd !important;
+        text-decoration: none !important;
+        font-weight: 500 !important;
+      }
+      .clerk-link:hover {
+        text-decoration: underline !important;
+      }
+    </style>
   </head>
 
-  <body class="d-flex justify-content-center align-items-center vh-100 bg-dark text-white">
-    <div class="text-center">
-      <h1 class="mb-4">¡Bienvenido de nuevo!</h1>
-      
-      <!-- Clerk SignIn component -->
+  <body>
+    <div class="auth-card">
+      <div class="auth-title">¡Bienvenido de nuevo!</div>
+      <div class="auth-sub">Ingresá para continuar al panel</div>
+
+      <!-- Widget Clerk de login
+           - forceRedirectUrl: adónde te mando al loguearte.
+           - signUpUrl: pantalla de alta de usuario.
+           - appearance: sobreescribimos clases internas.
+             Nota: Clerk acepta un objeto "appearance" compatible con su tema.
+             Acá usamos .btn-primary-clerk y .clerk-input/.clerk-link de arriba.
+      -->
       <SignIn
         forceRedirectUrl="/dashboard"
         signUpUrl="/signup"
         appearance={{
           elements: {
-            rootBox: "mx-auto",
-            formButtonPrimary: "btn btn-primary w-100 mt-3"
+            // Contenedor raíz del widget Clerk
+            rootBox: "w-100",
+            // Botón primario de submit
+            formButtonPrimary: "btn-primary-clerk",
+            // Inputs
+            formFieldInput: "clerk-input",
+            // Links como "¿No tenés cuenta?" / "Olvidé mi contraseña"
+            footerActionLink: "clerk-link",
+            headerTitle: "text-white fw-semibold",
+            headerSubtitle: "text-secondary small",
           }
         }}
       />

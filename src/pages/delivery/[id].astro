@@ -1,23 +1,56 @@
 ---
 /**
- * Página para cargar/editar datos de Delivery asociados a un ticket.
- * - Precarga valores desde querystring (para atajos de UI o links precompletados).
- * - Trae datos del ticket y del último registro de delivery (si existe).
- * - Mezcla: delivery > cliente > precarga (el orden define prioridad).
- * - Renderiza el componente <DeliveryForm /> con la estructura `equipo`.
+ * Página /delivery/:id
+ *
+ * 🚚 Propósito:
+ * - Pantalla para cargar o editar la info de Delivery asociada a un ticket.
+ * - Renderiza un formulario (<DeliveryForm />) ya precompletado con la mejor info disponible.
+ *
+ * 💾 De dónde salen los datos que prellenan el form:
+ *   1. Último registro guardado en la tabla `delivery` para este ticket.
+ *   2. Datos del cliente asociado al ticket (dirección, localidad, info adicional).
+ *   3. Parámetros en la URL (?cotizar_delivery=... etc.) usados como precarga manual.
+ *
+ *   Prioridad final (de mayor a menor):
+ *     delivery > cliente > precarga
+ *
+ *   Ejemplo:
+ *   - Si ya hay `delivery.localidad`, usamos esa.
+ *   - Si no, usamos `cliente.localidad`.
+ *   - Si tampoco hay, usamos `precarga.localidad` (si vino en querystring).
+ *
+ * 📋 Qué mostramos:
+ * - Título con ícono de camión.
+ * - Si el ticket existe → <DeliveryForm equipo={...} />
+ * - Si NO existe → alerta de error.
+ *
+ * 🔐 Auth/permisos:
+ * - Esta vista asume que solo usuarios válidos llegan acá
+ *   (middleware debe filtrar antes). No se hace check directo acá.
  */
+
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import DeliveryForm from '../../components/DeliveryForm.astro';
 import { supabase } from '../../lib/supabase';
 
-// URL actual (para leer query params de precarga)
+// ======================================================================
+// 1️⃣ Leer datos iniciales del request
+// ======================================================================
+
+// Obtenemos la URL actual para leer los query params usados como precarga.
+// Ej: /delivery/123?cotizar_delivery=si&pagado=true
 const url = new URL(Astro.request.url);
 
 /**
- * Precarga por URL (querystring):
- * - El backend "ignora" fecha_de_entrega (según nota del autor),
- *   pero la dejamos pasar por si el form quiere mostrarla.
- * - Si un valor no viene, queda como `undefined` para no pisar merges.
+ * precarga:
+ * - Datos opcionales que pueden venir por querystring para precompletar el formulario.
+ * - Usamos `?? undefined` en cada campo:
+ *     - Si el query param NO está, guardamos undefined (NO string "null" ni "").
+ *     - Esto nos permite luego hacer el merge sin pisar valores reales con undefined.
+ *
+ * Notas:
+ * - fecha_de_entrega está incluida aunque del lado backend quizá no se use todavía,
+ *   pero la UI puede querer mostrarla.
  */
 const precarga = {
   cotizar_delivery: url.searchParams.get('cotizar_delivery') ?? undefined,
@@ -30,28 +63,42 @@ const precarga = {
   localidad: url.searchParams.get('localidad') ?? undefined,
 };
 
-// ID del ticket que viene por parámetro de ruta (p.ej. /delivery/:id)
+// Tomamos el parámetro dinámico :id de la ruta (/delivery/:id)
 const { id } = Astro.params as { id: string };
 
-/**
- * 1) Cargar Ticket + datos básicos de cliente
- *    - Traemos: id, número de ticket y join del cliente con datos de contacto/envío.
- */
+// ======================================================================
+// 2️⃣ Buscar datos del ticket y del cliente relacionado
+// ======================================================================
+//
+// Traemos de `tickets_mian`:
+//   - id               (PK interna del ticket)
+//   - ticket           (número "visible" del ticket)
+//   - cliente_id       (FK)
+//   - cliente:*        (join a la tabla cliente para dirección/contacto)
+//
+// cliente:cliente_id (...) hace el join y lo expone como `ticket.cliente`.
 const { data: ticket } = await supabase
   .from('tickets_mian')
   .select(`
     id,
     ticket,
     cliente_id,
-    cliente:cliente_id ( cliente, direccion, localidad, informacion_adicional_usuario )
+    cliente:cliente_id (
+      cliente,
+      direccion,
+      localidad,
+      informacion_adicional_usuario
+    )
   `)
   .eq('id', id)
   .single();
 
-/**
- * 2) Último delivery del ticket (si existiera)
- *    - Ordenamos por id DESC y tomamos el primero.
- */
+// ======================================================================
+// 3️⃣ Buscar el último registro de delivery guardado para el ticket
+// ======================================================================
+//
+// Puede haber múltiples registros en la tabla `delivery` para el mismo ticket.
+// Tomamos el más reciente ordenando por id DESC y quedándonos con el primero.
 const { data: deliveryRows } = await supabase
   .from('delivery')
   .select('*')
@@ -61,32 +108,59 @@ const { data: deliveryRows } = await supabase
 
 const delivery = Array.isArray(deliveryRows) ? deliveryRows[0] : null;
 
-/**
- * 3) Mezcla de datos para el form (`equipo`):
- *    Prioridad de campos:
- *      delivery (último registro)  >  cliente (del ticket)  >  precarga (querystring)
- *    - ticketId y ticketNumero viajan siempre si hay ticket.
- *    - Para direccion/localidad/info_extra hacemos el merge manual con ?? para respetar prioridad.
- *    - Agregamos SOLO las claves de `precarga` que NO son undefined (evitamos pisar con undefined).
- */
+// ======================================================================
+// 4️⃣ Armar el objeto `equipo` que va al <DeliveryForm />
+// ======================================================================
+//
+// Objetivo: darle al formulario un único objeto con la info consolidada.
+//
+// Estructura final `equipo` incluye:
+//   - ticketId          → id interno del ticket
+//   - ticketNumero      → nro "humano" (ticket.ticket)
+//   - todos los campos previos de delivery (si existen)
+//   - direccion / localidad / informacion_adicional_delivery resueltos con prioridad
+//   - TODOS los campos que llegaron por precarga (excepto los undefined)
+//
+// Reglas de prioridad para direccion / localidad / informacion_adicional_delivery:
+//   delivery > cliente > precarga
+//
+// Nota importante:
+//   Hacemos el spread de `delivery` primero y luego sobreescribimos campos
+//   específicos con merge manual usando ?? para mantener esa prioridad.
+//
+//   Al final, hacemos merge con `precarga`, pero OJO:
+//   - filtramos precarga para excluir keys cuyo valor sea undefined.
+//     Esto evita que un undefined de la URL tape un valor real existente.
+//
 const equipo = {
   ticketId: ticket?.id,
   ticketNumero: ticket?.ticket,
+
+  // Todos los campos existentes en delivery (pueden incluir: forma_de_pago, pagado, etc.)
   ...delivery,
+
+  // Campos con prioridad explícita delivery > cliente > (luego precarga más abajo):
   direccion:
     (delivery as any)?.direccion ??
     (ticket as any)?.cliente?.direccion ??
     undefined,
+
   localidad:
     (delivery as any)?.localidad ??
     (ticket as any)?.cliente?.localidad ??
     undefined,
+
   informacion_adicional_delivery:
     (delivery as any)?.informacion_adicional_delivery ??
     (ticket as any)?.cliente?.informacion_adicional_usuario ??
     undefined,
-  // Precarga filtrada (no incluimos claves con undefined)
-  ...Object.fromEntries(Object.entries(precarga).filter(([_, v]) => v !== undefined)),
+
+  // Por último, mergeamos la precarga SIN las props undefined.
+  // Ejemplo: si la URL trae ?pagado=true, lo agregamos acá.
+  // Si la precarga tiene algo undefined, lo descartamos.
+  ...Object.fromEntries(
+    Object.entries(precarga).filter(([_, v]) => v !== undefined)
+  ),
 };
 ---
 
@@ -99,12 +173,20 @@ const equipo = {
 
     {
       /**
-       * Si encontramos el ticket, renderizamos el formulario con `equipo`.
-       * De lo contrario, mostramos una alerta de error.
+       * Render principal:
+       *
+       * ✔ Si existe el ticket → mostramos el formulario DeliveryForm con los datos consolidados.
+       *   - <DeliveryForm equipo={equipo} />
+       *     donde `equipo` ya trae ticketId, dirección, localidad, etc.
+       *
+       * ✖ Si NO hay ticket (ticketId falsy) → mostramos alerta de error.
+       *   Esto cubre casos de /delivery/:id inexistente o consultas rotas.
        */
       equipo?.ticketId
         ? <DeliveryForm equipo={equipo} />
-        : <div class="alert alert-danger">No se encontró el ticket con ID: {id}</div>
+        : <div class="alert alert-danger">
+            No se encontró el ticket con ID: {id}
+          </div>
     }
   </div>
 </BasePrivateLayout>

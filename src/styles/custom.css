@@ -1,60 +1,85 @@
 :root {
-  /* 🎨 Colores base de Bootstrap y custom */
+  /* 🎨 Paleta principal y tokens de diseño globales.
+     Estos custom properties (-–bs-*) extienden la paleta de Bootstrap
+     y nos dejan mantener branding consistente. */
+
+  /* Fondo/base de la app */
   --bs-body-bg: #f8f9fa;
   --bs-body-color: #23253a;
 
-  /* Colores principales de la app */
+  /* Identidad visual (violeta protagonista + variantes) */
   --bs-primary: #6c63ff;
   --bs-primary-light: #c3c0fa;
   --bs-primary-dark: #534bd8;
 
+  /* Colores secundarios/soporte */
   --bs-secondary: #2f3144;
   --bs-accent: #00d9c0;
 
-  /* Escala de grises / neutrales */
+  /* Neutrales */
   --bs-light: #f1f0fb;
   --bs-lighter: #f8f9fa;
   --bs-dark: #1b1b1b;
   --bs-border: #e2e2f3;
 
-  /* Colores de estados */
+  /* Estados */
   --bs-success: #24c18a;
   --bs-danger: #fa6161;
   --bs-warning: #ffc440;
   --bs-info: #36b7ff;
 
-  /* Gradientes de marca */
+  /* Gradientes usados en fondos/badges especiales */
   --gradient-main: linear-gradient(90deg, #6c63ff 0%, #817cfa 100%);
   --gradient-secondary: linear-gradient(90deg, #2f3144 0%, #565874 100%);
 
-  /* Colores para botón upload */
+  /* Botón de upload (azul marca "acción primaria secundaria") */
   --upload-blue: #0366f1;
   --upload-blue-hover: #0548a7;
 
-  /* Colores para disabled */
+  /* Estados disabled accesibles */
   --bs-disabled-bg: #e3e3ef;
   --bs-disabled-text: #a1a1b1;
 }
 
-/* 🖼️ Imagen de card de impresora */
+/* ============================
+ * TARJETAS / CARDS DE IMPRESORAS
+ * ============================ */
+
+/* Imagen principal de cada impresora en el dashboard/detalle.
+   - Tamaño fijo cuadrado -> look consistente en la grilla
+   - object-fit: cover para recortar prolijo
+*/
 .card-img-equip {
   width: 170px;
   height: 170px;
   max-width: 100%;
   max-height: 170px;
-  object-fit: cover; /* asegura proporción */
+  object-fit: cover;
   border-radius: 9px;
   transition: box-shadow 0.2s;
 }
 
-/* Hover de cards custom */
+/* Card hover más "elevado":
+   - leve scale + levantar 3px
+   - glow violeta suave
+*/
 .card-custom:hover {
   transform: scale(1.025) translateY(-3px);
-  box-shadow: 0 8px 32px rgba(108,99,255,0.13);
+  box-shadow: 0 8px 32px rgba(108, 99, 255, 0.13);
 }
 
-/* Botones violetas en cards (ver/editar) */
-.btn-ver-card, .btn-editar-card {
+/* ============================
+ * BOTONES EN CARDS
+ * ============================ */
+
+/* Botón "Ver" / "Editar" dentro de la card
+   - Fondo violeta brand
+   - Borde violeta
+   - Sombra suave violeta
+   - Mismo estilo para ambos botones
+*/
+.btn-ver-card,
+.btn-editar-card {
   background: var(--bs-primary);
   color: #fff !important;
   border: 2px solid var(--bs-primary);
@@ -70,7 +95,8 @@
   margin: 0 !important;
   cursor: pointer;
 }
-/* Sin cambios al hacer hover/focus */
+
+/* Hover/focus mantiene la misma estética (sin saltos raros de color) */
 .btn-ver-card:hover,
 .btn-ver-card:focus,
 .btn-editar-card:hover,
@@ -83,19 +109,24 @@
   transform: none;
 }
 
-/* Quitar subrayado en enlaces-botón */
+/* Aseguramos que los <a> que actúan como botón
+   no se subrayen incluso si Bootstrap mete estilos */
 a.btn-ver-card,
 a.btn-editar-card {
   text-decoration: none !important;
 }
 
-/* Ajuste de spacing en botones de card */
+/* Ajuste fino del spacing para el contenedor
+   de los botones dentro de PrinterCard */
 .d-flex.flex-row.gap-2.justify-content-center.mt-2 {
   gap: 0.8rem !important;
   margin-top: 1rem !important;
 }
 
-/* Botón editar general (fuera de cards) */
+/* ============================
+ * BOTÓN EDITAR (uso general)
+ * ============================ */
+
 .btn-editar {
   background-color: var(--bs-secondary);
   color: #ffffff;
@@ -103,12 +134,19 @@ a.btn-editar-card {
   border-radius: 0.6rem;
   transition: background-color 0.2s ease-in-out;
 }
+
 .btn-editar:hover {
   background-color: #4b4e68;
   color: #ffffff;
 }
 
-/* Botón custom para subir imágenes */
+/* ============================
+ * SUBIDA DE IMÁGENES (form-editar / form-crear-ticket)
+ * ============================ */
+
+/* Botón "Subir imagen" grande, táctil:
+   - Azul propio (no violeta) para diferenciarlo de acciones del ticket
+*/
 .btn-upload-image {
   display: inline-block;
   background-color: var(--upload-blue);
@@ -125,6 +163,8 @@ a.btn-editar-card {
   max-width: 320px;
   font-size: 1.05rem;
 }
+
+/* Hover/focus: más oscuro + sombra más intensa */
 .btn-upload-image:hover,
 .btn-upload-image:focus {
   background-color: var(--upload-blue-hover);
@@ -132,23 +172,32 @@ a.btn-editar-card {
   color: #fff;
   box-shadow: 0 6px 18px 0 rgba(5, 72, 167, 0.17);
 }
-/* Oculta el input file real */
+
+/* Ocultamos el input file real dentro del label custom */
 .btn-upload-image input[type="file"] {
   display: none !important;
 }
 
-/* Imagen preview (con borde y sombra suave) */
+/* Preview de imagen (editar ticket / alta ticket):
+   - borde clarito
+   - glow violeta al hover para indicar que es clickable / importante */
 #img-actual-o-preview {
   box-shadow: 0 1px 12px 0 rgba(44, 44, 44, 0.11);
   border: 1.5px solid #ececec;
   transition: box-shadow 0.17s, border-color 0.18s;
 }
+
 #img-actual-o-preview:hover {
   box-shadow: 0 0 0 4px rgba(108, 99, 255, 0.17);
   border-color: var(--bs-primary);
 }
 
-/* Ajustes sidebar/topbar en desktop */
+/* ============================
+ * LAYOUT RESPONSIVE
+ * ============================ */
+
+/* En desktop queremos empujar el contenido
+   para que el sidebar fijo no tape nada */
 @media (min-width: 768px) {
   main.ms-md-240 {
     margin-left: 240px !important;
@@ -158,12 +207,16 @@ a.btn-editar-card {
   }
 }
 
-/* Ajustes en móviles */
+/* En móviles:
+   - Cards con sombra propia (porque no hay hover)
+   - Botones más grandes / full width
+*/
 @media (max-width: 768px) {
   .card-custom {
     box-shadow: 0 2px 20px rgba(44, 44, 44, 0.13);
     padding-bottom: 1.4rem !important;
   }
+
   .btn-upload-image {
     font-size: 1.12rem;
     padding: 1rem 1.1rem;
@@ -171,12 +224,14 @@ a.btn-editar-card {
     width: 100%;
     max-width: 100%;
   }
+
   .btn-ver-card,
   .btn-editar-card {
     width: 48% !important;
     font-size: 1.1rem;
     margin-bottom: 0;
   }
+
   .d-flex.flex-row.gap-2.justify-content-center.mt-2 {
     flex-direction: row !important;
     gap: 0.45rem !important;
@@ -184,7 +239,14 @@ a.btn-editar-card {
   }
 }
 
-/* Puntito de estado (pastel pero intensificado) */
+/* ============================
+ * ESTADOS / BADGES / DOTS
+ * ============================ */
+
+/* Pequeño circulito de estado:
+   - usado junto a etiquetas de estado ("Lista", "Reparación", etc)
+   - usa var(--dot-color) inyectable inline para cambiar color rápido
+*/
 .estado-dot {
   width: 12px;
   height: 12px;
@@ -196,17 +258,34 @@ a.btn-editar-card {
   filter: brightness(0.9) saturate(1.4);
 }
 
-/* Ajustes de dropdown activo */
+/* ============================
+ * DROPDOWN / MENÚS
+ * ============================ */
+
+/* Cuando Bootstrap marca un .dropdown-item como active
+   a veces mete fondo azul intenso; lo neutralizamos para
+   usar un gris clarito que no grite */
 .dropdown-menu .dropdown-item.active,
 .dropdown-menu .dropdown-item:active {
   background-color: rgba(0,0,0,.05);
   color: inherit;
 }
 
-/* Estilo para comentarios: respeta saltos de línea */
-.comentario { white-space: pre-line; }
+/* ============================
+ * COMENTARIOS / TEXTOS MULTILÍNEA
+ * ============================ */
 
-/* También aplica a textos en cards/listas */
-.card-text, .comment-message, .list-group-item p {
+/* En comentarios de ticket queremos respetar saltos de línea
+   pero SIN forzar monospace ni <br> manuales.
+   pre-line = colapsa espacios múltiples pero respeta \n */
+.comentario {
+  white-space: pre-line;
+}
+
+/* Reusar el mismo comportamiento para textos descriptivos
+   (card-text, mensajes de comentario, etc.) */
+.card-text,
+.comment-message,
+.list-group-item p {
   white-space: pre-line;
 }

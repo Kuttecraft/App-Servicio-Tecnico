@@ -2,8 +2,48 @@
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import { supabase } from '../../lib/supabase';
 
-// ========================= IMPRESORAS =========================
-/** Lista de modelos de impresoras para el selector */
+/**
+ * Página /editar/:id
+ *
+ * 🛠 Propósito:
+ * - Formulario para editar un ticket existente:
+ *    • Estado, técnico asignado, fechas
+ *    • Datos del cliente (contacto, DNI/CUIT)
+ *    • Datos de la impresora (modelo, serie, boquilla)
+ *    • Presupuesto (monto, link, garantía)
+ *    • Delivery (pago, costo, info logística)
+ *    • Notas internas / comentarios del cliente
+ *    • Imágenes del equipo (llegada, reparación, final)
+ *
+ * 🔄 Flujo de datos:
+ * - Se hace SSR con Supabase:
+ *    1. Cargamos ticket + joins (cliente, técnico, impresora, delivery, presupuestos).
+ *    2. Normalizamos joins que a veces llegan como array.
+ *    3. Seleccionamos el presupuesto más reciente.
+ *    4. Construimos URLs de imágenes, con fallback al storage público de Supabase.
+ *
+ * 💾 Envío:
+ * - El <form> hace POST multipart/form-data a /api/actualizarTicket?id=<ticketId>.
+ * - Ese endpoint debe persistir cambios de texto y subir/reemplazar/borrar imágenes.
+ *
+ * 🔐 Permisos:
+ * - Se determina si el usuario es admin desde Astro.locals.perfil.
+ * - Campos de delivery más sensibles solo se muestran a admin.
+ *
+ * 🧠 Detalles de UX:
+ * - El select de "Técnico" se llena dinámicamente desde /api/listarTecnicos en el cliente.
+ * - El select de "Modelo / Línea" tiene una opción "OTRA__ESPECIFICAR" que habilita un input libre.
+ * - Inputs monetarios tienen formateo ARS en vivo.
+ * - DNI/CUIT se formatea en vivo.
+ * - Campo "boquilla" se normaliza a "X mm".
+ * - Botones de imagen permiten previsualizar reemplazo y marcar eliminación.
+ */
+
+// ======================================================================
+// 0️⃣ Catálogo de modelos de impresoras
+//    (sirve para el <select> y para la lógica "OTRA__ESPECIFICAR")
+// ======================================================================
+/** Lista fija para el selector de impresoras */
 const impresoras = [
   "PK3 MK8",
   "PK3++ MK8",
@@ -18,17 +58,35 @@ const impresoras = [
   "OTRA__ESPECIFICAR"
 ];
 
-// ========================= HELPERS SERVER =========================
+// ======================================================================
+// 1️⃣ Helpers del lado servidor (Astro SSR)
+// ======================================================================
 
-/** Convierte varias variantes de fecha a "YYYY-MM-DD" (para inputs type="date"). */
+/**
+ * toISODate(v):
+ * Devuelve una fecha en formato "YYYY-MM-DD" lista para <input type="date" />.
+ * Acepta:
+ *   - ISO completo "2025-10-30T12:34:56Z"
+ *   - "YYYY-MM-DD"
+ *   - "YYYY/MM/DD"
+ *   - "DD/MM/YYYY" o "MM-DD-YYYY"
+ *   - strings raras parseables por Date()
+ * Si no puede parsear, devuelve ''.
+ */
 function toISODate(v?: string | null): string {
   if (!v) return '';
   const s = String(v).trim();
   if (!s || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') return '';
+
+  // Directo YYYY-MM-DD
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+
+  // YYYY/MM/DD
   m = s.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+
+  // DD/MM/YYYY ó MM-DD-YYYY (intentamos deducir orden)
   m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
   if (m) {
     const dd = String(m[1]).padStart(2, '0');
@@ -36,6 +94,8 @@ function toISODate(v?: string | null): string {
     const yyyy = m[3];
     return `${yyyy}-${mm}-${dd}`;
   }
+
+  // Último intento: Date nativo
   const d = new Date(s);
   if (!isNaN(d.getTime())) {
     const yyyy = d.getFullYear();
@@ -43,33 +103,60 @@ function toISODate(v?: string | null): string {
     const dd = String(d.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }
+
   return '';
 }
 
-/** Mostrar como M/D/YYYY (mes/día/año) sin ceros a la izquierda. */
+/**
+ * toMDY(v):
+ * Muestra la fecha como M/D/YYYY sin ceros a la izquierda
+ * (pensado para "Fecha formulario", que es más humana que editable).
+ */
 function toMDY(v?: string | null): string {
   if (!v) return '';
   const s = String(v).trim();
   if (!s || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') return '';
+
+  // YYYY-MM-DD
   let m = s.match(/^(\d{4})-((\d{2}))-(\d{2})/);
   if (m) return `${Number(m[2])}/${Number(m[3])}/${Number(m[1])}`;
+
+  // YYYY/MM/DD
   m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
   if (m) return `${Number(m[2])}/${Number(m[3])}/${Number(m[1])}`;
+
+  // DD/MM/YYYY o MM-DD-YYYY ambiguo
   m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
   if (m) {
-    const a = Number(m[1]); const b = Number(m[2]); const y = Number(m[3]);
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    const y = Number(m[3]);
     let mm: number, dd: number;
+    // Heurística para decidir mes/día
     if (b > 12 && a <= 12) { mm = a; dd = b; }
     else if (a > 12 && b <= 12) { dd = a; mm = b; }
     else { mm = a; dd = b; }
     return `${mm}/${dd}/${y}`;
   }
+
+  // Fallback con Date()
   const d = new Date(s);
   if (!isNaN(d.getTime())) return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+
   return '';
 }
 
-/** ========= Helpers de moneda ARS (FIX miles con punto) ========= */
+/**
+ * parseToNumberLike(s):
+ * - Intenta "limpiar" un string de precio ARS.
+ * - Quita símbolos que no sean dígitos, coma, punto, signo.
+ * - Detecta coma y punto para ver cuál es decimal vs miles.
+ *   • Si hay ambos, asume que el último en aparecer es el decimal.
+ *   • Si hay sólo coma, la trata de decimal.
+ *   • Si hay sólo punto, lo trata de decimal salvo que parezca separador de miles.
+ *
+ * Devuelve un string listo para pasar a Number().
+ */
 function parseToNumberLike(s?: string | null): string {
   if (!s) return '';
   let t = String(s).trim().replace(/[^\d.,-]/g, '');
@@ -77,7 +164,7 @@ function parseToNumberLike(s?: string | null): string {
   const hasDot = t.includes('.');
   const hasCom = t.includes(',');
 
-  // Punto y coma: el ÚLTIMO símbolo actúa como decimal
+  // Tiene punto y coma → inferimos cuál es miles y cuál es decimal
   if (hasDot && hasCom) {
     const lastDot = t.lastIndexOf('.');
     const lastCom = t.lastIndexOf(',');
@@ -88,19 +175,26 @@ function parseToNumberLike(s?: string | null): string {
     return t;
   }
 
-  // Solo coma -> decimal
+  // Solo coma → coma decimal
   if (hasCom && !hasDot) return t.replace(',', '.');
 
-  // Solo punto -> si parece miles (X.XXX[.XXX]...) quitar puntos
+  // Solo punto → si parece miles tipo "12.345.678", sacamos puntos
   if (hasDot && !hasCom) {
     const parts = t.split('.');
     const looksLikeThousands = parts.length > 1 && parts.slice(1).every(p => p.length === 3);
     return looksLikeThousands ? parts.join('') : t;
   }
 
+  // Solo dígitos
   return t;
 }
 
+/**
+ * formatARS(v):
+ * Muestra un valor en formato moneda argentina "$12.345,67"
+ * con hasta 2 decimales.
+ * - Usa parseToNumberLike() para entender strings con "." y "," mezclados.
+ */
 function formatARS(v?: string | number | null): string {
   if (v == null || v === '') return '';
   const asStr = typeof v === 'number' ? String(v) : String(v);
@@ -109,77 +203,169 @@ function formatARS(v?: string | number | null): string {
   if (!isFinite(n)) return String(v);
   const parts = norm.split('.');
   const decimals = parts[1]?.length ? Math.min(2, parts[1].length) : 0;
-  return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return '$' + n.toLocaleString('es-AR', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  });
 }
 
-/** ========= Normalizador de DNI/CUIT para *mostrar* ========= */
+/**
+ * prettifyDniCuit(s):
+ * Devuelve DNI/CUIT con formato humano:
+ *   - CUIT/CUIL (11 dígitos) → "##-########-#"
+ *   - DNI (7 u 8 dígitos)    → "12.345.678"
+ *   - Fallback: separadores de miles.
+ * Esto es sólo visual en el input.
+ */
 function prettifyDniCuit(s?: string | null): string {
   if (!s) return '';
   const digits = String(s).replace(/\D+/g, '');
   if (!digits) return '';
 
-  // CUIT/CUIL: 11 dígitos → XX-XXXXXXXX-X
   if (digits.length === 11) {
     return `${digits.slice(0,2)}-${digits.slice(2,10)}-${digits.slice(10)}`;
   }
 
-  // DNI: 7 u 8 dígitos → agrupado con puntos
   if (digits.length === 7 || digits.length === 8) {
     return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   }
 
-  // Otros largos
   return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
-// ========================= CARGA SERVER =========================
+// ======================================================================
+// 2️⃣ Carga de datos desde Supabase (SSR)
+// ======================================================================
 
+// ID del ticket tomado de la URL /editar/:id
 const { id } = Astro.params as { id: string };
 
-// Perfil (para campos admin)
+// Perfil/rol del usuario, para condicionar campos sólo-admin
 const perfil = (Astro.locals as any)?.perfil;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 
-/* ================== CARGA PRINCIPAL ================== */
+/**
+ * Consulta principal:
+ * - Trae ticket y campos asociados.
+ * - Joins:
+ *    • cliente:cliente_id
+ *    • tecnicos:tecnico_id
+ *    • impresoras:impresora_id
+ *    • delivery (relación directa)
+ *    • presupuestos (lista histórica)
+ *
+ * Notar:
+ * - "presupuestos" es una relación 1:N → después elegimos el más reciente.
+ * - delivery puede venir como array, igual que impresoras y tecnicos,
+ *   así que más abajo lo aplanamos.
+ */
 const { data, error } = await supabase
   .from('tickets_mian')
   .select(`
-    id, ticket, estado, marca_temporal, fecha_de_reparacion, tecnico_id, cliente_id, impresora_id,
-    imagen, imagen_ticket, imagen_extra, notas_del_tecnico, notas_del_cliente,
-    cliente:cliente_id ( id, dni_cuit, correo_electronico, whatsapp, comentarios ),
-    tecnicos:tecnico_id ( id, nombre, apellido, email ),
-    impresoras:impresora_id ( modelo, maquina, numero_de_serie, tamano_de_boquilla ),
-    delivery ( pagado, cotizar_delivery, informacion_adicional_delivery, fecha_de_entrega, medio_de_entrega ),
-    presupuestos ( id, monto, link_presupuesto, cubre_garantia, fecha_presupuesto )
+    id,
+    ticket,
+    estado,
+    marca_temporal,
+    fecha_de_reparacion,
+    tecnico_id,
+    cliente_id,
+    impresora_id,
+    imagen,
+    imagen_ticket,
+    imagen_extra,
+    notas_del_tecnico,
+    notas_del_cliente,
+
+    cliente:cliente_id (
+      id,
+      dni_cuit,
+      correo_electronico,
+      whatsapp,
+      comentarios
+    ),
+
+    tecnicos:tecnico_id (
+      id,
+      nombre,
+      apellido,
+      email
+    ),
+
+    impresoras:impresora_id (
+      modelo,
+      maquina,
+      numero_de_serie,
+      tamano_de_boquilla
+    ),
+
+    delivery (
+      pagado,
+      cotizar_delivery,
+      informacion_adicional_delivery,
+      fecha_de_entrega,
+      medio_de_entrega
+    ),
+
+    presupuestos (
+      id,
+      monto,
+      link_presupuesto,
+      cubre_garantia,
+      fecha_presupuesto
+    )
   `)
   .eq('id', id)
   .maybeSingle();
 
 if (error) console.error('[editar] supabase error:', error);
 
+// `row` es el registro crudo del ticket
 const row = (data ?? null) as any;
 
-/* Normalización defensiva */
+/**
+ * Normalización defensiva:
+ * - Algunos joins vienen como array, otros como objeto único.
+ * - Nos aseguramos de dejar `equipo` con:
+ *     equipo.cliente      = objeto cliente
+ *     equipo.tecnicos     = objeto técnico
+ *     equipo.impresoras   = objeto impresora
+ *     equipo.delivery     = objeto delivery
+ *     equipo.presupuestos = último presupuesto (no array)
+ *
+ * Además:
+ * - Si el cliente vino vacío en el join inicial, hacemos fallback a una
+ *   consulta puntual a la tabla `cliente` para recuperar contacto.
+ */
 let clienteJoin = row?.cliente;
 if (Array.isArray(clienteJoin)) clienteJoin = clienteJoin[0] ?? null;
 
+// Creamos "equipo", la estructura que usamos para popular el form
 let equipo: any = row ? {
   ...row,
   cliente: clienteJoin ?? null,
-  tecnicos: Array.isArray(row?.tecnicos) ? row.tecnicos[0] : row?.tecnicos,
+
+  // tecnicos / impresoras / delivery pueden venir como array
+  tecnicos: Array.isArray(row?.tecnicos)   ? row.tecnicos[0]   : row?.tecnicos,
   impresoras: Array.isArray(row?.impresoras) ? row?.impresoras[0] : row?.impresoras,
-  delivery: Array.isArray(row?.delivery) ? row.delivery[0] : row?.delivery,
+  delivery: Array.isArray(row?.delivery)   ? row.delivery[0]   : row?.delivery,
+
+  // De varios presupuestos, nos quedamos con el último (ID más grande)
   presupuestos: Array.isArray(row?.presupuestos)
     ? (row.presupuestos.sort((a:any,b:any)=>Number(a.id)-Number(b.id))[row.presupuestos.length-1] ?? null)
     : row?.presupuestos,
 } : null;
 
-if (equipo && (!equipo.cliente || (
-  equipo.cliente.dni_cuit == null &&
-  equipo.cliente.whatsapp == null &&
-  equipo.cliente.correo_electronico == null &&
-  equipo.cliente.comentarios == null
-))) {
+// Si todavía no tenemos info del cliente (o vino muy vacía),
+// intentamos refetch de cliente para completar whatsapp / correo / etc.
+if (
+  equipo &&
+  (!equipo.cliente || (
+    equipo.cliente.dni_cuit == null &&
+    equipo.cliente.whatsapp == null &&
+    equipo.cliente.correo_electronico == null &&
+    equipo.cliente.comentarios == null
+  ))
+) {
   const { data: cliFB } = await supabase
     .from('cliente')
     .select('id, dni_cuit, correo_electronico, whatsapp, comentarios')
@@ -188,26 +374,46 @@ if (equipo && (!equipo.cliente || (
   if (cliFB) equipo.cliente = cliFB;
 }
 
-// estados del ticket
+// ======================================================================
+// 3️⃣ Constantes de UI: selects y valores actuales
+// ======================================================================
+
+// Estados posibles del ticket
 const estados = [
   "Nuevo","Presupuestar","Enviar presupuesto","P. Enviado",
-  "Reparación","Prueba","Lista", "Retirar", "Entregada","Feedback Enviado","Archivada","No realizada"
+  "Reparación","Prueba","Lista", "Retirar", "Entregada",
+  "Feedback Enviado","Archivada","No realizada"
 ];
 
-// Fallbacks de imágenes
-const urlMain   = equipo?.imagen        || supabase.storage.from('imagenes').getPublicUrl(`public/${id}.webp`).data.publicUrl;
-const urlTicket = equipo?.imagen_ticket || supabase.storage.from('imagenes').getPublicUrl(`public/${id}_ticket.webp`).data.publicUrl;
-const urlExtra  = equipo?.imagen_extra  || supabase.storage.from('imagenes').getPublicUrl(`public/${id}_extra.webp`).data.publicUrl;
+// URLs de imágenes de fallback:
+// Si el ticket ya tiene imagen_* usamos esa.
+// Si no, intentamos obtener la URL pública en el bucket supabase.storage.
+const urlMain   = equipo?.imagen
+  || supabase.storage.from('imagenes').getPublicUrl(`public/${id}.webp`).data.publicUrl;
 
-// selects booleanos
+const urlTicket = equipo?.imagen_ticket
+  || supabase.storage.from('imagenes').getPublicUrl(`public/${id}_ticket.webp`).data.publicUrl;
+
+const urlExtra  = equipo?.imagen_extra
+  || supabase.storage.from('imagenes').getPublicUrl(`public/${id}_extra.webp`).data.publicUrl;
+
+// Select booleanos:
 const valorCubreGarantia = (equipo?.presupuestos?.cubre_garantia === 'true') ? 'true' : 'false';
-const valorCobrado = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
+const valorCobrado       = (equipo?.delivery?.pagado === 'true') ? 'true' : 'false';
+
+// Estado actual como string simple
 const estadoActual = (equipo?.estado || '').trim();
 
-// Técnico actual -> label = parte antes de @
+// Técnico asignado actualmente (para marcar como selected en el combo dinámico)
 const currentTecId: number | null =
   equipo?.tecnico_id != null ? Number(equipo.tecnico_id) : null;
 
+/**
+ * currentTecLabel:
+ * - Label legible para el técnico actual.
+ * - Preferimos la parte antes de la @ del email.
+ * - Si no hay email, usamos el nombre del técnico.
+ */
 const currentTecLabel: string = (() => {
   const t = equipo?.tecnicos || null;
   if (!t) return '';
@@ -217,27 +423,46 @@ const currentTecLabel: string = (() => {
   return nombre || '';
 })();
 
-/** ================== LÓGICA PARA SELECT DE IMPRESORA ================== */
+/**
+ * Lógica para el selector de impresora:
+ *
+ * - El form tiene un <select> con lista fija (impresoras[]).
+ * - También hay un input libre "Modelo específico".
+ * - Si el modelo actual NO está en la lista, marcamos la opción
+ *   'OTRA__ESPECIFICAR' y mostramos el input libre con ese valor precargado.
+ */
 const modeloActualRaw = (equipo?.impresoras?.modelo || '').toString().trim();
 const estaEnLista = impresoras.includes(modeloActualRaw);
 const isOtra = !estaEnLista && modeloActualRaw !== '';
 const valorOtra = isOtra ? modeloActualRaw : '';
 const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
-
 ---
+
 <BasePrivateLayout>
   <style>
+    /* ================================================================
+       🎨 Estilos locales de la vista de edición
+       - section-card: caja blanca con borde leve
+       - grid-2: responsive 2 cols en desktop / 1 col mobile
+       - img-row: layout de imágenes con su panel de botones
+       ================================================================ */
     .section-card { border: 1px solid rgba(0,0,0,.08); border-radius: 12px; padding: 1rem; background: #fff; }
     .section-title { font-weight: 700; font-size: .95rem; color: #0d6efd; margin-bottom: .5rem; display: flex; align-items: center; gap: .5rem; }
     .section-title.center { justify-content: center; }
+
     .grid-2 { display: grid; grid-template-columns: 1fr; gap: .75rem; }
     @media (min-width: 768px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+
     .actions { display: flex; gap: .5rem; justify-content: flex-end; flex-wrap: wrap; }
+
     .img-row { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem; }
     @media (min-width:768px){ .img-row{ flex-direction:row; align-items:center; justify-content:center; gap:1.25rem; } }
+
     .img-box { border-radius:15px; overflow:hidden; border:1px solid rgba(0,0,0,.1); box-shadow:0 2px 8px rgba(0,0,0,.06); }
     .img-box img { display:block; width:auto; height:auto; max-width:300px; max-height:300px; object-fit:contain; }
+
     .btn-col { display:flex; flex-direction:column; align-items:center; gap:.5rem; }
+
     .hidden { display:none !important; }
   </style>
 
@@ -245,6 +470,19 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
     <h1 class="h4 mb-3">Editar ticket</h1>
 
     {equipo ? (
+      /* ============================================================
+         FORM PRINCIPAL
+         - method POST → /api/actualizarTicket
+         - enctype multipart/form-data porque subimos imágenes
+         - Se incluyen:
+           * datos del ticket
+           * datos cliente
+           * impresora
+           * presupuesto
+           * delivery
+           * notas
+           * imágenes (3 slots)
+         ============================================================ */
       <form
         method="POST"
         action={`/api/actualizarTicket?id=${encodeURIComponent(String(equipo.id))}`}
@@ -253,10 +491,16 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
         id="form-editar-equipo"
         style="max-width: 980px; margin: 0 auto;"
       >
+        {/* IDs ocultos para el backend */}
         <input type="hidden" name="ticketId" value={String(equipo.id)} />
         <input type="hidden" name="id"        value={String(equipo.id)} />
 
-        {/* 1) DATOS DEL TICKET */}
+        {/* ============================================================
+           1) DATOS DEL TICKET
+           - Estado
+           - Técnico asignado
+           - Fechas
+           ============================================================ */}
         <div class="section-card">
           <div class="section-title"><i class="bi bi-ticket-perforated"></i> Datos del ticket</div>
           <div class="grid-2">
@@ -264,16 +508,24 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
               <label class="form-label">N° Ticket</label>
               <input type="number" class="form-control" value={equipo.ticket} disabled />
             </div>
+
             <div>
               <label class="form-label">Estado</label>
               <select name="estado" class="form-select" required id="select-estado">
                 {estados.map((op) => (
-                  <option value={op} selected={estadoActual.toLowerCase() === op.toLowerCase()}>{op}</option>
+                  <option
+                    value={op}
+                    selected={estadoActual.toLowerCase() === op.toLowerCase()}
+                  >
+                    {op}
+                  </option>
                 ))}
               </select>
             </div>
 
-            {/* Técnico dinámico */}
+            {/* Técnico asignado:
+               - El option inicial muestra el técnico actual (si hay).
+               - El resto se llena vía fetch(/api/listarTecnicos) en el script de abajo. */}
             <div>
               <label class="form-label">Técnico</label>
               <select
@@ -284,7 +536,9 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
               >
                 <option value="">— Sin asignar —</option>
                 {currentTecId && currentTecLabel && (
-                  <option value={String(currentTecId)} selected>{currentTecLabel}</option>
+                  <option value={String(currentTecId)} selected>
+                    {currentTecLabel}
+                  </option>
                 )}
               </select>
               <small id="tecHelp" class="form-text text-muted"></small>
@@ -292,16 +546,34 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
 
             <div>
               <label class="form-label">Fecha formulario</label>
-              <input name="fechaFormulario" type="text" class="form-control" value={toMDY(equipo.marca_temporal)} />
+              {/* Fecha "de carga" se muestra editable como texto libre tipo M/D/YYYY */}
+              <input
+                name="fechaFormulario"
+                type="text"
+                class="form-control"
+                value={toMDY(equipo.marca_temporal)}
+              />
             </div>
+
             <div>
               <label class="form-label">Fecha listo</label>
-              <input type="date" class="form-control" value={toISODate(equipo.fecha_de_reparacion)} disabled />
+              {/* Fecha de reparación se ve pero no se edita acá */}
+              <input
+                type="date"
+                class="form-control"
+                value={toISODate(equipo.fecha_de_reparacion)}
+                disabled
+              />
             </div>
           </div>
         </div>
 
-        {/* 2) DATOS DEL CLIENTE */}
+        {/* ============================================================
+           2) DATOS DEL CLIENTE
+           - DNI/CUIT c/ formateo amigable
+           - WhatsApp
+           - Correo
+           ============================================================ */}
         <div class="section-card">
           <div class="section-title"><i class="bi bi-person-badge"></i> Datos del cliente</div>
           <div class="grid-2">
@@ -319,18 +591,35 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
                 placeholder="Ej: 12.345.678 o 20-12345678-3"
               />
             </div>
+
             <div>
               <label class="form-label">WhatsApp</label>
-              <input name="whatsapp" type="text" class="form-control" value={equipo.cliente?.whatsapp || ''} />
+              <input
+                name="whatsapp"
+                type="text"
+                class="form-control"
+                value={equipo.cliente?.whatsapp || ''}
+              />
             </div>
+
             <div class="col-12">
               <label class="form-label">Correo</label>
-              <input name="correo" type="email" class="form-control" value={equipo.cliente?.correo_electronico || ''} />
+              <input
+                name="correo"
+                type="email"
+                class="form-control"
+                value={equipo.cliente?.correo_electronico || ''}
+              />
             </div>
           </div>
         </div>
 
-        {/* 3) IMPRESORA */}
+        {/* ============================================================
+           3) IMPRESORA
+           - Selector de modelo/línea + campo "Otra"
+           - N° de serie
+           - Tamaño de boquilla
+           ============================================================ */}
         <div class="section-card">
           <div class="section-title"><i class="bi bi-printer"></i> Impresora</div>
           <div class="grid-2">
@@ -371,16 +660,33 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
 
             <div>
               <label class="form-label">N° de serie</label>
-              <input name="numeroSerie" type="text" class="form-control" value={equipo.impresoras?.numero_de_serie || ''} />
+              <input
+                name="numeroSerie"
+                type="text"
+                class="form-control"
+                value={equipo.impresoras?.numero_de_serie || ''}
+              />
             </div>
+
             <div class="col-12">
               <label class="form-label">Tamaño de boquilla</label>
-              <input name="boquilla" type="text" class="form-control" value={equipo.impresoras?.tamano_de_boquilla || ''} />
+              <input
+                name="boquilla"
+                type="text"
+                class="form-control"
+                value={equipo.impresoras?.tamano_de_boquilla || ''}
+              />
             </div>
           </div>
         </div>
 
-        {/* 4) PRESUPUESTO */}
+        {/* ============================================================
+           4) PRESUPUESTO
+           - Monto en ARS
+           - Link al presupuesto externo
+           - ¿Cubre garantía?
+           - Fecha de presupuesto (sólo lectura)
+           ============================================================ */}
         <div class="section-card">
           <div class="section-title"><i class="bi bi-receipt"></i> Presupuesto</div>
           <div class="grid-2">
@@ -394,10 +700,17 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
                 placeholder="$10.000,00"
               />
             </div>
+
             <div>
               <label class="form-label">Link presupuesto</label>
-              <input name="linkPresupuesto" type="url" class="form-control" value={equipo.presupuestos?.link_presupuesto || ''} />
+              <input
+                name="linkPresupuesto"
+                type="url"
+                class="form-control"
+                value={equipo.presupuestos?.link_presupuesto || ''}
+              />
             </div>
+
             <div>
               <label class="form-label">¿Cubre garantía?</label>
               <select name="cubreGarantia" class="form-select">
@@ -405,14 +718,25 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
                 <option value="false" selected={valorCubreGarantia === 'false'}>No</option>
               </select>
             </div>
+
             <div>
               <label class="form-label">Fecha presupuesto</label>
-              <input type="date" class="form-control" value={toISODate(equipo.presupuestos?.fecha_presupuesto)} disabled />
+              <input
+                type="date"
+                class="form-control"
+                value={toISODate(equipo.presupuestos?.fecha_presupuesto)}
+                disabled
+              />
             </div>
           </div>
         </div>
 
-        {/* 5) DELIVERY */}
+        {/* ============================================================
+           5) DELIVERY
+           - Indicator "¿Cobrado?"
+           - Campos extra (modo entrega, costo, info) sólo visibles a admin
+           - Fecha de entrega (solo lectura)
+           ============================================================ */}
         <div class="section-card">
           <div class="section-title"><i class="bi bi-truck"></i> Delivery</div>
           <div class="grid-2">
@@ -423,12 +747,19 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
                 <option value="false" selected={valorCobrado === 'false'}>No</option>
               </select>
             </div>
+
             {isAdmin && (
               <>
                 <div>
                   <label class="form-label">Modo de entrega</label>
-                  <input name="medioEntrega" type="text" class="form-control" value={equipo.delivery?.medio_de_entrega || ''} />
+                  <input
+                    name="medioEntrega"
+                    type="text"
+                    class="form-control"
+                    value={equipo.delivery?.medio_de_entrega || ''}
+                  />
                 </div>
+
                 <div>
                   <label class="form-label">Costo delivery</label>
                   <input
@@ -439,38 +770,74 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
                     placeholder="$3.500"
                   />
                 </div>
+
                 <div>
                   <label class="form-label">Info delivery</label>
-                  <input name="infoDelivery" type="text" class="form-control" value={equipo.delivery?.informacion_adicional_delivery || ''} />
+                  <input
+                    name="infoDelivery"
+                    type="text"
+                    class="form-control"
+                    value={equipo.delivery?.informacion_adicional_delivery || ''}
+                  />
                 </div>
               </>
             )}
+
             <div>
               <label class="form-label">Fecha de entrega</label>
-              <input type="date" class="form-control" value={toISODate(equipo.delivery?.fecha_de_entrega)} disabled />
+              <input
+                type="date"
+                class="form-control"
+                value={toISODate(equipo.delivery?.fecha_de_entrega)}
+                disabled
+              />
             </div>
           </div>
         </div>
 
-        {/* 6) NOTAS & COMENTARIOS */}
+        {/* ============================================================
+           6) NOTAS & COMENTARIOS
+           - Nota del técnico interna
+           - Comentarios / detalle del cliente
+           ============================================================ */}
         <div class="section-card">
           <div class="section-title"><i class="bi bi-journal-text"></i> Notas & Comentarios</div>
           <div class="grid-2">
             <div class="col-12">
               <label class="form-label">Nota Técnico</label>
-              <textarea name="notaTecnico" class="form-control" rows="3">{equipo.notas_del_tecnico || ''}</textarea>
+              <textarea
+                name="notaTecnico"
+                class="form-control"
+                rows="3"
+              >{equipo.notas_del_tecnico || ''}</textarea>
             </div>
+
             <div class="col-12">
               <label class="form-label">Comentarios del cliente (detalle del problema)</label>
-              <textarea name="detalleCliente" class="form-control" rows="3">{equipo.notas_del_cliente || equipo.cliente?.comentarios || ''}</textarea>
+              <textarea
+                name="detalleCliente"
+                class="form-control"
+                rows="3"
+              >{equipo.notas_del_cliente || equipo.cliente?.comentarios || ''}</textarea>
             </div>
           </div>
         </div>
 
-        {/* 7) IMÁGENES */}
+        {/* ============================================================
+           7) IMÁGENES
+           - 3 slots:
+             • principal (llegó)
+             • reparación (en proceso)
+             • final (lista)
+           - Cada bloque:
+             • preview actual
+             • input <file> oculto con label estilado
+             • botón "Eliminar imagen" que marca hidden input "borrar..."
+           ============================================================ */}
         <div class="section-card">
           <div class="section-title center"><i class="bi bi-images"></i> Imágenes</div>
 
+          {/* Imagen principal / llegada */}
           <div class="mb-4">
             <h6 class="mb-2 text-center">Imagen principal (Cuando llegó la impresora)</h6>
             <div class="img-row">
@@ -486,14 +853,34 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
               <div class="btn-col">
                 <label class="btn btn-primary fw-semibold">
                   <i class="bi bi-upload me-2"></i> Cambiar imagen
-                  <input type="file" name="imagenArchivo" accept="image/*" id="input-imagen-archivo" style="display:none;" />
+                  <input
+                    type="file"
+                    name="imagenArchivo"
+                    accept="image/*"
+                    id="input-imagen-archivo"
+                    style="display:none;"
+                  />
                 </label>
-                <input type="hidden" name="borrarImagen" id="input-borrar-imagen" value="false" />
-                <button type="button" class="btn btn-danger px-4" id="btn-eliminar-equipo">Eliminar imagen</button>
+
+                {/* Señalamos borrado con hidden input */}
+                <input
+                  type="hidden"
+                  name="borrarImagen"
+                  id="input-borrar-imagen"
+                  value="false"
+                />
+                <button
+                  type="button"
+                  class="btn btn-danger px-4"
+                  id="btn-eliminar-equipo"
+                >
+                  Eliminar imagen
+                </button>
               </div>
             </div>
           </div>
 
+          {/* Imagen reparación */}
           <div class="mb-4">
             <h6 class="mb-2 text-center">Imagen reparación (en proceso)</h6>
             <div class="img-row">
@@ -509,14 +896,33 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
               <div class="btn-col">
                 <label class="btn btn-primary fw-semibold">
                   <i class="bi bi-upload me-2"></i> Cambiar imagen reparación
-                  <input type="file" name="imagenTicketArchivo" accept="image/*" id="input-imagen-ticket" style="display:none;" />
+                  <input
+                    type="file"
+                    name="imagenTicketArchivo"
+                    accept="image/*"
+                    id="input-imagen-ticket"
+                    style="display:none;"
+                  />
                 </label>
-                <input type="hidden" name="borrarImagenTicket" id="input-borrar-imagen-ticket" value="false" />
-                <button type="button" class="btn btn-danger px-4" id="btn-eliminar-imagen-ticket">Eliminar imagen reparación</button>
+
+                <input
+                  type="hidden"
+                  name="borrarImagenTicket"
+                  id="input-borrar-imagen-ticket"
+                  value="false"
+                />
+                <button
+                  type="button"
+                  class="btn btn-danger px-4"
+                  id="btn-eliminar-imagen-ticket"
+                >
+                  Eliminar imagen reparación
+                </button>
               </div>
             </div>
           </div>
 
+          {/* Imagen final */}
           <div>
             <h6 class="mb-2 text-center">Imagen final (ya lista para entregar)</h6>
             <div class="img-row">
@@ -532,30 +938,64 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
               <div class="btn-col">
                 <label class="btn btn-primary fw-semibold">
                   <i class="bi bi-upload me-2"></i> Cambiar imagen final
-                  <input type="file" name="imagenExtraArchivo" accept="image/*" id="input-imagen-extra" style="display:none;" />
+                  <input
+                    type="file"
+                    name="imagenExtraArchivo"
+                    accept="image/*"
+                    id="input-imagen-extra"
+                    style="display:none;"
+                  />
                 </label>
-                <input type="hidden" name="borrarImagenExtra" id="input-borrar-imagen-extra" value="false" />
-                <button type="button" class="btn btn-danger px-4" id="btn-eliminar-imagen-extra">Eliminar imagen final</button>
+
+                <input
+                  type="hidden"
+                  name="borrarImagenExtra"
+                  id="input-borrar-imagen-extra"
+                  value="false"
+                />
+                <button
+                  type="button"
+                  class="btn btn-danger px-4"
+                  id="btn-eliminar-imagen-extra"
+                >
+                  Eliminar imagen final
+                </button>
               </div>
             </div>
           </div>
         </div>
 
+        {/* Botón principal Guardar cambios */}
         <div class="actions">
-          <button type="submit" class="btn btn-success px-4" id="btn-guardar-ticket">
+          <button
+            type="submit"
+            class="btn btn-success px-4"
+            id="btn-guardar-ticket"
+          >
             <i class="bi bi-check2-square me-1"></i> Guardar cambios
           </button>
         </div>
       </form>
     ) : (
+      // Si no encontramos el ticket en la DB
       <p class="text-danger">No se encontró el equipo con ID: {id}</p>
     )}
   </div>
 
+  {/* ================================================================
+     Scripts frontend auxiliares
+     - image compression (3rd party)
+     - manejo de previews y eliminar imágenes
+     ================================================================ */}
   <script src="https://unpkg.com/browser-image-compression@latest/dist/browser-image-compression.js" defer></script>
   <script src="/scripts/form-mas-imagenes.js?v=1" defer></script>
 
-  {/* Cargar técnicos dinámicamente desde /api/listarTecnicos */}
+  {/* ================================================================
+     1) Cargar técnicos dinámicamente
+     - Hace fetch /api/listarTecnicos
+     - Inserta <option> extra en el combo de técnico
+     - Marca como selected el técnico actual
+     ================================================================ */}
   <script type="module">
     // @ts-nocheck
     (async function(){
@@ -569,12 +1009,13 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
         const data = await res.json();
         if (!res.ok || !data?.items) throw new Error(data?.error || 'No se pudo cargar técnicos');
 
-        // Evitar duplicar el option semilla (el actual)
+        // Evitar duplicar el option inicial (el técnico ya seleccionado)
         const ya = new Set(Array.from(sel.options).map(o => Number(o.value) || 0));
 
         (data.items || []).forEach((it) => {
           const idNum = Number(it.id);
           if (ya.has(idNum)) return;
+
           const opt = document.createElement('option');
           opt.value = String(it.id);
           opt.textContent = it.label;
@@ -590,7 +1031,11 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
     })();
   </script>
 
-  {/* Lógica de mostrar/ocultar el campo "Modelo específico" según el select */}
+  {/* ================================================================
+     2) Mostrar/ocultar campo "Modelo específico"
+     - Si el usuario elige "OTRA__ESPECIFICAR" → mostramos input libre.
+     - Si elige una opción conocida → ocultamos campo libre, y copiamos valor.
+     ================================================================ */}
   <script type="module">
     // @ts-nocheck
     (function(){
@@ -607,12 +1052,15 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
         function syncOtraVisibility(){
           const v = _selModelo.value;
           if (v === 'OTRA__ESPECIFICAR') {
+            // Mostrar el input libre
             _inputOtra.classList.remove('hidden');
+            // Si está vacío pero tenemos un valor inicial sugerido, cargarlo
             if (!_inputOtra.value.trim()) {
               const preset = _selModelo.getAttribute('data-otra-value') || '';
               if (preset) _inputOtra.value = preset;
             }
           } else {
+            // Ocultar input libre y forzar el valor seleccionado
             _inputOtra.classList.add('hidden');
             _inputOtra.value = v || '';
           }
@@ -624,7 +1072,11 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
     })();
   </script>
 
-  {/* Formateo ARS al escribir */}
+  {/* ================================================================
+     3) Formateo ARS en inputs de moneda
+     - Al escribir: solo deja dígitos, coma, punto, $, -
+     - Al salir del input (blur): re-formatea como $12.345,67
+     ================================================================ */}
   <script type="module">
     // @ts-nocheck
     (function(){
@@ -656,6 +1108,7 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
       function onInputClean(e){
         const el = e.target;
         if (!(el instanceof HTMLInputElement)) return;
+        // Limpieza mínima mientras tipeás
         el.value = el.value.replace(/[^\d.,$-]/g,'');
       }
       document.querySelectorAll('.currency-ars').forEach((node)=>{
@@ -667,19 +1120,29 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
     })();
   </script>
 
-  {/* Formateo DNI/CUIT en vivo */}
+  {/* ================================================================
+     4) Formateo DNI/CUIT en vivo
+     - Mientras escribís, reinyecta puntos/guiones.
+     - Mantiene el cursor al final cuando cambia el valor.
+     ================================================================ */}
   <script type="module">
     // @ts-nocheck
     (function(){
       function formatDniCuitLive(raw){
         const digits = String(raw||'').replace(/\D+/g, '');
         if (!digits) return '';
+
+        // CUIT/CUIL (11 dígitos)
         if (digits.length === 11) {
           return digits.slice(0,2)+'-'+digits.slice(2,10)+'-'+digits.slice(10);
         }
+
+        // DNI (7 u 8 dígitos)
         if (digits.length === 7 || digits.length === 8) {
           return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
         }
+
+        // Fallback: deja sólo dígitos, puntos y guiones
         return String(raw||'').replace(/[^\d\.\-]/g,'');
       }
 
@@ -693,9 +1156,13 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
           if (before !== after) {
             const atEnd = el.selectionStart === before.length;
             el.value = after;
-            try { if (atEnd) el.setSelectionRange(after.length, after.length); } catch {}
+            // Intento mantener el cursor al final si estaba al final
+            try {
+              if (atEnd) el.setSelectionRange(after.length, after.length);
+            } catch {}
           }
         });
+
         input.addEventListener('blur', (e) => {
           const el = e.target;
           if (!(el instanceof HTMLInputElement)) return;
@@ -705,7 +1172,11 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
     })();
   </script>
 
-  {/* Normalizador de “Tamaño de boquilla” a `X mm` */}
+  {/* ================================================================
+     5) Normalizador "Tamaño de boquilla"
+     - Limpia el input y lo deja estilo "0.4 mm"
+     - Al hacer blur, fuerza el sufijo "mm".
+     ================================================================ */}
   <script type="module">
     // @ts-nocheck
     (function () {
@@ -713,13 +1184,19 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
         if (raw == null) return '';
         let s = String(raw).toLowerCase().trim();
         s = s.replace(',', '.');
+
+        // buscar primer número tipo "0.4", ".6", "1"
         const m = s.match(/(\d+\.?\d*|\.\d+)/);
         if (!m) return '';
+
         let num = m[0];
-        if (num.startsWith('.')) num = '0' + num;
+        if (num.startsWith('.')) num = '0' + num; // ".4" → "0.4"
         if (num.endsWith('.'))  num = num.slice(0,-1);
+
         const n = Number(num);
         if (!isFinite(n)) return '';
+
+        // 2 decimales máximo, y sacamos ceros innecesarios
         let out = n.toFixed(2);
         out = out.replace(/\.?0+$/, '');
         return out;
@@ -733,10 +1210,12 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
       const input = document.querySelector('input[name="boquilla"]');
       if (!(input instanceof HTMLInputElement)) return;
 
+      // Normalizar valor inicial que ya vino desde el servidor
       if (input.value && input.value.trim()) {
         input.value = normalizeToMm(input.value);
       }
 
+      // Mientras escribe: limpiar caracteres raros
       input.addEventListener('input', (e) => {
         const el = e.target;
         if (!(el instanceof HTMLInputElement)) return;
@@ -745,6 +1224,7 @@ const valorSelect = isOtra ? 'OTRA__ESPECIFICAR' : (modeloActualRaw || '');
         if (before !== cleaned) el.value = cleaned;
       });
 
+      // Cuando sale del campo: forzar "X mm"
       input.addEventListener('blur', (e) => {
         const el = e.target;
         if (!(el instanceof HTMLInputElement)) return;

@@ -1,28 +1,71 @@
 ---
 /**
  * Página de Presupuesto de un ticket.
- * Técnicos: sin precios (ni columnas ni totales).
- * Admin: ve todo como siempre.
+ *
+ * 👀 ¿Qué muestra?
+ * - Datos principales del presupuesto asociado a un ticket.
+ * - Listado de repuestos ya seleccionados para ese presupuesto.
+ * - Botón para administrar esos repuestos.
+ * - Botón para descargar el PDF del presupuesto.
+ *
+ * 🔐 Permisos / visibilidad:
+ * - Técnicos:
+ *   - Ven el presupuesto en modo "solo lectura".
+ *   - NO ven precios unitarios, subtotales ni total estimado.
+ *   - NO pueden editar campos del presupuesto desde acá.
+ *
+ * - Admin:
+ *   - Ve precios unitarios, subtotales por ítem y total estimado.
+ *   - Puede editar presupuesto usando <PresupuestoForm />.
+ *   - Puede precargar automáticamente el campo "Monto" con la suma
+ *     de los repuestos seleccionados (auto-fill inteligente).
+ *
+ * 💾 Datos cargados en el servidor (en el bloque frontmatter):
+ * - ticket: id, número de ticket y si pidió presupuesto.
+ * - presupuesto más reciente (último registro de la tabla presupuestos).
+ * - Se construye `equipo`, que viaja al form.
+ *
+ * 🧠 Terminología:
+ * - "Verificar presupuesto": ya existe un presupuesto para este ticket.
+ * - "Añadir presupuesto": todavía no hay presupuesto guardado.
  */
+
 import BasePrivateLayout from '../../layouts/BasePrivateLayout.astro';
 import PresupuestoForm from '../../components/PresupuestoForm.astro';
 import { supabase } from '../../lib/supabase';
 import { formatearFecha } from '../../lib/utils';
 
+// Perfil/rol del usuario autenticado (inyectado por middleware en Astro.locals)
 type Perfil = { rol?: string; admin?: boolean; activo?: boolean };
 const perfil = (Astro.locals as any).perfil as Perfil | undefined;
+
+// Reglas de visibilidad:
+// - Admin -> showPrices = true
+// - Técnico -> showPrices = false
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
 const isTecnico = perfil?.rol === 'tecnico';
-const showPrices = isAdmin; // <<< ÚNICA FUENTE DE VERDAD
+const showPrices = isAdmin; // <<< ÚNICA FUENTE DE VERDAD: si no sos admin, no hay precios
 
+// ID del ticket tomado de la ruta dinámica /presupuesto/:id
 const { id } = Astro.params as { id: string };
 
+/** ==========================
+ * 1) Cargamos datos del ticket
+ *    - id interno
+ *    - nro público "ticket"
+ *    - solicitar_presupuesto: "Si" | "No" | null
+ * =========================== */
 const { data: ticket } = await supabase
   .from('tickets_mian')
   .select('id, ticket, solicitar_presupuesto')
   .eq('id', id)
   .single();
 
+/** ==========================
+ * 2) Traemos el presupuesto más reciente del ticket
+ *    - Obtenemos todos los presupuestos del ticket ordenados desc por id
+ *    - Nos quedamos con el primero (último generado)
+ * =========================== */
 const { data: presuRows } = await supabase
   .from('presupuestos')
   .select('*')
@@ -31,8 +74,16 @@ const { data: presuRows } = await supabase
   .limit(1);
 
 const presupuesto = Array.isArray(presuRows) ? (presuRows[0] ?? null) : null;
+
+// Si hay presupuesto previo -> "Verificar presupuesto", sino "Añadir presupuesto"
 const isVerificar = Boolean(presupuesto?.id);
 
+/**
+ * `equipo`:
+ * - Objeto que se le pasa a <PresupuestoForm />
+ * - Combina datos del ticket (ticketId, ticketNumero, solicitar_presupuesto)
+ *   con los campos del presupuesto más reciente (monto, link_presupuesto, etc.)
+ */
 const equipo = {
   ticketId: ticket?.id,
   ticketNumero: ticket?.ticket,
@@ -40,24 +91,44 @@ const equipo = {
   ...presupuesto
 };
 
+/** Fecha mostrada en el campo "Fecha presupuesto" */
 const fechaPresupuesto = presupuesto?.fecha_presupuesto || null;
 const fechaPresupuestoVista = fechaPresupuesto
   ? formatearFecha(fechaPresupuesto)
-  : formatearFecha(new Date().toISOString());
+  : formatearFecha(new Date().toISOString()); // fallback: hoy
 
+/** ============== Helpers de moneda para mostrar ARS ============== */
+/**
+ * parseToNumberLike:
+ * - Limpia un string tipo "$12.345,50" → "12345.50"
+ * - Convierte coma o punto como separador decimal según el contexto.
+ * - Es el mismo criterio que usamos en edición de presupuesto.
+ */
 function parseToNumberLike(s?: string | null): string {
   if (!s) return '';
   let t = String(s).trim().replace(/[^\d.,-]/g,'');
+
+  // Buscar último separador decimal real entre . y ,
   const lastDot=t.lastIndexOf('.'), lastCom=t.lastIndexOf(',');
   if(lastDot!==-1 && lastCom!==-1){
-    const dec = lastDot>lastCom?'.':','; const mil = dec==='.'?',':'.';
-    t = t.split(mil).join('');
-    if(dec===',') t = t.replace(',', '.');
+    // Si hay ambos, el que aparece último en el string se considera decimal,
+    // el otro se considera separador de miles y se elimina.
+    const dec = lastDot>lastCom?'.':',';    // cuál es decimal
+    const mil = dec==='.'?',':'.';          // cuál es miles
+    t = t.split(mil).join('');              // saco "miles"
+    if(dec===',') t = t.replace(',', '.');  // unifico decimal a '.'
   } else if(lastCom!==-1 && lastDot===-1){
+    // Sólo coma -> decimal
     t = t.replace(',', '.');
   }
   return t;
 }
+
+/**
+ * formatARS:
+ * - Devuelve "$12.345,67" o "$12.345" según la cantidad de decimales detectados.
+ * - Se usa más abajo para el campo Monto en vista técnico.
+ */
 function formatARS(v?: string | number | null): string {
   if (v == null || v === '') return '';
   const norm = parseToNumberLike(String(v));
@@ -65,48 +136,89 @@ function formatARS(v?: string | number | null): string {
   if (!isFinite(n)) return String(v);
   const parts = norm.split('.');
   const decimals = parts[1]?.length ? Math.min(2, parts[1].length) : 0;
-  return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return '$' + n.toLocaleString('es-AR', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  });
 }
 
+/**
+ * Path al subpantalla de selección de repuestos
+ * (/presupuesto/:id/repuestosItems):
+ * - Ahí el admin/técnico administra (agrega/quita) los repuestos para este ticket.
+ * - Ese subpantalla pega a /api/listarRepuestos y /api/presupuestoItems.
+ */
 const repsPath = `/presupuesto/${id}/repuestosItems`;
 ---
 
 <BasePrivateLayout>
+  {/* ============================================================
+     CONTENEDOR RAÍZ:
+     - data-ticket-id      → usado por el <script> para fetch de ítems.
+     - data-show-prices    → true/false, controla visibilidad de totales.
+     ============================================================ */}
   <div
     id="presupuesto-root"
     class="container mt-5"
     data-ticket-id={id}
     data-show-prices={String(showPrices)}
   >
-    <!-- Encabezado -->
+    {/* ============================================================
+       HEADER PRINCIPAL DE LA PÁGINA
+       - Título dinámico ("Verificar" vs "Añadir")
+       - Botón Volver al detalle del equipo
+       ============================================================ */}
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h2 class="mb-0">
         <i class="bi bi-receipt me-2"></i>
         {isVerificar ? 'Verificar presupuesto' : 'Añadir presupuesto'} del ticket #{equipo.ticketNumero ?? id}
       </h2>
+
       <a class="btn btn-light btn-sm" href={`/detalle/${id}`}>
         <i class="bi bi-arrow-left"></i> Volver
       </a>
     </div>
 
+    {/* ============================================================
+       Chequeo: si encontramos el ticket (equipo.ticketId),
+       renderizamos todo. Caso contrario mostramos alerta de error.
+       ============================================================ */}
     {equipo?.ticketId ? (
       <>
-        <!-- Fecha -->
+        {/* ========================================================
+           BLOQUE: Fecha de presupuesto
+           - Sólo lectura, siempre visible.
+           - Usa formatearFecha() (dd/mm/aaaa).
+           ======================================================== */}
         <div class="card mb-3">
           <div class="card-body">
             <div class="row g-3 align-items-end">
               <div class="col-md-6">
                 <label class="form-label">Fecha presupuesto</label>
-                <input type="text" class="form-control" value={fechaPresupuestoVista} readonly />
+                <input
+                  type="text"
+                  class="form-control"
+                  value={fechaPresupuestoVista}
+                  readonly
+                />
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Form (admin) o vista (técnico) -->
+        {/* ========================================================
+           BLOQUE: Formulario o vista de sólo lectura
+           - Admin → <PresupuestoForm equipo={equipo} />
+                    (puede editar monto, link, notas, etc.)
+           - Técnico → versión read-only con los campos clave
+                       (sin editar y con aviso arriba).
+           - Otro rol → "No tenés permisos".
+           ======================================================== */}
         {isAdmin ? (
+          // 🧑‍💼 ADMIN: formulario editable completo
           <PresupuestoForm equipo={equipo} />
         ) : isTecnico ? (
+          // 🔧 TÉCNICO: sólo lectura, sin poder editar desde acá
           <>
             <div class="alert alert-info d-flex align-items-center" role="alert">
               <i class="bi bi-info-circle me-2"></i>
@@ -118,22 +230,46 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
                 <div class="row g-3">
                   <div class="col-md-6">
                     <label class="form-label fw-semibold">Monto</label>
-                    <input type="text" class="form-control" value={formatARS(equipo.monto)} readonly />
+                    <input
+                      type="text"
+                      class="form-control"
+                      value={formatARS(equipo.monto)}
+                      readonly
+                    />
                   </div>
+
                   <div class="col-md-6">
                     <label class="form-label fw-semibold">¿Garantía activa?</label>
-                    <input type="text" class="form-control" value={(equipo.garantia_activa ?? '') || '—'} readonly />
+                    <input
+                      type="text"
+                      class="form-control"
+                      value={(equipo.garantia_activa ?? '') || '—'}
+                      readonly
+                    />
                   </div>
+
                   <div class="col-md-6">
                     <label class="form-label fw-semibold">Link presupuesto</label>
-                    <input type="text" class="form-control" value={(equipo.link_presupuesto ?? '') || '—'} readonly />
+                    <input
+                      type="text"
+                      class="form-control"
+                      value={(equipo.link_presupuesto ?? '') || '—'}
+                      readonly
+                    />
                   </div>
+
                   {isVerificar && (
                     <div class="col-md-6">
                       <label class="form-label fw-semibold">Aprobación del presupuesto</label>
-                      <input type="text" class="form-control" value={(equipo.presupuesto_aprobado ?? '') || '—'} readonly />
+                      <input
+                        type="text"
+                        class="form-control"
+                        value={(equipo.presupuesto_aprobado ?? '') || '—'}
+                        readonly
+                      />
                     </div>
                   )}
+
                   <div class="col-md-6">
                     <label class="form-label fw-semibold">¿Quiere saber presupuesto?</label>
                     <input
@@ -150,32 +286,52 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
 
                   <div class="col-12">
                     <label class="form-label fw-semibold">Notas de administración</label>
-                    <textarea class="form-control" rows={4} readonly>{(equipo.notas_administracion ?? '') || '—'}</textarea>
+                    <textarea
+                      class="form-control"
+                      rows={4}
+                      readonly
+                    >{(equipo.notas_administracion ?? '') || '—'}</textarea>
                   </div>
                 </div>
               </div>
             </div>
           </>
         ) : (
-          <div class="alert alert_warning">No tenés permisos para ver esta sección.</div>
+          // 🚫 Rol sin permisos suficientes
+          <div class="alert alert_warning">
+            No tenés permisos para ver esta sección.
+          </div>
         )}
 
-        <!-- Repuestos seleccionados -->
+        {/* ========================================================
+           BLOQUE: Lista de repuestos seleccionados para ESTE ticket
+           - Tabla dinámica (JS la rellena).
+           - Muestra ID, componente y cantidad siempre.
+           - Muestra precio unitario / subtotal / Total solo si showPrices=true.
+           - Botón "Administrar repuestos" → va a /presupuesto/:id/repuestosItems
+             donde se puede agregar/quitar ítems.
+           - Botón "Descargar Presupuesto" → /api/presupuestoPdf?ticket_id=...
+             genera un PDF con o sin precios según isAdmin (lo controla el backend).
+           ======================================================== */}
         <div class="card mt-4">
           <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div class="fw-semibold">Repuestos seleccionados</div>
+
             <div class="d-flex align-items-center gap-3 ms-auto">
+              {/* Resumen de cantidad total de ítems y, si sos admin, total en $ARS */}
               <div class="small text-muted">
                 <span id="repCount">0 ítems</span>
                 {showPrices && (
                   <>
                     <span class="mx-2">•</span>
-                    <span id="totalWrap">Total: <span id="repTotal">$0</span></span>
+                    <span id="totalWrap">
+                      Total: <span id="repTotal">$0</span>
+                    </span>
                   </>
                 )}
               </div>
 
-              <!-- ⬇️ Nuevo botón: Descargar Presupuesto -->
+              {/* Descargar presupuesto (genera PDF en server) */}
               <a
                 class="btn btn-success btn-sm"
                 href={`/api/presupuestoPdf?ticket_id=${id}`}
@@ -185,7 +341,12 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
                 <i class="bi bi-file-earmark-pdf me-1"></i> Descargar Presupuesto
               </a>
 
-              <a id="btnRepuestos" class="btn btn-primary btn-sm" href={repsPath}>
+              {/* Ir a gestionar repuestos (pantalla con buscador, stock, etc.) */}
+              <a
+                id="btnRepuestos"
+                class="btn btn-primary btn-sm"
+                href={repsPath}
+              >
                 <i class="bi bi-box-seam me-1"></i> Administrar repuestos
               </a>
             </div>
@@ -199,14 +360,40 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
                     <th style="width:90px;" class="text-start">ID</th>
                     <th class="text-start">Componente</th>
                     <th style="width:120px;" class="text-end">Cantidad</th>
-                    {showPrices && <th style="width:160px;" class="text-end">Precio unitario</th>}
-                    {showPrices && <th style="width:160px;" class="text-end">Subtotal</th>}
-                    <th style="width:70px;" class="text-center"></th>
+
+                    {/* Admin ve columnas de precio unitario y subtotal */}
+                    {showPrices && (
+                      <th
+                        style="width:160px;"
+                        class="text-end"
+                      >
+                        Precio unitario
+                      </th>
+                    )}
+                    {showPrices && (
+                      <th
+                        style="width:160px;"
+                        class="text-end"
+                      >
+                        Subtotal
+                      </th>
+                    )}
+
+                    {/* Última col: botón Eliminar ítem */}
+                    <th
+                      style="width:70px;"
+                      class="text-center"
+                    ></th>
                   </tr>
                 </thead>
+
                 <tbody id="tbody-sel">
+                  {/* Mientras se carga por fetch(), mostramos un placeholder */}
                   <tr>
-                    <td colspan={showPrices ? 6 : 4} class="text-center py-3 text-muted">
+                    <td
+                      colspan={showPrices ? 6 : 4}
+                      class="text-center py-3 text-muted"
+                    >
                       Cargando…
                     </td>
                   </tr>
@@ -217,12 +404,29 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
         </div>
       </>
     ) : (
-      <div class="alert alert-danger">No se encontró el ticket con ID: {id}</div>
+      // Si no encontramos el ticketId armamos alerta roja
+      <div class="alert alert-danger">
+        No se encontró el ticket con ID: {id}
+      </div>
     )}
   </div>
 
-  <!-- Script: respeta data-show-prices (admin=true / técnico=false) -->
+  {/* ============================================================
+     SCRIPT CLIENT-SIDE
+     - Se ejecuta en el navegador.
+     - Usa data-ticket-id y data-show-prices para cargar/mostrar info.
+     - Hace GET /api/presupuestoItems?ticket_id=... para traer
+       los repuestos guardados actualmente en este presupuesto.
+     - Renderiza filas en la tabla + total estimado (solo admin).
+     - Permite eliminar un repuesto del presupuesto SIN recargar,
+       haciendo POST con la lista resultante.
+     - Para admin:
+         También intenta "autofill" del campo Monto del <PresupuestoForm>
+         en base a la suma de los repuestos.
+       (Si el admin ya tocó manualmente el monto, no lo pisa.)
+     ============================================================ */}
   <script type="module">
+    // Referencias clave del DOM
     const root = document.getElementById('presupuesto-root');
     const ticketId = Number(root?.dataset.ticketId || 0);
     const showPrices = (root?.dataset.showPrices || 'false') === 'true';
@@ -232,51 +436,96 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
     const repTotal = document.getElementById('repTotal');
     const totalWrap = document.getElementById('totalWrap');
 
-    // Formato ARS sin decimales (enteros con punto de miles)
+    /**
+     * fmtARS0:
+     * - Formatea un número entero/monto en ARS estilo "$12.345".
+     * - Se usa para precio unitario, subtotal y total.
+     */
     const fmtARS0 = (n) =>
-      new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 })
-        .format(Number(n) || 0);
+      new Intl.NumberFormat('es-AR', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      }).format(Number(n) || 0);
 
-    // Solo admins: AUTOFILL DEL MONTO con el total de repuestos
+    /**
+     * setMontoFromRepuestos(totalEnteroARS):
+     * - Solo para admin (showPrices = true).
+     * - Intenta autocompletar el campo "Monto" del <PresupuestoForm />
+     *   con la suma de los repuestos (totalEnteroARS).
+     * - Respeta una edición manual previa:
+     *   si el admin ya cambió el monto a mano, no lo vuelve a pisar.
+     *
+     * Cómo lo detecta:
+     * - Lee el input[name="monto"] dentro de #presupuesto-form
+     * - Compara el valor actual con un dataset.autofillTotal recordado.
+     */
     function setMontoFromRepuestos(totalEnteroARS) {
-      if (!showPrices) return; // técnicos no ven ni tocamos monto automáticamente
+      if (!showPrices) return; // Técnicos no tienen ni precios ni form editable
+
       const inp = document.querySelector('#presupuesto-form input[name="monto"]');
       if (!inp) return;
+
       const lastAuto = Number(inp.dataset.autofillTotal || '0');
+
+      // Sacamos los dígitos actuales del input para compararlos
       const digits = String(inp.value || '').replace(/\D/g, '');
       const currNum = Number(digits || '0');
+
+      // userEdited = el admin ya tocó el valor y no queremos pisarlo
       const userEdited = (currNum !== 0 && currNum !== lastAuto);
       if (userEdited) return;
+
+      // Autorellenar el campo con el total calculado
       inp.value = fmtARS0(totalEnteroARS);
       inp.dataset.autofillTotal = String(totalEnteroARS);
     }
 
-    // Normalizador usado si falta precio numérico
+    /**
+     * parseEnteroARS(s):
+     * - Convierte un string de precio "humano" a un entero numérico aproximado.
+     * - Ej: "$12.345" -> 12345
+     * - o "123,45" -> 123000 (si parece ser miles/decimales raros).
+     * - Se usa como fallback si no hay precio_unit_num ya guardado.
+     */
     const parseEnteroARS = (s) => {
       if (!s) return 0;
       const raw = String(s).trim();
+
       const hasDot = raw.includes('.');
       const hasCom = raw.includes(',');
+
+      // Caso con '.' y ',' mezclados → detectar cuál es decimal
       if (hasDot && hasCom) {
         const lastDot = raw.lastIndexOf('.');
         const lastCom = raw.lastIndexOf(',');
         const dec = lastDot > lastCom ? '.' : ',';
         const mil = dec === '.' ? ',' : '.';
+
         let t = raw.split(mil).join('');
         if (dec === ',') t = t.replace(',', '.');
+
         const n = Number(t.replace(/[^\d.-]/g, ''));
-        return Number.isFinite(n) ? Math.round(n < 1000 ? n * 1000 : n) : 0;
+        if (!Number.isFinite(n)) return 0;
+        // Si parece un valor tipo "123,45" => interpretamos como 123.450
+        return Math.round(n < 1000 ? n * 1000 : n);
       }
+
+      // Sólo coma -> podría ser "123,45"
       if (hasCom && !hasDot) {
         const only = raw.replace(/[^\d,]/g, '');
         if (/^\d{1,3},\d{1,2}$/.test(only)) {
           const n = Number(only.replace(',', '.'));
           return Number.isFinite(n) ? Math.round(n * 1000) : 0;
         }
+        // Si no matchea decimales cortos, sacamos todo menos dígitos
         const d = raw.replace(/[^\d]/g, '');
         const n = Number(d);
         return Number.isFinite(n) ? n : 0;
       }
+
+      // Sólo punto -> puede ser "123.45" (decimal) o "12.345" (miles)
       if (hasDot && !hasCom) {
         const only = raw.replace(/[^\d.]/g, '');
         if (/^\d{1,3}\.\d{1,2}$/.test(only)) {
@@ -287,13 +536,25 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
         const n = Number(d);
         return Number.isFinite(n) ? n : 0;
       }
+
+      // Sin separadores raros -> le sacamos todo menos dígitos
       const d = raw.replace(/[^\d]/g, '');
       const n = Number(d);
       return Number.isFinite(n) ? n : 0;
     };
 
+    // cacheRows guarda la última versión de los ítems traídos del backend.
+    // Lo usamos para poder "eliminar uno" y luego re-postear el resto
+    // sin hacer otra consulta.
     let cacheRows = [];
 
+    /**
+     * cargarSeleccion():
+     * - GET /api/presupuestoItems?ticket_id=...
+     * - Pinta la tabla de repuestos seleccionados actualmente.
+     * - Calcula el total estimado (solo admin).
+     * - También engancha el botón "Eliminar" de cada fila.
+     */
     async function cargarSeleccion() {
       if (!ticketId) return;
       try {
@@ -302,27 +563,42 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
         const rows = Array.isArray(out?.rows) ? out.rows : [];
         cacheRows = rows;
 
+        // Caso sin repuestos guardados
         if (rows.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="${showPrices ? 6 : 4}" class="text-center py-3 text-muted">Sin repuestos seleccionados. Usá “Administrar repuestos”.</td></tr>`;
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="${showPrices ? 6 : 4}" class="text-center py-3 text-muted">
+                Sin repuestos seleccionados. Usá “Administrar repuestos”.
+              </td>
+            </tr>`;
           repCount.textContent = '0 ítems';
           if (showPrices && repTotal) repTotal.textContent = fmtARS0(0);
-          setMontoFromRepuestos(0);
+          setMontoFromRepuestos(0); // también limpia el monto auto si sos admin
           return;
         }
 
+        // Hay repuestos:
         let total = 0;
+
+        // Construimos cada fila:
+        //  - Admin ve ID, nombre, cantidad, unitPrice, subtotal, eliminar
+        //  - Técnico ve ID, nombre, cantidad, eliminar (sin $)
         const html = rows.map(r => {
           const cant = Number(r?.cantidad || 0);
 
-          // Si el admin ve precios, los calculamos; si no, omitimos cols
           if (showPrices) {
+            // Admin:
+            // unit = precio referencia. Si no hay precio_unit_num usamos parseEnteroARS() del texto.
             let unit = Number(r?.precio_unit_num);
             if (!Number.isFinite(unit) || unit <= 0) {
               unit = parseEnteroARS(r?.precio ?? r?.precio_unit_al_momento ?? '');
             } else {
+              // Heurística defensiva: si hay un string con precio más grande y el unit era muy chico (<1000),
+              // nos quedamos con el más creíble
               const fromStr = parseEnteroARS(r?.precio ?? r?.precio_unit_al_momento ?? '');
               if (fromStr > unit && unit < 1000) unit = fromStr;
             }
+
             const sub = unit * cant;
             total += sub;
 
@@ -334,21 +610,29 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
                 <td class="text-end">${fmtARS0(unit)}</td>
                 <td class="text-end">${fmtARS0(sub)}</td>
                 <td class="text-center" style="width:70px;">
-                  <button type="button" class="btn btn-outline-danger btn-sm btnEliminar" title="Eliminar">
+                  <button
+                    type="button"
+                    class="btn btn-outline-danger btn-sm btnEliminar"
+                    title="Eliminar"
+                  >
                     <i class="bi bi-trash"></i>
                   </button>
                 </td>
               </tr>
             `;
           } else {
-            // Técnico: sin precios
+            // Técnico (sin ver precios)
             return `
               <tr data-id="${r.repuesto_id}">
                 <td class="fw-semibold text-start">${r.repuesto_id}</td>
                 <td class="text-start">${r.componente || ''}</td>
                 <td class="text-end">${cant}</td>
                 <td class="text-center" style="width:70px;">
-                  <button type="button" class="btn btn-outline-danger btn-sm btnEliminar" title="Eliminar">
+                  <button
+                    type="button"
+                    class="btn btn-outline-danger btn-sm btnEliminar"
+                    title="Eliminar"
+                  >
                     <i class="bi bi-trash"></i>
                   </button>
                 </td>
@@ -357,19 +641,42 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
           }
         }).join('');
 
+        // Metemos las filas en el <tbody>
         tbody.innerHTML = html;
+
+        // Contador de ítems y total
         repCount.textContent = `${rows.length} ${rows.length === 1 ? 'ítem' : 'ítems'}`;
         if (showPrices && repTotal) repTotal.textContent = fmtARS0(total);
+
+        // Autorelleno del campo "Monto" del form de admin con la suma
         setMontoFromRepuestos(total);
 
-        tbody.querySelectorAll('.btnEliminar').forEach(btn => btn.addEventListener('click', onEliminarClick));
+        // Enlazamos los botones "Eliminar" de cada fila
+        tbody.querySelectorAll('.btnEliminar').forEach(btn =>
+          btn.addEventListener('click', onEliminarClick)
+        );
       } catch(e) {
-        tbody.innerHTML = `<tr><td colspan="${showPrices ? 6 : 4}" class="text-center py-3 text-danger">Error al cargar los repuestos seleccionados.</td></tr>`;
+        // Error de fetch: mostramos mensaje rojo en la tabla y
+        // limpiamos totales
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="${showPrices ? 6 : 4}" class="text-center py-3 text-danger">
+              Error al cargar los repuestos seleccionados.
+            </td>
+          </tr>`;
         repCount.textContent = '—';
         if (showPrices && repTotal) repTotal.textContent = '—';
       }
     }
 
+    /**
+     * onEliminarClick(e):
+     * - Handler para botón "Eliminar" de cada fila en la tabla.
+     * - Confirma con el usuario.
+     * - Reenvía la lista de repuestos RESTANTES a /api/presupuestoItems (POST).
+     *   Esto es consistente con la lógica del backend que hace un replace total.
+     * - Si el POST responde ok => recargamos la tabla.
+     */
     async function onEliminarClick(e) {
       const tr = e.currentTarget.closest('tr');
       const repuestoId = Number(tr?.getAttribute('data-id') || '0');
@@ -377,19 +684,27 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
 
       if (!confirm('¿Eliminar este repuesto del presupuesto?')) return;
 
+      // Filtramos cacheRows para sacar el ítem borrado
       const restantes = cacheRows
         .filter(r => Number(r?.repuesto_id) !== repuestoId)
-        .map(r => ({ repuesto_id: Number(r.repuesto_id), cantidad: Number(r.cantidad || 1) }));
+        .map(r => ({
+          repuesto_id: Number(r.repuesto_id),
+          cantidad: Number(r.cantidad || 1)
+        }));
 
       try {
         const res = await fetch('/api/presupuestoItems', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ticket_id: ticketId, items: restantes })
+          body: JSON.stringify({
+            ticket_id: ticketId,
+            items: restantes
+          })
         });
         const out = await res.json();
 
         if (res.ok && out.ok) {
+          // Re-fetch para refrescar la UI y totales
           await cargarSeleccion();
         } else {
           alert('No se pudo eliminar: ' + (out.error || res.statusText));
@@ -399,6 +714,7 @@ const repsPath = `/presupuesto/${id}/repuestosItems`;
       }
     }
 
+    // Primera carga de la tabla al entrar a la página
     cargarSeleccion();
   </script>
 </BasePrivateLayout>

@@ -3,42 +3,71 @@
  * usuarios.astro
  * ---------------
  * Pantalla de gestión de permisos por usuario.
- * - Lista filas de `usuarios_perfil` desde Supabase.
- * - Permite marcar permisos (checkbox) y rol admin por fila.
- * - Permite marcar usuarios para eliminar.
- * - Incluye una última fila para crear un usuario nuevo.
- * - Envía todo a /api/actualizarPermisosUsuarios (POST).
  *
- * Seguridad: solo admins.
+ * 🔐 Seguridad:
+ *   - Solo accesible para administradores.
+ *   - Si el usuario logueado NO es admin, se redirige a /no-autorizado.
+ *
+ * 📋 ¿Qué muestra/permite?
+ *   - Lista todos los registros de la tabla `usuarios_perfil` (ordenados por email).
+ *   - Cada fila tiene:
+ *        • Email (solo lectura)
+ *        • Checkboxes de permisos por sección (dashboard, tickets, etc.)
+ *        • Check "Admin"
+ *        • Check "Eliminar"
+ *   - Abajo hay una fila "vacía" para crear un usuario nuevo.
+ *
+ * 💾 ¿Cómo se guardan los cambios?
+ *   - Todo el formulario se envía por POST a `/api/actualizarPermisosUsuarios`
+ *   - El backend debe:
+ *        • Recorrer `usuarios[index]`:
+ *             - Si viene `[eliminar]` => borrar ese usuario.
+ *             - Sino actualizar sus flags de permisos y rol.
+ *        • Si viene `nuevo[...]` con email => crear usuario nuevo con esos flags.
+ *
+ * ⚠️ Importante:
+ *   - La columna "Admin" deriva de `rol === 'admin'` en la base.
+ *   - Los permisos extra (dashboard, tickets...) se guardan como booleanos en `usuarios_perfil`.
  */
+
 import { supabase } from '../lib/supabase';
 import BasePrivateLayout from '../layouts/BasePrivateLayout.astro';
 
-// ✅ Solo admin
+// 1) Verificamos si el usuario autenticado es admin.
+//    El middleware previo ya colocó `perfil` en Astro.locals.
 const perfil = (Astro.locals as any)?.perfil;
 const isAdmin = (perfil?.rol === 'admin') || (perfil?.admin === true);
+
+// 🔒 Seguridad: bloquear acceso a no-admins
 if (!isAdmin) {
   return Astro.redirect('/no-autorizado');
 }
 
-// 1) Traer usuarios (ordenados por email)
+// 2) Traer todos los usuarios registrados en `usuarios_perfil`
+//    Ordenados por email para que la tabla sea determinista.
 const { data: usuarios, error } = await supabase
   .from('usuarios_perfil')
   .select('*')
   .order('email', { ascending: true });
 
-// 2) Definición de columnas de permisos (clave => label visible)
+// 3) Definimos las "columnas" de permisos que vamos a mostrar dinámicamente.
+//    Cada item tiene:
+//      - nombre: la key real en BD (true/false)
+//      - label: texto legible en UI
 const PERMISOS = [
-  { nombre: 'dashboard',   label: 'Inicio' },
-  { nombre: 'tickets',     label: 'Tickets' },
-  { nombre: 'usuarios',    label: 'Usuarios' },
-  { nombre: 'estadisticas',label: 'Estadísticas' },
+  { nombre: 'dashboard',    label: 'Inicio' },
+  { nombre: 'tickets',      label: 'Tickets' },
+  { nombre: 'usuarios',     label: 'Usuarios' },
+  { nombre: 'estadisticas', label: 'Estadísticas' },
 ];
 ---
 
 <BasePrivateLayout>
   <div class="container mt-5">
-    <h2>Gestión de permisos de usuarios</h2>
+    <h2 class="mb-3">
+      <i class="bi bi-people me-2"></i>
+      Gestión de permisos de usuarios
+    </h2>
 
     {error && (
       <div class="alert alert-danger mt-3">
@@ -46,146 +75,239 @@ const PERMISOS = [
       </div>
     )}
 
-    <!--
-      El backend /api/actualizarPermisosUsuarios debe:
-      - Leer el array `usuarios[...]` (email + flags + admin + eliminar)
-      - Aplicar updates/inserts/deletes en `usuarios_perfil`
-      - Validar que quien pega este endpoint es admin
-    -->
-    <form id="form-permisos" method="post" action="/api/actualizarPermisosUsuarios">
-      <div class="table-responsive">
-        <table class="table table-bordered mt-4 align-middle">
-          <thead>
-            <tr>
-              <th style="min-width:280px">Email</th>
-              {PERMISOS.map((p) => <th>{p.label}</th>)}
-              <th>Admin</th>
-              <th>Eliminar</th>
-            </tr>
-          </thead>
+    {(!error) && (
+      <>
+        {/*
+          IMPORTANTE:
+          - Este formulario POSTea todo a /api/actualizarPermisosUsuarios.
+          - El endpoint debe validar que quien lo invoca sigue siendo admin
+            (nunca confíes solo en el front).
+        */}
+        <form
+          id="form-permisos"
+          method="post"
+          action="/api/actualizarPermisosUsuarios"
+          class="card shadow-sm"
+          style="overflow-x:auto;"
+        >
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-bordered align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th style="min-width: 260px;">Email</th>
 
-          <tbody>
-            {/* Filas existentes (una por usuario) */}
-            {usuarios?.map((usuario, idx) => (
-              <tr>
-                {/* Email (solo lectura) */}
-                <td>
-                  <input
-                    type="email"
-                    name={`usuarios[${idx}][email]`}
-                    value={usuario.email}
-                    class="form-control"
-                    readonly
-                  />
-                </td>
+                    {PERMISOS.map((p) => (
+                      <th class="text-center" style="white-space:nowrap;">{p.label}</th>
+                    ))}
 
-                {/* Checks de permisos (flags booleanos por clave) */}
-                {PERMISOS.map((p) => (
-                  <td class="text-center">
-                    <input
-                      type="checkbox"
-                      class="form-check-input"
-                      name={`usuarios[${idx}][${p.nombre}]`}
-                      checked={Boolean((usuario as any)[p.nombre])}
-                    />
-                  </td>
-                ))}
+                    <th class="text-center" style="white-space:nowrap;">Admin</th>
+                    <th class="text-center" style="white-space:nowrap;">Eliminar</th>
+                  </tr>
+                </thead>
 
-                {/* Admin se deriva de rol === 'admin' */}
-                <td class="text-center">
-                  <input
-                    type="checkbox"
-                    class="form-check-input"
-                    name={`usuarios[${idx}][admin]`}
-                    checked={usuario.rol === 'admin'}
-                  />
-                </td>
+                <tbody>
+                  {/* ========== Filas EXISTENTES (usuarios que ya están en la BD) ========== */}
+                  {usuarios?.map((usuario, idx) => (
+                    <tr>
+                      {/* EMAIL - solo lectura, pero lo mandamos igual en el POST
+                         para que el backend sepa a quién actualizar/borrar */}
+                      <td>
+                        <input
+                          type="email"
+                          name={`usuarios[${idx}][email]`}
+                          value={usuario.email}
+                          class="form-control"
+                          readonly
+                        />
+                      </td>
 
-                {/* Marcar para eliminar este usuario en el submit */}
-                <td class="text-center">
-                  <input
-                    type="checkbox"
-                    class="form-check-input eliminar-checkbox"
-                    name={`usuarios[${idx}][eliminar]`}
-                    id={`eliminar-${idx}`}
-                    title="Marcar para eliminar"
-                  />
-                </td>
-              </tr>
-            ))}
+                      {/* Permisos por sección de la app:
+                         Para cada PERMISO definimos un checkbox.
+                         Ejemplo:
+                           usuarios[0][dashboard] = "on" si marcado.
+                      */}
+                      {PERMISOS.map((p) => (
+                        <td class="text-center">
+                          <input
+                            type="checkbox"
+                            class="form-check-input"
+                            name={`usuarios[${idx}][${p.nombre}]`}
+                            checked={Boolean((usuario as any)[p.nombre])}
+                          />
+                        </td>
+                      ))}
 
-            {/* Fila para AGREGAR un nuevo usuario */}
-            <tr>
-              <td>
-                <input
-                    type="email"
-                    name="nuevo[email]"
-                    placeholder="nuevo@gmail.com"
-                    class="form-control"
-                    autocomplete="email"
-                />
-              </td>
+                      {/* Admin:
+                         - Si `usuario.rol === 'admin'`, tildamos.
+                         - En el backend, si viene este checkbox → rol='admin'.
+                           Si NO viene → rol='tecnico' o el rol base que uses.
+                      */}
+                      <td class="text-center">
+                        <input
+                          type="checkbox"
+                          class="form-check-input"
+                          name={`usuarios[${idx}][admin]`}
+                          checked={usuario.rol === 'admin'}
+                        />
+                      </td>
 
-              {PERMISOS.map((p) => (
-                <td class="text-center">
-                  <input
-                    type="checkbox"
-                    class="form-check-input"
-                    name={`nuevo[${p.nombre}]`}
-                  />
-                </td>
-              ))}
+                      {/* Eliminar:
+                         - Este checkbox NO existe aún en BD.
+                         - Es solo señal: si viene `usuarios[i][eliminar] === 'on'`
+                           el backend debe borrar ese usuario de la tabla.
+                      */}
+                      <td class="text-center">
+                        <input
+                          type="checkbox"
+                          class="form-check-input eliminar-checkbox"
+                          name={`usuarios[${idx}][eliminar]`}
+                          id={`eliminar-${idx}`}
+                          title="Marcar para eliminar este usuario"
+                        />
+                      </td>
+                    </tr>
+                  ))}
 
-              <td class="text-center">
-                <input type="checkbox" class="form-check-input" name="nuevo[admin]" />
-              </td>
-              <td></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+                  {/* ========== Fila para CREAR NUEVO USUARIO ========== */}
+                  <tr class="table-success-subtle">
+                    <td>
+                      <input
+                        type="email"
+                        name="nuevo[email]"
+                        placeholder="nuevo@gmail.com"
+                        class="form-control"
+                        autocomplete="email"
+                      />
+                    </td>
 
-      <div class="mt-3 d-flex flex-wrap gap-2">
-        <button type="submit" class="btn btn-primary">
-          Guardar cambios
-        </button>
+                    {/* Permisos iniciales del nuevo usuario */}
+                    {PERMISOS.map((p) => (
+                      <td class="text-center">
+                        <input
+                          type="checkbox"
+                          class="form-check-input"
+                          name={`nuevo[${p.nombre}]`}
+                        />
+                      </td>
+                    ))}
 
-        <!--
-          Botón auxiliar para borrar en masa los marcados.
-          El script solo marca/avisa; el borrado efectivo lo hace el endpoint.
-        -->
-        <button type="button" class="btn btn-danger" id="btn-eliminar">
-          Eliminar seleccionados
-        </button>
-      </div>
-    </form>
+                    {/* ¿Es admin el nuevo? */}
+                    <td class="text-center">
+                      <input
+                        type="checkbox"
+                        class="form-check-input"
+                        name="nuevo[admin]"
+                      />
+                    </td>
 
-    <!--
-      Script opcional: confirmación de borrado masivo.
-      Si tenés lógica adicional (deshabilitar/contar/confirmar), colócala acá.
-    -->
-    <script is:inline>
-      (function(){
-        const btn = document.getElementById('btn-eliminar');
-        const form = document.getElementById('form-permisos');
-        if (!btn || !form) return;
+                    {/* En la fila nueva no hay "Eliminar" */}
+                    <td class="text-center text-muted">—</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-        btn.addEventListener('click', function(){
-          const marcados = Array.from(
-            form.querySelectorAll('.eliminar-checkbox')
-          ).filter((el) => el instanceof HTMLInputElement && el.checked);
+            {/* Botonera */}
+            <div class="mt-4 d-flex flex-wrap gap-2">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-save me-2"></i>
+                Guardar cambios
+              </button>
 
-          if (!marcados.length) {
-            alert('No hay usuarios marcados para eliminar.');
-            return;
-          }
-          const ok = confirm(`¿Eliminar ${marcados.length} usuario(s) seleccionados?`);
-          if (!ok) return;
+              {/* Botón auxiliar "Eliminar seleccionados":
+                 Este NO borra directamente en el front.
+                 Solo dispara un confirm() y luego hace submit del mismo form,
+                 dejando los checkboxes [eliminar] marcados.
+              */}
+              <button
+                type="button"
+                class="btn btn-danger"
+                id="btn-eliminar"
+              >
+                <i class="bi bi-trash3 me-2"></i>
+                Eliminar seleccionados
+              </button>
+            </div>
 
-          // Enviamos el mismo form (el backend debe respetar [eliminar]=on)
-          form.submit();
-        });
-      })();
-    </script>
+            <div class="form-text text-muted mt-3">
+              • Marcar "Eliminar" NO borra al instante: se confirma y luego se envía todo.<br/>
+              • "Admin" tiene acceso total, incluyendo esta misma pantalla.
+            </div>
+          </div>
+        </form>
+
+        {/* Script de confirmación para eliminación masiva.
+           - Cuenta cuántos usuarios están marcados con [eliminar].
+           - Pregunta confirmación.
+           - Si aceptás, hace submit() del form.
+        */}
+        <script is:inline>
+          (function(){
+            const btn = document.getElementById('btn-eliminar');
+            const form = document.getElementById('form-permisos');
+
+            if (!btn || !form) return;
+
+            btn.addEventListener('click', function(){
+              // Buscamos todos los checkboxes con clase "eliminar-checkbox"
+              const marcados = Array.from(
+                form.querySelectorAll('.eliminar-checkbox')
+              ).filter((el) => el instanceof HTMLInputElement && el.checked);
+
+              if (!marcados.length) {
+                alert('No hay usuarios marcados para eliminar.');
+                return;
+              }
+
+              const ok = confirm(
+                `¿Eliminar ${marcados.length} usuario(s) seleccionados? Esta acción no se puede deshacer.`
+              );
+              if (!ok) return;
+
+              // Disparamos el submit del mismo form.
+              // El backend verá cuáles tenían [eliminar] marcado.
+              form.submit();
+            });
+          })();
+        </script>
+      </>
+    )}
   </div>
+
+  {/* Pequeños estilos para pulir la lectura */}
+  <style is:inline>
+    h2 {
+      font-weight: 600;
+      color: #0d6efd;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+
+    table.table td,
+    table.table th {
+      vertical-align: middle;
+    }
+
+    thead.table-light th {
+      white-space: nowrap;
+      font-weight: 600;
+      font-size: .9rem;
+    }
+
+    tbody tr td:first-child input[readonly] {
+      background-color: #f8f9fa;
+      color: #495057;
+      font-size: .9rem;
+    }
+
+    .table-success-subtle {
+      background: rgba(25,135,84,.05);
+    }
+
+    .form-text {
+      font-size: .8rem;
+    }
+  </style>
 </BasePrivateLayout>

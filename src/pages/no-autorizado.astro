@@ -1,98 +1,156 @@
 ---
 /**
  * no-autorizado.astro
- * -------------------
- * Página simple de error de autorización.
- * Se muestra cuando el usuario no tiene los permisos necesarios
- * para acceder a una sección de la app.
+ * -------------------------------------------------
+ * Vista pública / stand-alone (NO usa BasePrivateLayout).
+ *
+ * ¿Cuándo se muestra?
+ * - Cuando alguien sin permisos intenta entrar a una ruta protegida:
+ *   • /estadisticas (solo admin)
+ *   • otras vistas internas si el middleware detecta rol inválido
+ *
+ * ¿Qué hace?
+ * - Muestra mensaje de “Acceso denegado”.
+ * - Ofrece un link para cerrar sesión y volver al login.
+ *   Si Clerk está presente en window, llama a signOut() primero.
+ *
+ * Notas:
+ * - Es intencionalmente “fuera” de la app privada para que también
+ *   funcione en sesiones rotas / sin perfil cargado.
+ * - No depende de Bootstrap.
+ * - Mantiene estética parecida al resto (tarjeta blanca con sombra suave).
  */
 ---
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <title>Acceso Denegado | Servicio Técnico Kuttecraft</title>
+    <title>Acceso denegado | Servicio Técnico Kuttercraft</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <style>
-      /* Estilos generales de la página */
+      /* ===== Reset / layout de página completa ===== */
       body {
-        font-family: system-ui, sans-serif;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         background: #f7f7fa;
         margin: 0;
-        padding: 0;
-        min-height: 100vh; /* siempre ocupa toda la ventana */
+        min-height: 100vh;            /* ocupa todo el alto */
         display: flex;
         align-items: center;
         justify-content: center;
+        color: #222;
       }
 
-      /* Tarjeta central */
+      main {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        width: 100%;
+        max-width: 480px;
+      }
+
+      /* ===== Tarjeta central ===== */
       .card {
         background: #fff;
         padding: 2.5rem 2rem 2rem;
         border-radius: 1rem;
         box-shadow: 0 6px 32px #0001;
         max-width: 380px;
+        width: 100%;
         text-align: center;
+
+        /* Accesibilidad: role="alert" hace que lectores de pantalla
+           lo anuncien; aria-live refuerza. */
       }
 
-      /* Título */
-      h1 {
-        color: #e74c3c;
-        margin-bottom: .5rem;
-      }
-
-      /* Texto explicativo */
-      p {
-        color: #222;
-        margin-bottom: 1.8rem;
-      }
-
-      /* Link de volver al login */
-      a {
-        color: #1565c0;
-        text-decoration: none;
-        font-weight: bold;
-        cursor: pointer;
-      }
-      a:hover {
-        text-decoration: underline;
-      }
-
-      /* Emoji grande */
+      /* ===== Emoji / título / copy ===== */
       .emoji {
         font-size: 3rem;
+        line-height: 1;
         margin-bottom: .5rem;
+      }
+
+      h1 {
+        color: #e74c3c; /* rojo “error” */
+        font-size: 1.25rem;
+        line-height: 1.3;
+        margin: 0 0 .5rem;
+        font-weight: 600;
+      }
+
+      p {
+        margin: 0 0 1.8rem;
+        font-size: .95rem;
+        line-height: 1.45;
+        color: #222;
+      }
+
+      /* ===== Link acción (logout → signin) ===== */
+      a#logout-link {
+        color: #1565c0;
+        text-decoration: none;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: .95rem;
+      }
+      a#logout-link:hover {
+        text-decoration: underline;
       }
     </style>
   </head>
+
   <body>
-    <div class="card">
-      <div class="emoji">⛔</div>
-      <h1>Acceso denegado</h1>
-      <p>
-        Tu cuenta no tiene permisos para ingresar a la aplicación.<br />
-        Si creés que esto es un error o necesitás acceso, por favor
-        <b>contactá al administrador</b>.
-      </p>
-      <!-- Link que desloguea al usuario y lo manda al login -->
-      <a href="#" id="logout-link">Volver al inicio de sesión</a>
-    </div>
+    <main>
+      <section
+        class="card"
+        role="alert"
+        aria-live="assertive"
+        aria-labelledby="titulo-acceso-denegado"
+      >
+        <div class="emoji" aria-hidden="true">⛔</div>
+
+        <h1 id="titulo-acceso-denegado">Acceso denegado</h1>
+
+        <p>
+          Tu cuenta no tiene permisos para ingresar a esta sección.<br />
+          Si creés que esto es un error o necesitás acceso, por favor
+          <strong>contactá al administrador</strong>.
+        </p>
+
+        <!-- Acción principal:
+             - Intenta cerrar sesión con Clerk (si existe).
+             - Después redirige a /signin -->
+        <a href="#" id="logout-link" role="button">
+          Volver al inicio de sesión
+        </a>
+      </section>
+    </main>
 
     <script>
-      // Script para manejar el "logout" seguro
-      const logoutLink = document.getElementById('logout-link');
-      if (logoutLink) {
+      // Cierre de sesión defensivo.
+      // - Si usamos Clerk y está disponible en window, llamamos a signOut()
+      //   antes de redirigir.
+      // - Si no, simplemente redirigimos.
+      (function () {
+        const logoutLink = document.getElementById('logout-link');
+        if (!logoutLink) return;
+
         logoutLink.addEventListener('click', async function (e) {
           e.preventDefault();
-          // Si está Clerk integrado, hacemos signOut
-          if (window.Clerk && window.Clerk.signOut) {
-            await window.Clerk.signOut();
+
+          try {
+            if (window.Clerk && typeof window.Clerk.signOut === 'function') {
+              await window.Clerk.signOut();
+            }
+          } catch (err) {
+            // Fallar silenciosamente: igual vamos al login
+            console.warn('Error al cerrar sesión:', err);
           }
-          // Redirigir al login
+
+          // Mandamos al login público
           window.location.href = '/signin';
         });
-      }
+      })();
     </script>
   </body>
 </html>

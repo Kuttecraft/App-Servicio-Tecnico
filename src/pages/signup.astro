@@ -1,4 +1,18 @@
 ---
+/**
+ * signup.astro
+ *
+ * Pantalla de registro usando Clerk <SignUp />.
+ *
+ * - Redirige a /dashboard cuando el alta termina.
+ * - Link a /signin si el usuario ya tiene cuenta.
+ * - Usa Bootstrap para layout y tipografía.
+ * - Personaliza estilos del widget Clerk para que combine con el fondo oscuro.
+ *
+ * Requisitos:
+ * - Clerk tiene que estar configurado en tu app Astro.
+ * - /dashboard, /signin existen y son rutas válidas en tu proyecto.
+ */
 import { SignUp } from '@clerk/astro/components';
 ---
 
@@ -6,26 +20,116 @@ import { SignUp } from '@clerk/astro/components';
   <head>
     <meta charset="UTF-8" />
     <title>Registrarse</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Bootstrap -->
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+
+    <!-- Bootstrap para utilidades de layout -->
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
       rel="stylesheet"
     />
+
+    <style>
+      /* Fondo oscuro + tipografía base */
+      body {
+        background-color: #0f172a; /* gris azulado oscuro */
+        color: #fff;
+        min-height: 100vh;
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", Roboto, "Helvetica Neue", sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Tarjeta visual donde vive el widget */
+      .auth-card {
+        background: rgba(15, 23, 42, 0.6); /* panel translúcido */
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+        border-radius: 1rem;
+        width: 100%;
+        max-width: 360px;
+        padding: 2rem 1.5rem;
+        text-align: center;
+      }
+
+      .auth-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #fff;
+        margin-bottom: 1rem;
+      }
+
+      .auth-sub {
+        font-size: .9rem;
+        color: #cbd5e1;
+        margin-bottom: 1.5rem;
+      }
+
+      /* Botón principal del widget Clerk estilizado como .btn-primary */
+      .btn-primary-clerk {
+        background-color: #0d6efd !important;
+        border: 1px solid #0d6efd !important;
+        color: #fff !important;
+        border-radius: .5rem !important;
+        font-weight: 600 !important;
+        font-size: .9rem !important;
+        line-height: 1.25rem !important;
+        padding: .6rem .75rem !important;
+        width: 100% !important;
+      }
+
+      /* Inputs del widget Clerk (email, password, etc.) */
+      .clerk-input {
+        border-radius: .5rem !important;
+        border: 1px solid rgba(255,255,255,.15) !important;
+        background: rgba(15,23,42,.4) !important;
+        color: #fff !important;
+      }
+      .clerk-input:focus {
+        border-color: #0d6efd !important;
+        outline: 0 !important;
+        box-shadow: 0 0 0 .25rem rgba(13,110,253,.25) !important;
+      }
+
+      /* Links secundarios del widget (ya tengo cuenta, etc.) */
+      .clerk-link {
+        color: #0d6efd !important;
+        text-decoration: none !important;
+        font-weight: 500 !important;
+      }
+      .clerk-link:hover {
+        text-decoration: underline !important;
+      }
+    </style>
   </head>
 
-  <body class="d-flex justify-content-center align-items-center vh-100 bg-dark text-white">
-    <div class="text-center">
-      <h1 class="mb-4">Crea una cuenta nueva</h1>
+  <body>
+    <div class="auth-card">
+      <div class="auth-title">Crear cuenta nueva</div>
+      <div class="auth-sub">Registrate para acceder al panel</div>
 
-      <!-- Clerk SignUp component -->
+      <!-- Widget Clerk SignUp -->
       <SignUp
         forceRedirectUrl="/dashboard"
         signInUrl="/signin"
         appearance={{
           elements: {
-            rootBox: "mx-auto",
-            formButtonPrimary: "btn btn-primary w-100 mt-3"
+            // Caja raíz del widget
+            rootBox: "w-100",
+            // Botón "Continuar / Registrarse"
+            formButtonPrimary: "btn-primary-clerk",
+            // Inputs de texto
+            formFieldInput: "clerk-input",
+            // Links de cambio de flujo ("¿Ya tenés cuenta?")
+            footerActionLink: "clerk-link",
+            // Títulos/labels internos
+            headerTitle: "text-white fw-semibold",
+            headerSubtitle: "text-secondary small",
           }
         }}
       />
